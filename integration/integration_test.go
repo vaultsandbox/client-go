@@ -1034,3 +1034,248 @@ func TestIntegration_EmailAddressFormat(t *testing.T) {
 		t.Errorf("EmailAddress domain %q not in AllowedDomains %v", parts[1], serverInfo.AllowedDomains)
 	}
 }
+
+// ============================================================================
+// Edge Case Tests (Section 6 from tests-spec.md)
+// ============================================================================
+
+// TestIntegration_WaitForEmail_ZeroTimeout verifies that a timeout of 0 causes
+// immediate timeout. With zero timeout, the context deadline is already expired.
+func TestIntegration_WaitForEmail_ZeroTimeout(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+	defer inbox.Delete(ctx)
+
+	// Wait with zero timeout - should return immediately with deadline exceeded
+	start := time.Now()
+	_, err = inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(0))
+	elapsed := time.Since(start)
+
+	// Should return very quickly (within 100ms)
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("WaitForEmail with zero timeout took %v, expected immediate return", elapsed)
+	}
+
+	// Should get a context deadline exceeded error
+	if err == nil {
+		t.Error("WaitForEmail with zero timeout should return error")
+	} else if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("WaitForEmail error = %v, want context.DeadlineExceeded", err)
+	} else {
+		t.Log("WaitForEmail correctly returned context.DeadlineExceeded for zero timeout")
+	}
+}
+
+// TestIntegration_WaitForEmailCount_ZeroTimeout verifies zero timeout for WaitForEmailCount.
+func TestIntegration_WaitForEmailCount_ZeroTimeout(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+	defer inbox.Delete(ctx)
+
+	// Wait with zero timeout
+	start := time.Now()
+	_, err = inbox.WaitForEmailCount(ctx, 1, vaultsandbox.WithWaitTimeout(0))
+	elapsed := time.Since(start)
+
+	// Should return very quickly
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("WaitForEmailCount with zero timeout took %v, expected immediate return", elapsed)
+	}
+
+	// Should get a context deadline exceeded error
+	if err == nil {
+		t.Error("WaitForEmailCount with zero timeout should return error")
+	} else if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("WaitForEmailCount error = %v, want context.DeadlineExceeded", err)
+	} else {
+		t.Log("WaitForEmailCount correctly returned context.DeadlineExceeded for zero timeout")
+	}
+}
+
+// TestIntegration_WaitForEmail_VeryShortTimeout verifies behavior with very short timeout.
+func TestIntegration_WaitForEmail_VeryShortTimeout(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+	defer inbox.Delete(ctx)
+
+	// Wait with 1ms timeout
+	start := time.Now()
+	_, err = inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(1*time.Millisecond))
+	elapsed := time.Since(start)
+
+	// Should return quickly (within 200ms to account for network latency)
+	if elapsed > 200*time.Millisecond {
+		t.Errorf("WaitForEmail with 1ms timeout took %v, expected quick return", elapsed)
+	}
+
+	// Should get an error (no email available)
+	if err == nil {
+		t.Error("WaitForEmail with very short timeout should return error (no email)")
+	} else {
+		t.Logf("WaitForEmail correctly returned error for very short timeout: %v", err)
+	}
+}
+
+// TestIntegration_WaitForEmail_ContextCancellation verifies context cancellation is respected.
+func TestIntegration_WaitForEmail_ContextCancellation(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+	defer inbox.Delete(ctx)
+
+	// Create a context that we'll cancel
+	waitCtx, cancel := context.WithCancel(ctx)
+
+	// Cancel after a short delay
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	_, err = inbox.WaitForEmail(waitCtx, vaultsandbox.WithWaitTimeout(30*time.Second))
+	elapsed := time.Since(start)
+
+	// Should return quickly after cancellation
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("WaitForEmail took %v after context cancel, expected quick return", elapsed)
+	}
+
+	// Should get a context canceled error
+	if err == nil {
+		t.Error("WaitForEmail should return error when context is canceled")
+	} else if !errors.Is(err, context.Canceled) {
+		t.Errorf("WaitForEmail error = %v, want context.Canceled", err)
+	} else {
+		t.Log("WaitForEmail correctly returned context.Canceled")
+	}
+}
+
+// TestIntegration_DeletedInboxDuringWait verifies behavior when inbox is deleted during wait.
+func TestIntegration_DeletedInboxDuringWait(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+
+	emailAddr := inbox.EmailAddress()
+	t.Logf("Created inbox: %s", emailAddr)
+
+	// Channel to signal when wait has started
+	waitStarted := make(chan struct{})
+	waitDone := make(chan error, 1)
+
+	// Start waiting for email in a goroutine
+	go func() {
+		close(waitStarted)
+		_, err := inbox.WaitForEmail(ctx,
+			vaultsandbox.WithWaitTimeout(10*time.Second),
+			vaultsandbox.WithPollInterval(500*time.Millisecond),
+		)
+		waitDone <- err
+	}()
+
+	// Wait for the wait to start
+	<-waitStarted
+	time.Sleep(200 * time.Millisecond)
+
+	// Delete the inbox while waiting
+	t.Log("Deleting inbox during wait...")
+	if err := inbox.Delete(ctx); err != nil {
+		t.Logf("Delete() error (may be expected): %v", err)
+	}
+
+	// Wait for the WaitForEmail to complete
+	select {
+	case err := <-waitDone:
+		if err == nil {
+			t.Error("WaitForEmail should return error when inbox is deleted")
+		} else {
+			// Should get ErrInboxNotFound or a context error
+			if errors.Is(err, vaultsandbox.ErrInboxNotFound) {
+				t.Log("WaitForEmail correctly returned ErrInboxNotFound")
+			} else if errors.Is(err, context.DeadlineExceeded) {
+				t.Log("WaitForEmail returned DeadlineExceeded (inbox deleted but timeout reached first)")
+			} else {
+				t.Logf("WaitForEmail returned error: %v", err)
+			}
+		}
+	case <-time.After(15 * time.Second):
+		t.Error("WaitForEmail did not complete in time")
+	}
+}
+
+// TestIntegration_MonitorInboxes_EmptySlice verifies MonitorInboxes returns error for empty slice.
+func TestIntegration_MonitorInboxes_EmptySlice(t *testing.T) {
+	client := newClient(t)
+
+	// Try to monitor empty inboxes slice
+	_, err := client.MonitorInboxes([]*vaultsandbox.Inbox{})
+	if err == nil {
+		t.Error("MonitorInboxes should return error for empty inboxes")
+	} else {
+		t.Logf("MonitorInboxes correctly returned error for empty slice: %v", err)
+	}
+}
+
+// TestIntegration_MonitorInboxes_ClosedClient verifies MonitorInboxes fails on closed client.
+func TestIntegration_MonitorInboxes_ClosedClient(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a client
+	opts := []vaultsandbox.Option{
+		vaultsandbox.WithBaseURL(baseURL),
+		vaultsandbox.WithTimeout(30 * time.Second),
+	}
+
+	client, err := vaultsandbox.New(apiKey, opts...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	// Create an inbox
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+	emailAddr := inbox.EmailAddress()
+
+	// Close the client
+	client.Close()
+
+	// Try to monitor after close
+	_, err = client.MonitorInboxes([]*vaultsandbox.Inbox{inbox})
+	if err == nil {
+		t.Error("MonitorInboxes should return error on closed client")
+	} else if !errors.Is(err, vaultsandbox.ErrClientClosed) {
+		t.Errorf("MonitorInboxes error = %v, want ErrClientClosed", err)
+	} else {
+		t.Log("MonitorInboxes correctly returned ErrClientClosed")
+	}
+
+	// Clean up with a new client
+	cleanupClient := newClient(t)
+	cleanupClient.DeleteInbox(ctx, emailAddr)
+}

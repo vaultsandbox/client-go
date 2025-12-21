@@ -367,35 +367,38 @@ Plan to align the Go SDK test suite with `tests-spec.md`.
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
-| Timeout value 0 | ❌ Missing | - | Immediate timeout |
-| Deleted inbox during wait | ❌ Missing | - | |
-| Empty inbox array | ⚠️ Review | `monitor_test.go` | `MonitorInboxes([])` |
+| Timeout value 0 | ✅ Exists | `integration/integration_test.go` | `TestIntegration_WaitForEmail_ZeroTimeout`, `TestIntegration_WaitForEmailCount_ZeroTimeout` |
+| Very short timeout | ✅ Exists | `integration/integration_test.go` | `TestIntegration_WaitForEmail_VeryShortTimeout` |
+| Context cancellation | ✅ Exists | `integration/integration_test.go` | `TestIntegration_WaitForEmail_ContextCancellation` |
+| Deleted inbox during wait | ✅ Exists | `integration/integration_test.go` | `TestIntegration_DeletedInboxDuringWait` |
+| Empty inbox array | ✅ Exists | `integration/integration_test.go` | `TestIntegration_MonitorInboxes_EmptySlice` |
+| Closed client monitoring | ✅ Exists | `integration/integration_test.go` | `TestIntegration_MonitorInboxes_ClosedClient` |
 
 **Action Items:**
-- [ ] Add timeout=0 test
-- [ ] Add deleted inbox during wait test
-- [ ] Verify empty inbox array monitoring test
+- [x] Add timeout=0 test ✅
+- [x] Add deleted inbox during wait test ✅
+- [x] Verify empty inbox array monitoring test ✅
 
 ### 6.2 Retry Logic
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
-| Retry on 5xx | ⚠️ Review | `internal/api/retry_test.go` | |
-| Max retries exceeded | ⚠️ Review | `internal/api/retry_test.go` | |
-| No retry on 4xx | ⚠️ Review | `internal/api/retry_test.go` | |
+| Retry on 5xx | ✅ Exists | `internal/api/retry_test.go` | `TestRetryConfig_ShouldRetry` (500, 502, 503, 504) |
+| Max retries exceeded | ✅ Exists | `internal/api/retry_test.go` | `TestRetryConfig_ShouldRetry/max_attempts_reached` |
+| No retry on 4xx | ✅ Exists | `internal/api/retry_test.go` | `TestRetryConfig_ShouldRetry` (400, 401, 404) |
 
 **Action Items:**
-- [ ] Review retry logic tests
+- [x] Review retry logic tests ✅
 
 ### 6.3 Specific Error Types
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
-| 404 inbox | ⚠️ Review | `errors_test.go` | `ErrInboxNotFound` |
-| 404 email | ⚠️ Review | `errors_test.go` | `ErrEmailNotFound` |
+| 404 inbox | ✅ Exists | `errors_test.go` | `TestAPIError_Is/404_matches_ErrInboxNotFound`, `TestAPIError_Is_404Differentiation` |
+| 404 email | ✅ Exists | `errors_test.go` | `TestAPIError_Is/404_matches_ErrEmailNotFound`, `TestAPIError_Is_404Differentiation` |
 
 **Action Items:**
-- [ ] Verify error type tests
+- [x] Verify error type tests ✅
 
 ---
 
