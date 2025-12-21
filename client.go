@@ -79,13 +79,13 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	defer cancel()
 
 	if err := apiClient.CheckKey(ctx); err != nil {
-		return nil, err
+		return nil, wrapError(err)
 	}
 
 	// Fetch server info
 	serverInfo, err := apiClient.GetServerInfo(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fetch server info: %w", err)
+		return nil, fmt.Errorf("fetch server info: %w", wrapError(err))
 	}
 
 	// Create delivery strategy based on configuration
@@ -144,7 +144,7 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 
 	resp, err := c.apiClient.CreateInbox(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err)
 	}
 
 	inbox := newInboxFromLegacyResponse(resp, c)
@@ -185,7 +185,7 @@ func (c *Client) ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, 
 	// Verify inbox still exists on server
 	_, err = c.apiClient.GetInboxSync(ctx, inbox.emailAddress)
 	if err != nil {
-		return nil, fmt.Errorf("verify inbox: %w", err)
+		return nil, fmt.Errorf("verify inbox: %w", wrapError(err))
 	}
 
 	c.mu.Lock()
@@ -211,7 +211,7 @@ func (c *Client) DeleteInbox(ctx context.Context, emailAddress string) error {
 	}
 	c.mu.Unlock()
 
-	return c.apiClient.DeleteInboxByEmail(ctx, emailAddress)
+	return wrapError(c.apiClient.DeleteInboxByEmail(ctx, emailAddress))
 }
 
 // DeleteAllInboxes deletes all inboxes managed by this client.
@@ -223,7 +223,8 @@ func (c *Client) DeleteAllInboxes(ctx context.Context) (int, error) {
 	}
 	c.mu.Unlock()
 
-	return c.apiClient.DeleteAllInboxes(ctx)
+	count, err := c.apiClient.DeleteAllInboxes(ctx)
+	return count, wrapError(err)
 }
 
 // GetInbox returns an inbox by email address.
@@ -265,7 +266,7 @@ func (c *Client) CheckKey(ctx context.Context) error {
 	}
 	c.mu.RUnlock()
 
-	return c.apiClient.CheckKey(ctx)
+	return wrapError(c.apiClient.CheckKey(ctx))
 }
 
 // ExportInboxToFile exports an inbox to a JSON file.

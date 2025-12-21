@@ -82,7 +82,7 @@ func (i *Inbox) IsExpired() bool {
 func (i *Inbox) GetSyncStatus(ctx context.Context) (*SyncStatus, error) {
 	status, err := i.client.apiClient.GetInboxSync(ctx, i.emailAddress)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err)
 	}
 	return &SyncStatus{
 		EmailCount: status.EmailCount,
@@ -94,7 +94,7 @@ func (i *Inbox) GetSyncStatus(ctx context.Context) (*SyncStatus, error) {
 func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
 	resp, err := i.client.apiClient.GetEmails(ctx, i.emailAddress)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err)
 	}
 
 	emails := make([]*Email, 0, len(resp.Emails))
@@ -113,7 +113,7 @@ func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
 func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
 	resp, err := i.client.apiClient.GetEmail(ctx, i.emailAddress, emailID)
 	if err != nil {
-		return nil, err
+		return nil, wrapError(err)
 	}
 
 	return i.decryptEmail(resp)

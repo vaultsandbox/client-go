@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/vaultsandbox/client-go/internal/api"
 )
 
 // Sentinel errors for errors.Is() checks
@@ -238,3 +240,31 @@ func (e *StrategyError) Unwrap() error {
 
 // VaultSandboxError implements the VaultSandboxError interface.
 func (e *StrategyError) VaultSandboxError() {}
+
+// wrapError converts internal API errors to public errors.
+// This ensures that errors.Is() checks work with public sentinel errors.
+func wrapError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var apiErr *api.APIError
+	if errors.As(err, &apiErr) {
+		return &APIError{
+			StatusCode: apiErr.StatusCode,
+			Message:    apiErr.Message,
+			RequestID:  apiErr.RequestID,
+		}
+	}
+
+	var netErr *api.NetworkError
+	if errors.As(err, &netErr) {
+		return &NetworkError{
+			Err:     netErr.Err,
+			URL:     netErr.URL,
+			Attempt: netErr.Attempt,
+		}
+	}
+
+	return err
+}

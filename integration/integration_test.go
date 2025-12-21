@@ -392,21 +392,21 @@ func TestIntegration_CheckKey(t *testing.T) {
 
 func TestIntegration_CheckKey_Invalid(t *testing.T) {
 	// Create client with invalid API key
+	// The Go SDK validates the API key during New(), so it should fail immediately
 	opts := []vaultsandbox.Option{
 		vaultsandbox.WithBaseURL(baseURL),
 	}
 
-	client, err := vaultsandbox.New("invalid-api-key-12345", opts...)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
+	_, err := vaultsandbox.New("invalid-api-key-12345", opts...)
+	if err == nil {
+		t.Fatal("New() should return error for invalid API key")
 	}
-	defer client.Close()
 
-	ctx := context.Background()
-
-	// Invalid API key should error
-	if err := client.CheckKey(ctx); err == nil {
-		t.Error("CheckKey() should return error for invalid API key")
+	// Verify the error is an unauthorized error
+	if !errors.Is(err, vaultsandbox.ErrUnauthorized) {
+		t.Errorf("New() error = %v, want ErrUnauthorized", err)
+	} else {
+		t.Log("New() correctly returned ErrUnauthorized for invalid API key")
 	}
 }
 
