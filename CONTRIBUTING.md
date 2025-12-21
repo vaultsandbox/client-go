@@ -38,7 +38,7 @@ We love pull requests. Here's a quick guide:
 
 This project is a Go library.
 
-1.  Ensure you have Go 1.21+ installed.
+1.  Ensure you have Go 1.24+ installed.
 2.  Clone the repository and navigate to the project directory.
 3.  Download dependencies: `go mod download`
 4.  Configuration: If you are running tests that require environment variables, you can create a `.env` file from the `.env.example`.

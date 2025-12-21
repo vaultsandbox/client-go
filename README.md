@@ -9,7 +9,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/vaultsandbox/client-go.svg)](https://pkg.go.dev/github.com/vaultsandbox/client-go)
 [![CI](https://github.com/vaultsandbox/client-go/actions/workflows/ci.yml/badge.svg)](https://github.com/vaultsandbox/client-go/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-brightgreen.svg)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.24-brightgreen.svg)](https://golang.org/)
 
 **Production-like email testing. Self-hosted & secure.**
 
@@ -17,7 +17,7 @@ The official Go SDK for [VaultSandbox Gateway](https://github.com/vaultsandbox/g
 
 Stop mocking your email stack. If your app sends real emails in production, it must send real emails in testing. VaultSandbox provides isolated inboxes that behave exactly like production without exposing a single byte of customer data.
 
-> **Go 1.21+** required.
+> **Go 1.24+** required.
 
 ## Why VaultSandbox?
 
@@ -778,9 +778,6 @@ go tool cover -html=coverage.out
 ```bash
 # Build the library
 go build ./...
-
-# Build examples
-go build ./examples/...
 
 # Run linter
 golangci-lint run
