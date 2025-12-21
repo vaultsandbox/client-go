@@ -2,20 +2,185 @@ package delivery
 
 import (
 	"context"
+	"math/rand"
+	"sync"
 	"time"
+
+	"github.com/vaultsandbox/client-go/internal/api"
+)
+
+const (
+	PollingInitialInterval   = 2 * time.Second
+	PollingMaxBackoff        = 30 * time.Second
+	PollingBackoffMultiplier = 1.5
+	PollingJitterFactor      = 0.3
 )
 
 // PollingStrategy implements email delivery via polling.
 type PollingStrategy struct {
-	apiClient interface{}
+	apiClient *api.Client
+	inboxes   map[string]*polledInbox // keyed by hash
+	handler   EventHandler
+	cancel    context.CancelFunc
+	mu        sync.RWMutex
+	started   bool
+}
+
+type polledInbox struct {
+	hash         string
+	emailAddress string // Required for polling API endpoints
+	lastHash     string
+	seenEmails   map[string]struct{}
+	interval     time.Duration
 }
 
 // NewPollingStrategy creates a new polling strategy.
-func NewPollingStrategy(apiClient interface{}) *PollingStrategy {
+func NewPollingStrategy(cfg Config) *PollingStrategy {
 	return &PollingStrategy{
-		apiClient: apiClient,
+		apiClient: cfg.APIClient,
+		inboxes:   make(map[string]*polledInbox),
 	}
 }
+
+// Name returns the strategy name.
+func (p *PollingStrategy) Name() string {
+	return "polling"
+}
+
+// Start begins listening for emails on the given inboxes.
+func (p *PollingStrategy) Start(ctx context.Context, inboxes []InboxInfo, handler EventHandler) error {
+	p.mu.Lock()
+	p.handler = handler
+	for _, inbox := range inboxes {
+		p.inboxes[inbox.Hash] = &polledInbox{
+			hash:         inbox.Hash,
+			emailAddress: inbox.EmailAddress,
+			seenEmails:   make(map[string]struct{}),
+			interval:     PollingInitialInterval,
+		}
+	}
+	p.started = true
+	p.mu.Unlock()
+
+	ctx, p.cancel = context.WithCancel(ctx)
+	go p.pollLoop(ctx)
+	return nil
+}
+
+// Stop gracefully shuts down the strategy.
+func (p *PollingStrategy) Stop() error {
+	p.mu.Lock()
+	p.started = false
+	p.mu.Unlock()
+
+	if p.cancel != nil {
+		p.cancel()
+	}
+	return nil
+}
+
+// AddInbox adds an inbox to monitor.
+func (p *PollingStrategy) AddInbox(inbox InboxInfo) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.inboxes[inbox.Hash] = &polledInbox{
+		hash:         inbox.Hash,
+		emailAddress: inbox.EmailAddress,
+		seenEmails:   make(map[string]struct{}),
+		interval:     PollingInitialInterval,
+	}
+	return nil
+}
+
+// RemoveInbox removes an inbox from monitoring.
+func (p *PollingStrategy) RemoveInbox(inboxHash string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.inboxes, inboxHash)
+	return nil
+}
+
+func (p *PollingStrategy) pollLoop(ctx context.Context) {
+	ticker := time.NewTicker(PollingInitialInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			p.pollAll(ctx)
+		}
+	}
+}
+
+func (p *PollingStrategy) pollAll(ctx context.Context) {
+	p.mu.RLock()
+	inboxList := make([]*polledInbox, 0, len(p.inboxes))
+	for _, inbox := range p.inboxes {
+		inboxList = append(inboxList, inbox)
+	}
+	p.mu.RUnlock()
+
+	for _, inbox := range inboxList {
+		p.pollInbox(ctx, inbox)
+	}
+}
+
+func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
+	// Check sync status first
+	sync, err := p.apiClient.GetInboxSync(ctx, inbox.emailAddress)
+	if err != nil {
+		return
+	}
+
+	// No changes since last poll
+	if sync.EmailsHash == inbox.lastHash {
+		// Increase backoff
+		newInterval := time.Duration(float64(inbox.interval) * PollingBackoffMultiplier)
+		if newInterval > PollingMaxBackoff {
+			newInterval = PollingMaxBackoff
+		}
+		inbox.interval = newInterval
+		return
+	}
+
+	// Changes detected - fetch emails
+	inbox.lastHash = sync.EmailsHash
+	inbox.interval = PollingInitialInterval // Reset backoff
+
+	emails, err := p.apiClient.GetEmailsNew(ctx, inbox.emailAddress)
+	if err != nil {
+		return
+	}
+
+	p.mu.RLock()
+	handler := p.handler
+	p.mu.RUnlock()
+
+	// Find new emails
+	for _, email := range emails {
+		if _, seen := inbox.seenEmails[email.ID]; !seen {
+			inbox.seenEmails[email.ID] = struct{}{}
+
+			if handler != nil {
+				handler(&api.SSEEvent{
+					InboxID:           inbox.hash,
+					EmailID:           email.ID,
+					EncryptedMetadata: email.EncryptedMetadata,
+				})
+			}
+		}
+	}
+}
+
+func (p *PollingStrategy) getWaitDuration(inbox *polledInbox) time.Duration {
+	// Add jitter to prevent thundering herd
+	jitter := time.Duration(rand.Float64() * PollingJitterFactor * float64(inbox.interval))
+	return inbox.interval + jitter
+}
+
+// Legacy interface implementation for backward compatibility.
 
 // WaitForEmail waits for an email using polling.
 func (p *PollingStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
@@ -104,5 +269,5 @@ func (p *PollingStrategy) WaitForEmailCount(ctx context.Context, inboxHash strin
 
 // Close closes the polling strategy.
 func (p *PollingStrategy) Close() error {
-	return nil
+	return p.Stop()
 }

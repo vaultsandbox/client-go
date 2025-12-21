@@ -4,8 +4,18 @@ import (
 	"net/http"
 	"regexp"
 	"time"
+)
 
-	"github.com/vaultsandbox/client-go/internal/delivery"
+// DeliveryStrategy specifies how the client receives new emails.
+type DeliveryStrategy string
+
+const (
+	// StrategyAuto tries SSE first, falls back to polling.
+	StrategyAuto DeliveryStrategy = "auto"
+	// StrategySSE uses Server-Sent Events for real-time push notifications.
+	StrategySSE DeliveryStrategy = "sse"
+	// StrategyPolling uses periodic API calls with exponential backoff.
+	StrategyPolling DeliveryStrategy = "polling"
 )
 
 const (
@@ -16,11 +26,11 @@ const (
 
 // clientConfig holds configuration for the client.
 type clientConfig struct {
-	baseURL    string
-	httpClient *http.Client
-	strategy   delivery.Strategy
-	timeout    time.Duration
-	retries    int
+	baseURL          string
+	httpClient       *http.Client
+	deliveryStrategy DeliveryStrategy
+	timeout          time.Duration
+	retries          int
 }
 
 // inboxConfig holds configuration for inbox creation.
@@ -63,10 +73,10 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
-// WithStrategy sets the delivery strategy.
-func WithStrategy(strategy delivery.Strategy) Option {
+// WithDeliveryStrategy sets the delivery strategy.
+func WithDeliveryStrategy(strategy DeliveryStrategy) Option {
 	return func(c *clientConfig) {
-		c.strategy = strategy
+		c.deliveryStrategy = strategy
 	}
 }
 

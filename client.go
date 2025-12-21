@@ -11,7 +11,7 @@ import (
 // Client is the main VaultSandbox client for managing inboxes.
 type Client struct {
 	apiClient *api.Client
-	strategy  delivery.Strategy
+	strategy  delivery.FullStrategy
 	inboxes   map[string]*Inbox
 	mu        sync.RWMutex
 }
@@ -19,7 +19,8 @@ type Client struct {
 // New creates a new VaultSandbox client with the given API key.
 func New(apiKey string, opts ...Option) (*Client, error) {
 	cfg := &clientConfig{
-		baseURL: defaultBaseURL,
+		baseURL:          defaultBaseURL,
+		deliveryStrategy: StrategyAuto,
 	}
 
 	for _, opt := range opts {
@@ -35,14 +36,22 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		apiClient.SetHTTPClient(cfg.httpClient)
 	}
 
-	c := &Client{
-		apiClient: apiClient,
-		strategy:  cfg.strategy,
-		inboxes:   make(map[string]*Inbox),
+	// Create delivery strategy based on configuration
+	deliveryCfg := delivery.Config{APIClient: apiClient}
+	var strategy delivery.FullStrategy
+	switch cfg.deliveryStrategy {
+	case StrategySSE:
+		strategy = delivery.NewSSEStrategy(deliveryCfg)
+	case StrategyPolling:
+		strategy = delivery.NewPollingStrategy(deliveryCfg)
+	default:
+		strategy = delivery.NewAutoStrategy(deliveryCfg)
 	}
 
-	if c.strategy == nil {
-		c.strategy = delivery.NewAutoStrategy(apiClient)
+	c := &Client{
+		apiClient: apiClient,
+		strategy:  strategy,
+		inboxes:   make(map[string]*Inbox),
 	}
 
 	return c, nil
