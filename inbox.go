@@ -2,6 +2,8 @@ package vaultsandbox
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/vaultsandbox/client-go/internal/api"
@@ -259,23 +261,94 @@ func newInboxFromExport(data *ExportedInbox, c *Client) (*Inbox, error) {
 	}, nil
 }
 
-func (i *Inbox) decryptEmail(encrypted *api.EncryptedEmail) (*Email, error) {
-	// Convert api.EncryptedEmail to crypto.EncryptedEmail
-	cryptoEncrypted := &crypto.EncryptedEmail{
-		ID:              encrypted.ID,
-		EncapsulatedKey: encrypted.EncapsulatedKey,
-		Ciphertext:      encrypted.Ciphertext,
-		Signature:       encrypted.Signature,
-		ReceivedAt:      encrypted.ReceivedAt,
-		IsRead:          encrypted.IsRead,
+func (i *Inbox) decryptEmail(raw *api.RawEmail) (*Email, error) {
+	return i.decryptEmailWithContext(context.Background(), raw)
+}
+
+func (i *Inbox) decryptEmailWithContext(ctx context.Context, raw *api.RawEmail) (*Email, error) {
+	if raw.EncryptedMetadata == nil {
+		return nil, fmt.Errorf("email has no encrypted metadata")
 	}
 
-	decrypted, err := crypto.DecryptEmail(cryptoEncrypted, i.keypair, i.serverSigPk)
+	// If we don't have parsed content, fetch the full email first
+	emailData := raw
+	if raw.EncryptedParsed == nil {
+		fullEmail, err := i.client.apiClient.GetEmail(ctx, i.emailAddress, raw.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch full email: %w", err)
+		}
+		emailData = fullEmail
+	}
+
+	// Verify signature BEFORE decryption (critical for security)
+	if err := crypto.VerifySignature(emailData.EncryptedMetadata); err != nil {
+		return nil, err
+	}
+
+	// Decrypt the metadata
+	metadataPlaintext, err := crypto.Decrypt(emailData.EncryptedMetadata, i.keypair)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert crypto.DecryptedEmail to Email
+	// Parse the decrypted metadata
+	var metadata crypto.DecryptedMetadata
+	if err := json.Unmarshal(metadataPlaintext, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to parse decrypted metadata: %w", err)
+	}
+
+	// Build the decrypted email from metadata
+	decrypted := &crypto.DecryptedEmail{
+		ID:      emailData.ID,
+		From:    metadata.From,
+		To:      []string{metadata.To},
+		Subject: metadata.Subject,
+		IsRead:  emailData.IsRead,
+	}
+
+	// Parse receivedAt
+	if metadata.ReceivedAt != "" {
+		if t, err := time.Parse(time.RFC3339, metadata.ReceivedAt); err == nil {
+			decrypted.ReceivedAt = t
+		}
+	}
+	if decrypted.ReceivedAt.IsZero() {
+		decrypted.ReceivedAt = emailData.ReceivedAt
+	}
+
+	// Decrypt parsed content if available
+	if emailData.EncryptedParsed != nil {
+		if err := crypto.VerifySignature(emailData.EncryptedParsed); err != nil {
+			return nil, err
+		}
+
+		parsedPlaintext, err := crypto.Decrypt(emailData.EncryptedParsed, i.keypair)
+		if err != nil {
+			return nil, err
+		}
+
+		var parsed crypto.DecryptedParsed
+		if err := json.Unmarshal(parsedPlaintext, &parsed); err != nil {
+			return nil, fmt.Errorf("failed to parse decrypted parsed content: %w", err)
+		}
+
+		decrypted.Text = parsed.Text
+		decrypted.HTML = parsed.HTML
+		decrypted.Attachments = parsed.Attachments
+		decrypted.Links = parsed.Links
+		decrypted.AuthResults = parsed.AuthResults
+
+		// Convert headers
+		if len(parsed.Headers) > 0 {
+			decrypted.Headers = make(map[string]string)
+			for k, v := range parsed.Headers {
+				if s, ok := v.(string); ok {
+					decrypted.Headers[k] = s
+				}
+			}
+		}
+	}
+
 	return i.convertDecryptedEmail(decrypted), nil
 }
 

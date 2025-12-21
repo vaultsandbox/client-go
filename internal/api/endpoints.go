@@ -181,9 +181,9 @@ func (c *Client) CreateInbox(ctx context.Context, req *LegacyCreateInboxRequest)
 	}, nil
 }
 
-// GetEmailsResponse is the response from fetching emails (legacy).
+// GetEmailsResponse is the response from fetching emails.
 type GetEmailsResponse struct {
-	Emails []*EncryptedEmail
+	Emails []*RawEmail
 }
 
 // EncryptedEmail represents an encrypted email from the API (legacy).
@@ -196,35 +196,31 @@ type EncryptedEmail struct {
 	IsRead          bool
 }
 
-// GetEmails fetches all emails in an inbox (legacy API).
+// GetEmails fetches all emails in an inbox.
 func (c *Client) GetEmails(ctx context.Context, emailAddress string) (*GetEmailsResponse, error) {
-	var resp []emailAPIResponse
+	var resp []RawEmail
 	path := fmt.Sprintf("/api/inboxes/%s/emails", url.PathEscape(emailAddress))
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 
-	emails := make([]*EncryptedEmail, 0, len(resp))
-	for _, e := range resp {
-		encrypted, err := parseEncryptedEmail(&e)
-		if err != nil {
-			return nil, err
-		}
-		emails = append(emails, encrypted)
+	emails := make([]*RawEmail, 0, len(resp))
+	for i := range resp {
+		emails = append(emails, &resp[i])
 	}
 
 	return &GetEmailsResponse{Emails: emails}, nil
 }
 
-// GetEmail fetches a specific email (legacy API).
-func (c *Client) GetEmail(ctx context.Context, emailAddress, emailID string) (*EncryptedEmail, error) {
-	var resp emailAPIResponse
+// GetEmail fetches a specific email.
+func (c *Client) GetEmail(ctx context.Context, emailAddress, emailID string) (*RawEmail, error) {
+	var resp RawEmail
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 
-	return parseEncryptedEmail(&resp)
+	return &resp, nil
 }
 
 // GetEmailRaw fetches the raw email content (legacy API).

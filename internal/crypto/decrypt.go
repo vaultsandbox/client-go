@@ -13,20 +13,38 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-// DecryptedEmail represents the decrypted email payload.
+// DecryptedMetadata represents the decrypted email metadata (from list endpoint).
+type DecryptedMetadata struct {
+	From       string `json:"from"`
+	To         string `json:"to"` // Single recipient in metadata
+	Subject    string `json:"subject"`
+	ReceivedAt string `json:"receivedAt"`
+}
+
+// DecryptedParsed represents the decrypted parsed email content.
+type DecryptedParsed struct {
+	Text        string                 `json:"text"`
+	HTML        string                 `json:"html"`
+	Headers     map[string]interface{} `json:"headers"`
+	Attachments []DecryptedAttachment  `json:"attachments"`
+	Links       []string               `json:"links"`
+	AuthResults json.RawMessage        `json:"authResults"`
+}
+
+// DecryptedEmail represents a fully decrypted email (combined metadata + parsed).
 type DecryptedEmail struct {
-	ID          string                `json:"id"`
-	From        string                `json:"from"`
-	To          []string              `json:"to"`
-	Subject     string                `json:"subject"`
-	Text        string                `json:"text"`
-	HTML        string                `json:"html"`
-	ReceivedAt  time.Time             `json:"received_at"`
-	Headers     map[string]string     `json:"headers"`
-	Attachments []DecryptedAttachment `json:"attachments"`
-	Links       []string              `json:"links"`
-	AuthResults json.RawMessage       `json:"auth_results"`
-	IsRead      bool                  `json:"is_read"`
+	ID          string
+	From        string
+	To          []string
+	Subject     string
+	Text        string
+	HTML        string
+	ReceivedAt  time.Time
+	Headers     map[string]string
+	Attachments []DecryptedAttachment
+	Links       []string
+	AuthResults json.RawMessage
+	IsRead      bool
 }
 
 // DecryptedAttachment represents a decrypted attachment.
