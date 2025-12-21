@@ -1,375 +1,505 @@
-# Go SDK Alignment Plan with Node SDK
+# Test Alignment Plan
 
-This document outlines a phased approach to verify and align the Go SDK (`client-go`) with the Node SDK (`client-node`) to ensure feature parity and consistency.
-
-**Reference:** `/home/vs/Desktop/dev/client-node`
+Plan to align the Go SDK test suite with `tests-spec.md`.
 
 ---
 
-## Phase 1: Core Cryptography Verification ✅ COMPLETED
+## Current State Summary
 
-Ensure cryptographic operations are identical between both SDKs.
-
-### 1.1 Keypair Generation
-- [x] Verify ML-KEM-768 key sizes match (public: 1184B, secret: 2400B)
-- [x] Verify `GenerateKeypair()` produces valid keys
-- [x] Implement `DerivePublicKeyFromSecret()` - Added to keypair.go
-- [x] Add `ValidateKeypair()` function - Added to keypair.go
-
-### 1.2 Signature Verification
-- [x] Verify ML-DSA-65 public key size (1952B)
-- [x] Verify transcript building matches Node SDK:
-  - Version byte (1)
-  - Algorithm ciphersuite string (`ML-KEM-768:ML-DSA-65:AES-256-GCM:HKDF-SHA-512`)
-  - Context string (`vaultsandbox:email:v1`)
-  - KEM ciphertext
-  - Nonce
-  - AAD
-  - Ciphertext
-  - Server public key
-- [x] Add `VerifySignatureSafe()` non-throwing variant - Added to verify.go
-- [x] Add `ValidateServerPublicKey()` function - Added to verify.go
-
-### 1.3 Decryption Pipeline
-- [x] Verify HKDF-SHA-512 key derivation matches:
-  - Salt = SHA-256(ctKem)
-  - Info = context || aad_length (4 bytes BE) || aad
-- [x] Verify AES-256-GCM parameters (12-byte nonce, 128-bit tag)
-- [x] Ensure signature verification happens BEFORE decryption
-
-### 1.4 Base64 Encoding
-- [x] Verify Base64URL encoding/decoding (no padding)
-- [x] Add standard Base64 encoding (`ToBase64`/`FromBase64`) for attachment content
-- [x] Lenient decoding already exists (`DecodeBase64` tries multiple formats)
-
-**Note:** The `DerivePublicKeyFromSecret` offset differs between Go (1152) and Node (1216) due to library-specific ML-KEM-768 secret key formats. This doesn't affect cross-SDK compatibility because export/import includes both public and secret keys explicitly.
+**Existing Test Files (22 total):**
+- Root: `client_test.go`, `email_test.go`, `inbox_test.go`, `errors_test.go`, `monitor_test.go`, `options_test.go`
+- `internal/api/`: `client_test.go`, `errors_test.go`, `retry_test.go`
+- `internal/crypto/`: `aes_test.go`, `base64_test.go`, `keypair_test.go`, `decrypt_test.go`, `verify_test.go`
+- `internal/delivery/`: `strategy_test.go`, `sse_test.go`, `polling_test.go`, `auto_test.go`
+- `authresults/`: `authresults_test.go`, `validate_test.go`
+- `integration/`: `integration_test.go`, `crosssdk_test.go`
 
 ---
 
-## Phase 2: API Client Alignment ✅ COMPLETED
+## 1. Unit Tests
 
-Ensure HTTP client behavior matches Node SDK.
+### 1.1 Cryptographic Utilities
 
-### 2.1 Configuration Options
-| Option | Node SDK | Go SDK | Status |
-|--------|----------|--------|--------|
-| `url` / `baseURL` | Required | `WithBaseURL()` | ✅ |
-| `apiKey` | Required | Constructor param | ✅ |
-| `strategy` | `'sse'|'polling'|'auto'` | `WithDeliveryStrategy()` | ✅ |
-| `pollingInterval` | 2000ms default | `defaultPollInterval` | ✅ |
-| `maxRetries` | 3 default | `WithRetries()` | ✅ |
-| `retryDelay` | 1000ms default | `DefaultRetryDelay` | ✅ |
-| `retryOn` | `[408,429,500,502,503,504]` | `WithRetryOn()` | ✅ |
-| `sseReconnectInterval` | 5000ms | `SSEReconnectInterval` | ✅ |
-| `sseMaxReconnectAttempts` | 10 | `SSEMaxReconnectAttempts` | ✅ |
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Base64URL Encoding** ||||
+| Round-trip | ✅ Exists | `internal/crypto/base64_test.go` | `TestBase64URLRoundtrip` |
+| No padding | ✅ Exists | `internal/crypto/base64_test.go` | `TestBase64URLNoPadding` |
+| URL-safe chars | ✅ Exists | `internal/crypto/base64_test.go` | `TestBase64URLSafeChars` |
+| **Keypair Generation** ||||
+| Generate keypair | ✅ Exists | `internal/crypto/keypair_test.go` | `TestGenerateKeypair` |
+| Unique keypairs | ⚠️ Review | `internal/crypto/keypair_test.go` | Verify uniqueness test exists |
+| Correct sizes | ✅ Exists | `internal/crypto/keypair_test.go` | `TestKeypairSizes` |
+| **Keypair Validation** ||||
+| Valid keypair | ✅ Exists | `internal/crypto/keypair_test.go` | `TestValidateKeypair` |
+| Invalid sizes | ⚠️ Review | `internal/crypto/keypair_test.go` | Verify invalid size test |
+| Mismatched base64 | ❌ Missing | - | Add test for mismatched base64 |
+| Missing fields | ⚠️ Review | `internal/crypto/keypair_test.go` | Verify nil/empty field handling |
 
-### 2.2 API Endpoints
-- [x] `GET /api/check-key` - Validate API key
-- [x] `GET /api/server-info` - Get server capabilities
-- [x] `POST /api/inboxes` - Create inbox
-- [x] `DELETE /api/inboxes` - Delete all inboxes
-- [x] `DELETE /api/inboxes/{email}` - Delete specific inbox
-- [x] `GET /api/inboxes/{email}/sync` - Get sync status
-- [x] `GET /api/inboxes/{email}/emails` - List emails
-- [x] `GET /api/inboxes/{email}/emails/{id}` - Get email
-- [x] `GET /api/inboxes/{email}/emails/{id}/raw` - Get raw email
-- [x] `PATCH /api/inboxes/{email}/emails/{id}/read` - Mark as read
-- [x] `DELETE /api/inboxes/{email}/emails/{id}` - Delete email
-- [x] `GET /api/events?inboxes=...` - SSE stream
+**Action Items:**
+- [ ] Review `keypair_test.go` for unique keypair test
+- [ ] Add test for mismatched base64 in keypair validation
+- [ ] Verify missing/nil field validation test exists
 
-### 2.3 Error Handling
-- [x] Map HTTP 404 + "inbox" → `ErrInboxNotFound`
-- [x] Map HTTP 404 + "email" → `ErrEmailNotFound`
-- [x] Map HTTP 401 → `ErrUnauthorized`
-- [x] Map HTTP 429 → `ErrRateLimited`
-- [x] Include RequestID in error messages
+### 1.2 Type Validation
 
-### 2.4 Retry Logic
-- [x] Exponential backoff: `delay * 2^retryCount`
-- [x] Verify retryable status codes
-- [x] Add configurable `retryOn` status codes
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **AuthResults Validation** ||||
+| All pass | ✅ Exists | `authresults/validate_test.go` | |
+| SPF fail | ✅ Exists | `authresults/validate_test.go` | |
+| DKIM fail | ✅ Exists | `authresults/validate_test.go` | |
+| DMARC fail | ✅ Exists | `authresults/validate_test.go` | |
+| DKIM partial pass | ⚠️ Review | `authresults/validate_test.go` | Verify multiple DKIM results test |
+| None status | ⚠️ Review | `authresults/validate_test.go` | Verify "none" status handling |
+| Empty results | ⚠️ Review | `authresults/validate_test.go` | Verify nil/empty handling |
+| Reverse DNS fail | ⚠️ Review | `authresults/validate_test.go` | Verify doesn't affect overall |
 
----
+**Action Items:**
+- [ ] Review `validate_test.go` for all edge cases
+- [ ] Add any missing AuthResults validation tests
 
-## Phase 3: Client API Alignment ✅ COMPLETED
+### 1.3 Client Configuration
 
-Ensure public Client API matches Node SDK.
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Default Configuration** ||||
+| Default values | ✅ Exists | `options_test.go` | |
+| Verify defaults | ⚠️ Review | `options_test.go` | Verify specific default values |
+| **Custom Configuration** ||||
+| Custom URL | ✅ Exists | `options_test.go` | `WithBaseURL` |
+| Custom timeout | ✅ Exists | `options_test.go` | `WithTimeout` |
+| Custom retries | ✅ Exists | `options_test.go` | `WithRetries` |
+| Custom strategy | ✅ Exists | `options_test.go` | `WithDeliveryStrategy` |
+| Polling config | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| SSE config | ⚠️ Review | `internal/delivery/sse_test.go` | |
 
-### 3.1 Client Methods
-| Method | Node SDK | Go SDK | Status |
-|--------|----------|--------|--------|
-| Constructor | `new VaultSandboxClient(config)` | `New(apiKey, ...opts)` | ✅ |
-| `createInbox()` | ✅ | `CreateInbox()` | ✅ |
-| `deleteAllInboxes()` | ✅ | `DeleteAllInboxes()` | ✅ |
-| `exportInbox()` | ✅ | Via `inbox.Export()` | ✅ |
-| `importInbox()` | ✅ | `ImportInbox()` | ✅ |
-| `exportInboxToFile()` | ✅ | `ExportInboxToFile()` | ✅ |
-| `importInboxFromFile()` | ✅ | `ImportInboxFromFile()` | ✅ |
-| `monitorInboxes()` | ✅ | `MonitorInboxes()` | ✅ |
-| `getServerInfo()` | ✅ | `ServerInfo()` | ✅ |
-| `checkKey()` | ✅ | `CheckKey()` | ✅ |
-| `close()` | ✅ | `Close()` | ✅ |
-
-### 3.2 Missing Client Features
-- [x] Add `CheckKey() error` public method
-- [x] Add `ExportInboxToFile(inbox, path) error`
-- [x] Add `ImportInboxFromFile(path) (*Inbox, error)`
-- [x] Add `MonitorInboxes(inboxes) *InboxMonitor` with EventEmitter pattern
+**Action Items:**
+- [ ] Review options tests for comprehensive default validation
+- [ ] Verify polling and SSE configuration tests
 
 ---
 
-## Phase 4: Inbox API Alignment ✅ COMPLETED
+## 2. Integration Tests
 
-Ensure Inbox operations match Node SDK.
+> Location: `integration/integration_test.go`
 
-### 4.1 Inbox Methods
-| Method | Node SDK | Go SDK | Status |
-|--------|----------|--------|--------|
-| `emailAddress` | Property | `EmailAddress()` | ✅ |
-| `expiresAt` | Property | `ExpiresAt()` | ✅ |
-| `inboxHash` | Property | `InboxHash()` | ✅ |
-| `listEmails()` | ✅ | `GetEmails()` | ✅ |
-| `getEmail(id)` | ✅ | `GetEmail()` | ✅ |
-| `getRawEmail(id)` | ✅ | Via `email.GetRaw()` | ✅ |
-| `waitForEmail()` | ✅ | `WaitForEmail()` | ✅ |
-| `waitForEmailCount()` | ✅ | `WaitForEmailCount()` | ✅ |
-| `onNewEmail(cb)` | ✅ | `OnNewEmail()` | ✅ |
-| `markEmailAsRead(id)` | ✅ | Via `email.MarkAsRead()` | ✅ |
-| `deleteEmail(id)` | ✅ | Via `email.Delete()` | ✅ |
-| `delete()` | ✅ | `Delete()` | ✅ |
-| `getSyncStatus()` | ✅ | `GetSyncStatus()` | ✅ |
-| `export()` | ✅ | `Export()` | ✅ |
+### 2.1 Client Lifecycle
 
-### 4.2 Missing Inbox Features
-- [x] Add `GetSyncStatus() (*SyncStatus, error)`
-- [x] Add `OnNewEmail(callback) Subscription` with unsubscribe
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **API Key Validation** ||||
+| Valid key | ⚠️ Review | `integration/integration_test.go` | `CheckKey` test |
+| Invalid key | ⚠️ Review | `integration/integration_test.go` | Should return false or 401 |
+| **Server Info** ||||
+| Get server info | ⚠️ Review | `integration/integration_test.go` | `ServerInfo` test |
+| Algorithm values | ❌ Missing | - | Verify specific algorithm values |
+| **Client Close** ||||
+| Graceful close | ⚠️ Review | `integration/integration_test.go` | `Close()` test |
+| Resource cleanup | ❌ Missing | - | Test with active subscriptions |
 
----
+**Action Items:**
+- [ ] Add invalid API key test
+- [ ] Add algorithm values verification test
+- [ ] Add resource cleanup test with active subscriptions
 
-## Phase 5: Email API Alignment ✅ COMPLETED
+### 2.2 Inbox Management
 
-Ensure Email properties and methods match.
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Create Inbox** ||||
+| Basic creation | ⚠️ Review | `integration/integration_test.go` | |
+| Email format | ⚠️ Review | `integration/integration_test.go` | Verify `@` symbol |
+| With custom TTL | ⚠️ Review | `integration/integration_test.go` | `WithTTL` option |
+| **Delete Inbox** ||||
+| Delete existing | ⚠️ Review | `integration/integration_test.go` | |
+| Access after delete | ❌ Missing | - | Should throw `ErrInboxNotFound` |
+| **Delete All Inboxes** ||||
+| Delete all | ⚠️ Review | `integration/integration_test.go` | |
+| **Sync Status** ||||
+| Empty inbox | ⚠️ Review | `integration/integration_test.go` | `email_count=0` |
+| Consistent hash | ❌ Missing | - | Multiple calls same hash |
 
-### 5.1 Email Properties
-| Property | Node SDK | Go SDK | Status |
-|----------|----------|--------|--------|
-| `id` | ✅ | `ID` | ✅ |
-| `from` | ✅ | `From` | ✅ |
-| `to` | `string[]` | `[]string` | ✅ |
-| `subject` | ✅ | `Subject` | ✅ |
-| `receivedAt` | `Date` | `time.Time` | ✅ |
-| `isRead` | ✅ | `IsRead` | ✅ |
-| `text` | `string|null` | `string` | ✅ |
-| `html` | `string|null` | `string` | ✅ |
-| `attachments` | ✅ | `[]Attachment` | ✅ |
-| `links` | `string[]` | `[]string` | ✅ |
-| `headers` | `Record<string,unknown>` | `map[string]string` | ✅ (intentional) |
-| `authResults` | `AuthResults` | `*authresults.AuthResults` | ✅ |
+**Action Items:**
+- [ ] Add "access after delete" test
+- [ ] Add "consistent hash" test for sync status
+- [ ] Review existing inbox tests for completeness
 
-**Note:** The `headers` field uses `map[string]string` in Go for type safety, while the Node SDK uses `Record<string, unknown>`. Non-string header values from the server are omitted during parsing. This is intentional as email headers are typically string values.
+### 2.3 Inbox Operations (No Email)
 
-### 5.2 Email Methods
-| Method | Node SDK | Go SDK | Status |
-|--------|----------|--------|--------|
-| `markAsRead()` | ✅ | `MarkAsRead()` | ✅ |
-| `delete()` | ✅ | `Delete()` | ✅ |
-| `getRaw()` | ✅ | `GetRaw()` | ✅ |
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **List Emails** ||||
+| Empty inbox | ⚠️ Review | `integration/integration_test.go` | Returns empty slice |
+| **Get Non-existent Email** ||||
+| Invalid ID | ⚠️ Review | `integration/integration_test.go` | `ErrEmailNotFound` |
 
-### 5.3 Attachment Structure
-- [x] Verify `Filename`, `ContentType`, `Size` fields - JSON tags updated to camelCase
-- [x] Verify `ContentID`, `ContentDisposition` for inline attachments - JSON tags updated
-- [x] Verify `Content` ([]byte) and `Checksum` fields - Using `Base64Bytes` type
-- [x] Handle base64-encoded content from server - `Base64Bytes` custom unmarshaler handles base64 strings
+**Action Items:**
+- [ ] Verify empty inbox list test
+- [ ] Verify non-existent email test
 
----
+### 2.4 Error Handling
 
-## Phase 6: Authentication Results Alignment ✅ COMPLETED
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Network Errors** ||||
+| Invalid host | ⚠️ Review | `integration/integration_test.go` | `ErrNetwork` |
+| **Uninitialized Client** ||||
+| Operations before init | ⚠️ Review | - | May not apply to Go SDK |
 
-Ensure email authentication validation matches.
-
-### 6.1 AuthResults Structure
-| Component | Node SDK | Go SDK | Status |
-|-----------|----------|--------|--------|
-| `spf` | `SPFResult` | `*SPFResult` | ✅ |
-| `dkim` | `DKIMResult[]` | `[]DKIMResult` | ✅ |
-| `dmarc` | `DMARCResult` | `*DMARCResult` | ✅ |
-| `reverseDns` | `ReverseDNSResult` | `*ReverseDNSResult` | ✅ |
-
-### 6.2 Validation Method
-- [x] Implement `Validate() AuthValidation` matching Node SDK:
-  ```go
-  type AuthValidation struct {
-      Passed           bool
-      SPFPassed        bool
-      DKIMPassed       bool
-      DMARCPassed      bool
-      ReverseDNSPassed bool
-      Failures         []string
-  }
-  ```
-- [x] Add `IsPassing() bool` convenience method
-
-**Note:** The `Passed` field (and `IsPassing()`) only checks SPF, DKIM, and DMARC to match Node SDK behavior. Reverse DNS is reported separately but does not affect the overall pass status.
+**Action Items:**
+- [ ] Verify network error test exists
+- [ ] Determine if uninitialized client test applies
 
 ---
 
-## Phase 7: Delivery Strategies Alignment ✅ COMPLETED
+## 3. E2E Tests
 
-Ensure SSE and Polling strategies match Node SDK behavior.
+> Requires SMTP. Location: `integration/integration_test.go`
 
-### 7.1 SSE Strategy
-- [x] Verify SSE endpoint URL format: `/api/events?inboxes={hash1},{hash2},...`
-- [x] Verify `X-API-Key` header authentication
-- [x] Implement reconnection with exponential backoff
-- [x] Match reconnection parameters (5s interval, 10 max attempts, 2x multiplier)
-- [x] Handle SSE event parsing (JSON payload)
+### 3.1 Basic Email Flow
 
-### 7.2 Polling Strategy
-- [x] Verify polling uses sync status (hash-based change detection)
-- [x] Implement exponential backoff with jitter:
-  - Initial: 2s
-  - Max: 30s
-  - Multiplier: 1.5
-  - Jitter: 0.3
-- [x] Reset backoff when changes detected
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| Simple text email | ⚠️ Review | `integration/integration_test.go` | Send, receive, verify |
+| Timeout on receive | ⚠️ Review | `integration/integration_test.go` | `ErrTimeout` |
+| **HTML Email** ||||
+| HTML content | ⚠️ Review | `integration/integration_test.go` | Text and HTML fields |
+| **Attachments** ||||
+| Single attachment | ⚠️ Review | `integration/integration_test.go` | |
+| Multiple attachments | ⚠️ Review | `integration/integration_test.go` | |
 
-### 7.3 Auto Strategy
-- [x] Try SSE first with timeout (5s)
-- [x] Fall back to polling on SSE failure
-- [x] Use polling for `WaitForEmail`/`WaitForEmailCount` (backward compat)
+**Action Items:**
+- [ ] Review E2E tests for basic email flow coverage
+- [ ] Add any missing attachment tests
 
-**Implementation Notes:**
-- Added `WaitForEmailWithSync` and `WaitForEmailCountWithSync` methods with optional `SyncFetcher` for hash-based change detection
-- Polling loop now uses adaptive per-inbox intervals with jitter
-- SSE strategy signals connection establishment via `Connected()` channel
-- Auto strategy properly waits for SSE connection before declaring success
+### 3.2 Email Filtering
 
----
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Filter by Subject** ||||
+| String match | ⚠️ Review | `integration/integration_test.go` | `WithSubject` |
+| Regex match | ⚠️ Review | `integration/integration_test.go` | `WithSubjectRegex` |
+| No match timeout | ⚠️ Review | `integration/integration_test.go` | |
+| **Filter by Sender** ||||
+| String match | ⚠️ Review | `integration/integration_test.go` | `WithFrom` |
+| Regex match | ⚠️ Review | `integration/integration_test.go` | `WithFromRegex` |
+| **Custom Predicate** ||||
+| Predicate function | ⚠️ Review | `integration/integration_test.go` | `WithPredicate` |
 
-## Phase 8: Error Types Alignment ✅ COMPLETED
+**Action Items:**
+- [ ] Verify all filter options have tests
+- [ ] Add regex filter tests if missing
 
-Ensure error types match Node SDK.
+### 3.3 Email Operations
 
-### 8.1 Error Classes
-| Node SDK Error | Go SDK Error | Status |
-|----------------|--------------|--------|
-| `VaultSandboxError` | Base interface | ✅ |
-| `ApiError` | `APIError` | ✅ |
-| `NetworkError` | `NetworkError` | ✅ |
-| `TimeoutError` | `TimeoutError` | ✅ |
-| `DecryptionError` | `DecryptionError` | ✅ |
-| `SignatureVerificationError` | `SignatureVerificationError` | ✅ |
-| `InboxNotFoundError` | `ErrInboxNotFound` | ✅ |
-| `EmailNotFoundError` | `ErrEmailNotFound` | ✅ |
-| `SSEError` | `ErrSSEConnection` | ✅ |
-| `InboxAlreadyExistsError` | `ErrInboxAlreadyExists` | ✅ |
-| `InvalidImportDataError` | `ErrInvalidImportData` | ✅ |
-| `StrategyError` | `StrategyError` | ✅ |
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **List Emails** ||||
+| Multiple emails | ⚠️ Review | `integration/integration_test.go` | |
+| **Get Specific Email** ||||
+| By ID | ⚠️ Review | `integration/integration_test.go` | `GetEmail` |
+| **Mark as Read** ||||
+| Via inbox method | ❌ Missing | - | `Inbox.MarkAsRead` |
+| Via email method | ⚠️ Review | `integration/integration_test.go` | `Email.MarkAsRead` |
+| **Delete Email** ||||
+| Via inbox method | ❌ Missing | - | `Inbox.DeleteEmail` |
+| Via email method | ⚠️ Review | `integration/integration_test.go` | `Email.Delete` |
+| **Raw Email** ||||
+| Get raw content | ⚠️ Review | `integration/integration_test.go` | `Email.GetRaw` |
 
-### 8.2 Error Enhancements
-- [x] Add `StrategyError` type
-- [x] Ensure all errors implement `VaultSandboxError` interface
-- [x] Add `Unwrap()` for error chaining
+**Action Items:**
+- [ ] Add inbox-level mark as read test (if method exists)
+- [ ] Add inbox-level delete email test (if method exists)
+- [ ] Verify raw email test exists
 
-**Implementation Notes:**
-- All error types implement the `VaultSandboxError` interface via marker method
-- Errors that wrap other errors (`NetworkError`, `DecryptionError`, `SSEError`, `StrategyError`) implement `Unwrap()` for `errors.Is()` / `errors.As()` chaining
-- Errors without wrapped errors (`APIError`, `TimeoutError`, `SignatureVerificationError`, `ValidationError`) don't need `Unwrap()` - this is idiomatic Go
-- Sentinel errors (`ErrInboxNotFound`, `ErrEmailNotFound`, etc.) work with `errors.Is()` via custom `Is()` methods on structured error types
+### 3.4 Email Content
 
----
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Link Extraction** ||||
+| Links in HTML | ⚠️ Review | `integration/integration_test.go` | `Email.Links` |
+| **Headers Access** ||||
+| Standard headers | ⚠️ Review | `integration/integration_test.go` | `Email.Headers` |
+| **Authentication Results** ||||
+| Results present | ⚠️ Review | `integration/integration_test.go` | `Email.AuthResults` |
+| Validate method | ⚠️ Review | `integration/integration_test.go` | `AuthResults.Validate()` |
+| Direct send fails SPF | ⚠️ Review | `integration/integration_test.go` | SPF != "pass" |
+| Direct send fails DKIM | ⚠️ Review | `integration/integration_test.go` | DKIM != "pass" |
 
-## Phase 9: Testing & Validation ✅ COMPLETED
+**Action Items:**
+- [ ] Verify link extraction test
+- [ ] Verify headers access test
+- [ ] Verify auth results tests
 
-Verify implementations with test cases.
+### 3.5 Multiple Emails
 
-### 9.1 Unit Tests
-- [x] Crypto operations (keypair, signature, decrypt) - `internal/crypto/*_test.go`
-- [x] Base64 encoding/decoding edge cases - `internal/crypto/base64_test.go`
-- [x] Error type assertions - `errors_test.go`
-- [x] Option builders - `options_test.go`
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Wait for Count** ||||
+| Wait for N | ⚠️ Review | `integration/integration_test.go` | `WaitForEmailCount` |
+| Timeout on count | ⚠️ Review | `integration/integration_test.go` | |
 
-### 9.2 Integration Tests
-- [x] Create inbox, send email, receive email - `integration/integration_test.go`
-- [x] Export/import inbox round-trip - `TestIntegration_ExportImport`, `TestIntegration_ExportFileRoundtrip`
-- [x] Email filtering (subject, from, predicate) - `TestIntegration_WaitForEmail_WithFilters`, `TestIntegration_WaitForEmail_WithPredicate`
-- [x] SSE real-time delivery - `TestIntegration_SSEDelivery`
-- [x] Polling fallback - `TestIntegration_PollingDelivery`
-- [x] Authentication results parsing - `TestIntegration_AuthResults`
-
-### 9.3 Cross-SDK Validation
-- [x] Export from Node, import in Go - `TestCrossSDK_ImportNodeExport`
-- [x] Export from Go, import in Node - `TestCrossSDK_ExportFormatCompatibility`
-- [x] Same inbox, same emails, verify decrypt works - `TestCrossSDK_CompareExports`
-- [x] Compare decrypted content byte-for-byte - `TestCrossSDK_CryptoConstants`
-
-**Implementation Notes:**
-- Unit tests cover all crypto operations with comprehensive edge cases
-- Integration tests require API credentials (VAULTSANDBOX_API_KEY, VAULTSANDBOX_URL)
-- Manual tests (email receive, SSE, polling, filters) require MANUAL_TEST=1 environment variable
-- Cross-SDK tests in `integration/crosssdk_test.go` verify format compatibility
-- Run all tests with: `go test ./... -count=1`
-- Run integration tests with: `go test -tags=integration ./integration/... -v`
+**Action Items:**
+- [ ] Verify wait for count tests
 
 ---
 
-## Phase 10: Documentation & Examples
+## 4. Strategy Tests
 
-Ensure documentation and examples are complete.
+### 4.1 Polling Strategy
 
-### 10.1 Examples
-- [x] Basic inbox creation (`examples/basic`)
-- [x] Wait for email (`examples/waitforemail`)
-- [x] Export/import (`examples/export`)
-- [x] SMTP integration (`examples/smtp`)
-- [ ] Monitor multiple inboxes
-- [ ] Authentication validation
-- [ ] Custom HTTP client
-- [ ] Error handling patterns
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Configuration** ||||
+| Default config | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| Custom config | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| **Behavior** ||||
+| Timeout with backoff | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| Custom interval | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| Concurrent polling | ❌ Missing | - | Poll multiple inboxes |
+| **Subscription Management** ||||
+| Subscribe | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| Unsubscribe | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| Close | ⚠️ Review | `internal/delivery/polling_test.go` | |
 
-### 10.2 Documentation
-- [ ] README with quick start
-- [ ] API reference (godoc)
-- [ ] Configuration options
-- [ ] Error handling guide
-- [ ] Security considerations
+**Action Items:**
+- [ ] Add concurrent polling test
+- [ ] Review subscription management tests
+
+### 4.2 SSE Strategy
+
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Configuration** ||||
+| Default config | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| Custom config | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| **Subscription Management** ||||
+| Subscribe | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| Unsubscribe | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| Multiple unsubscribe | ❌ Missing | - | Idempotent unsubscribe |
+| Close | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| **Connection Handling** ||||
+| Connection error | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| No connect when closing | ❌ Missing | - | Subscribe after close |
+
+**Action Items:**
+- [ ] Add idempotent unsubscribe test
+- [ ] Add "subscribe after close" test
+
+### 4.3 Real-time Monitoring
+
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **on_new_email** ||||
+| Receive via callback | ⚠️ Review | `monitor_test.go` | `OnNewEmail` |
+| Unsubscribe stops callback | ⚠️ Review | `monitor_test.go` | |
+| **monitor_inboxes** ||||
+| Multiple inboxes | ⚠️ Review | `monitor_test.go` | `MonitorInboxes` |
+| Unsubscribe all | ⚠️ Review | `monitor_test.go` | |
+
+**Action Items:**
+- [ ] Review monitoring tests for completeness
 
 ---
 
-## Summary: Priority Tasks
+## 5. Import/Export Tests
 
-### High Priority (Breaking/Security)
-1. Verify signature transcript matches exactly
-2. Verify HKDF key derivation matches exactly
-3. Verify decryption produces identical output
+### 5.1 Export
 
-### Medium Priority (Feature Parity)
-1. ~~Add `MonitorInboxes()` with event subscription~~ ✅
-2. ~~Add `OnNewEmail()` subscription on inbox~~ ✅
-3. ~~Add `GetSyncStatus()` on inbox~~ ✅
-4. ~~Add file-based export/import helpers~~ ✅
-5. ~~Expose `CheckKey()` publicly~~ ✅
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| Export to object | ⚠️ Review | `inbox_test.go` | `Inbox.Export()` |
+| Required fields | ⚠️ Review | `inbox_test.go` | All fields present |
+| Valid timestamps | ⚠️ Review | `inbox_test.go` | ISO 8601 format |
+| Valid base64 keys | ⚠️ Review | `inbox_test.go` | |
+| Export by address | ❌ Missing | - | Export using email string |
+| Not found error | ❌ Missing | - | Export non-existent inbox |
 
-### Low Priority (Polish)
-1. Add configurable retry status codes
-2. Add `StrategyError` type
-3. Improve documentation
-4. Add more examples
+**Action Items:**
+- [ ] Add export by email address test
+- [ ] Add export not found error test
+
+### 5.2 Import
+
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| Import valid data | ⚠️ Review | `client_test.go` | `ImportInbox` |
+| Access emails | ⚠️ Review | `integration/integration_test.go` | |
+| Missing fields | ⚠️ Review | `client_test.go` | `ErrInvalidImportData` |
+| Empty fields | ⚠️ Review | `client_test.go` | |
+| Invalid timestamp | ❌ Missing | - | |
+| Invalid base64 | ❌ Missing | - | |
+| Wrong key length | ⚠️ Review | `client_test.go` | |
+| Server mismatch | ❌ Missing | - | Different `server_sig_pk` |
+| Already exists | ⚠️ Review | `client_test.go` | `ErrInboxAlreadyExists` |
+
+**Action Items:**
+- [ ] Add invalid timestamp import test
+- [ ] Add invalid base64 import test
+- [ ] Add server mismatch import test
+
+### 5.3 File Operations
+
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| Export to file | ⚠️ Review | `client_test.go` | `ExportInboxToFile` |
+| Import from file | ⚠️ Review | `client_test.go` | `ImportInboxFromFile` |
+| Invalid JSON file | ❌ Missing | - | |
+| Non-existent file | ⚠️ Review | `client_test.go` | |
+| Formatted JSON | ❌ Missing | - | Check indentation |
+
+**Action Items:**
+- [ ] Add invalid JSON file import test
+- [ ] Add formatted JSON verification test
 
 ---
 
-## Verification Checklist
+## 6. Edge Cases
 
-Before marking a phase complete:
+### 6.1 Error Handling
 
-- [x] Code compiles without warnings (`go build ./...`)
-- [x] All unit tests pass (`go test ./... -count=1`)
-- [x] Integration tests pass against real server (`go test -tags=integration ./integration/...`)
-- [x] Behavior matches Node SDK (manual verification)
-- [x] No security regressions (signature before decrypt)
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| Timeout value 0 | ❌ Missing | - | Immediate timeout |
+| Deleted inbox during wait | ❌ Missing | - | |
+| Empty inbox array | ⚠️ Review | `monitor_test.go` | `MonitorInboxes([])` |
 
-**Phase 9 Verification:**
-- All 21 test files pass
-- Total ~150+ test functions across all packages
-- go vet passes without issues
-- Integration tests compile with build tag
+**Action Items:**
+- [ ] Add timeout=0 test
+- [ ] Add deleted inbox during wait test
+- [ ] Verify empty inbox array monitoring test
+
+### 6.2 Retry Logic
+
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| Retry on 5xx | ⚠️ Review | `internal/api/retry_test.go` | |
+| Max retries exceeded | ⚠️ Review | `internal/api/retry_test.go` | |
+| No retry on 4xx | ⚠️ Review | `internal/api/retry_test.go` | |
+
+**Action Items:**
+- [ ] Review retry logic tests
+
+### 6.3 Specific Error Types
+
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| 404 inbox | ⚠️ Review | `errors_test.go` | `ErrInboxNotFound` |
+| 404 email | ⚠️ Review | `errors_test.go` | `ErrEmailNotFound` |
+
+**Action Items:**
+- [ ] Verify error type tests
+
+---
+
+## 7. README Examples Tests
+
+| Spec Test | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Quick Start** ||||
+| Basic flow | ❌ Missing | - | End-to-end quick start |
+| **Configuration Examples** ||||
+| All client options | ❌ Missing | - | Test all documented options |
+| Environment variables | ❌ Missing | - | Env var configuration |
+| **Feature Examples** ||||
+| Filter examples | ❌ Missing | - | All filter patterns |
+| Attachment example | ❌ Missing | - | |
+| Auth results example | ❌ Missing | - | |
+| Monitor example | ❌ Missing | - | |
+| Export/import example | ❌ Missing | - | |
+| Error handling example | ❌ Missing | - | |
+
+**Action Items:**
+- [ ] Create `examples_test.go` with tests mirroring README examples
+- [ ] Ensure all documented code examples are tested
+
+---
+
+## 8. Test Utilities
+
+### 8.1 Required Helpers
+
+| Utility | Status | Location | Notes |
+|---------|--------|----------|-------|
+| SMTP client | ⚠️ Review | `integration/` | Check for SMTP helper |
+| Cleanup hooks | ⚠️ Review | `integration/` | Test cleanup |
+| Skip conditions | ⚠️ Review | `integration/` | Skip when server unavailable |
+| Timeout helpers | ⚠️ Review | - | Reasonable async timeouts |
+
+**Action Items:**
+- [ ] Review/create SMTP test helper
+- [ ] Ensure cleanup hooks exist
+- [ ] Verify skip conditions work
+
+### 8.2 Environment Variables
+
+| Variable | Status | Notes |
+|----------|--------|-------|
+| `VAULTSANDBOX_URL` | ⚠️ Review | |
+| `VAULTSANDBOX_API_KEY` | ⚠️ Review | |
+| `SMTP_HOST` | ⚠️ Review | |
+| `SMTP_PORT` | ⚠️ Review | |
+
+**Action Items:**
+- [ ] Verify all env vars are respected
+- [ ] Document env vars in test setup
+
+---
+
+## Implementation Priority
+
+### Phase 1: Critical Missing Tests (High Priority)
+1. Keypair mismatched base64 validation test
+2. Access after inbox delete test
+3. Import validation tests (invalid timestamp, base64, server mismatch)
+4. File operations tests (invalid JSON, formatted JSON)
+5. Edge case tests (timeout=0, deleted inbox during wait)
+
+### Phase 2: Strategy Tests (Medium Priority)
+1. Concurrent polling test
+2. Idempotent unsubscribe test
+3. Subscribe after close test
+
+### Phase 3: README Examples Tests (Medium Priority)
+1. Create `examples_test.go`
+2. Test all documented code examples
+
+### Phase 4: Review & Verify (Low Priority)
+1. Audit all ⚠️ Review items
+2. Ensure test naming consistency
+3. Add test documentation
+
+---
+
+## Test Count Target
+
+| Category | Spec Required | Current (Est.) | Gap |
+|----------|---------------|----------------|-----|
+| Unit - Crypto | 9 | ~7 | ~2 |
+| Unit - Types | 8 | ~6 | ~2 |
+| Unit - Config | 6 | ~5 | ~1 |
+| Integration - Client | 6 | ~4 | ~2 |
+| Integration - Inbox | 7 | ~5 | ~2 |
+| Integration - Errors | 2 | ~2 | 0 |
+| E2E - Basic Flow | 4 | ~3 | ~1 |
+| E2E - Filtering | 6 | ~4 | ~2 |
+| E2E - Operations | 8 | ~5 | ~3 |
+| E2E - Content | 6 | ~4 | ~2 |
+| E2E - Multiple | 2 | ~1 | ~1 |
+| Strategy - Polling | 6 | ~4 | ~2 |
+| Strategy - SSE | 6 | ~4 | ~2 |
+| Strategy - Monitoring | 4 | ~3 | ~1 |
+| Import/Export | 15 | ~8 | ~7 |
+| Edge Cases | 5 | ~2 | ~3 |
+| README Examples | 8 | 0 | 8 |
+| **Total** | **~108** | **~67** | **~41** |
+
+---
+
+## Next Steps
+
+1. **Immediate**: Run `go test ./...` to get current test count
+2. **Review**: Read each test file to update ⚠️ Review items
+3. **Implement**: Start with Phase 1 critical missing tests
+4. **Validate**: Run tests against live server to verify E2E coverage
