@@ -160,6 +160,30 @@ go tool cover -html=coverage.out
 go test -race -coverprofile=coverage.out ./...
 ```
 
+# Test script
+
+## Unit tests only
+./scripts/test.sh
+
+## Include integration tests (loads .env automatically)
+./scripts/test.sh --integration
+
+## With coverage
+./scripts/test.sh --coverage
+
+## All options
+./scripts/test.sh --integration --coverage -v
+
+Note on Integration Tests
+
+The integration tests in integration/integration_test.go already auto-load .env via godotenv:
+
+func TestMain(m *testing.M) {
+    _ = godotenv.Load("../.env")  // Loads .env from project root
+    // ...
+}
+
+
 ### Linting
 
 ```bash

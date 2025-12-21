@@ -19,25 +19,35 @@ var (
 
 func TestMain(m *testing.M) {
 	// Load .env file if it exists (won't error if missing)
-	_ = godotenv.Load("../.env")
+	if err := godotenv.Load("../.env"); err != nil {
+		os.Stderr.WriteString("Note: .env file not found at project root\n")
+	}
 
 	apiKey = os.Getenv("VAULTSANDBOX_API_KEY")
-	baseURL = os.Getenv("VAULTSANDBOX_BASE_URL")
+	baseURL = os.Getenv("VAULTSANDBOX_URL")
 
 	if apiKey == "" {
-		// Skip integration tests if no API key
 		os.Stderr.WriteString("Skipping integration tests: VAULTSANDBOX_API_KEY not set\n")
 		os.Exit(0)
 	}
+
+	if baseURL == "" {
+		os.Stderr.WriteString("Skipping integration tests: VAULTSANDBOX_URL not set\n")
+		os.Exit(0)
+	}
+
+	os.Stderr.WriteString("Running integration tests...\n")
+	os.Stderr.WriteString("API URL: " + baseURL + "\n")
+
 	os.Exit(m.Run())
 }
 
 func newClient(t *testing.T) *vaultsandbox.Client {
 	t.Helper()
 
-	opts := []vaultsandbox.Option{}
-	if baseURL != "" {
-		opts = append(opts, vaultsandbox.WithBaseURL(baseURL))
+	opts := []vaultsandbox.Option{
+		vaultsandbox.WithBaseURL(baseURL),
+		vaultsandbox.WithTimeout(30 * time.Second),
 	}
 
 	client, err := vaultsandbox.New(apiKey, opts...)

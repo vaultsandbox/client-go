@@ -58,10 +58,17 @@ fi
 
 if [ "$INTEGRATION" = true ]; then
     if [ -z "$VAULTSANDBOX_API_KEY" ]; then
-        echo "Error: VAULTSANDBOX_API_KEY not set. Create a .env file or export the variable."
+        echo "Error: VAULTSANDBOX_API_KEY not set"
+        echo "Create a .env file with VAULTSANDBOX_API_KEY and VAULTSANDBOX_URL"
         exit 1
     fi
-    CMD="$CMD -tags=integration"
+    if [ -z "$VAULTSANDBOX_URL" ]; then
+        echo "Error: VAULTSANDBOX_URL not set"
+        echo "Create a .env file with VAULTSANDBOX_API_KEY and VAULTSANDBOX_URL"
+        exit 1
+    fi
+    echo "Using API URL: $VAULTSANDBOX_URL"
+    CMD="$CMD -tags=integration -timeout 60s"
 fi
 
 CMD="$CMD ./..."
