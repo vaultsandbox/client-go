@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,9 @@ type SSEStrategy struct {
 	reconnectWait time.Duration
 	attempts      int
 	started       bool
+	connected     chan struct{} // Signals when first connection is established
+	connectedOnce sync.Once
+	lastError     error
 }
 
 // NewSSEStrategy creates a new SSE strategy.
@@ -35,12 +39,25 @@ func NewSSEStrategy(cfg Config) *SSEStrategy {
 		apiClient:     cfg.APIClient,
 		inboxHashes:   make(map[string]struct{}),
 		reconnectWait: SSEReconnectInterval,
+		connected:     make(chan struct{}),
 	}
 }
 
 // Name returns the strategy name.
 func (s *SSEStrategy) Name() string {
 	return "sse"
+}
+
+// Connected returns a channel that's closed when the SSE connection is established.
+func (s *SSEStrategy) Connected() <-chan struct{} {
+	return s.connected
+}
+
+// LastError returns the last connection error, if any.
+func (s *SSEStrategy) LastError() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastError
 }
 
 // Start begins listening for emails on the given inboxes.
@@ -131,14 +148,31 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 		return nil
 	}
 
+	// Check for nil API client
+	if s.apiClient == nil {
+		err := fmt.Errorf("SSE strategy: API client is nil")
+		s.mu.Lock()
+		s.lastError = err
+		s.mu.Unlock()
+		return err
+	}
+
 	resp, err := s.apiClient.OpenEventStream(ctx, hashes)
 	if err != nil {
+		s.mu.Lock()
+		s.lastError = err
+		s.mu.Unlock()
 		return err
 	}
 	defer resp.Body.Close()
 
 	// Reset attempts on successful connection
 	s.attempts = 0
+
+	// Signal that connection is established
+	s.connectedOnce.Do(func() {
+		close(s.connected)
+	})
 
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
@@ -175,89 +209,34 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 
 // WaitForEmail waits for an email using SSE (with polling fallback).
 func (s *SSEStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
-	// For backward compatibility, we still support the polling-based approach
-	// when used through the legacy interface.
-	if pollInterval == 0 {
-		pollInterval = 2 * time.Second
-	}
+	return s.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, WaitOptions{
+		PollInterval: pollInterval,
+		SyncFetcher:  nil,
+	})
+}
 
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	// Check immediately first
-	emails, err := fetcher(ctx)
-	if err == nil {
-		for _, email := range emails {
-			if matcher(email) {
-				return email, nil
-			}
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-ticker.C:
-			emails, err := fetcher(ctx)
-			if err != nil {
-				continue
-			}
-
-			for _, email := range emails {
-				if matcher(email) {
-					return email, nil
-				}
-			}
-		}
-	}
+// WaitForEmailWithSync waits for an email using sync-status-based change detection.
+// SSE strategy delegates to polling for WaitForEmail operations for backward compatibility.
+func (s *SSEStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error) {
+	// SSE strategy uses polling for WaitForEmail operations
+	polling := &PollingStrategy{apiClient: s.apiClient}
+	return polling.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, opts)
 }
 
 // WaitForEmailCount waits for multiple emails using SSE (with polling fallback).
 func (s *SSEStrategy) WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
-	if pollInterval == 0 {
-		pollInterval = 2 * time.Second
-	}
+	return s.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, WaitOptions{
+		PollInterval: pollInterval,
+		SyncFetcher:  nil,
+	})
+}
 
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	// Check immediately first
-	emails, err := fetcher(ctx)
-	if err == nil {
-		var matching []interface{}
-		for _, email := range emails {
-			if matcher(email) {
-				matching = append(matching, email)
-			}
-		}
-		if len(matching) >= count {
-			return matching[:count], nil
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-ticker.C:
-			emails, err := fetcher(ctx)
-			if err != nil {
-				continue
-			}
-
-			var matching []interface{}
-			for _, email := range emails {
-				if matcher(email) {
-					matching = append(matching, email)
-				}
-			}
-
-			if len(matching) >= count {
-				return matching[:count], nil
-			}
-		}
-	}
+// WaitForEmailCountWithSync waits for multiple emails using sync-status-based change detection.
+// SSE strategy delegates to polling for WaitForEmailCount operations for backward compatibility.
+func (s *SSEStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error) {
+	// SSE strategy uses polling for WaitForEmailCount operations
+	polling := &PollingStrategy{apiClient: s.apiClient}
+	return polling.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, opts)
 }
 
 // Close closes the SSE strategy.

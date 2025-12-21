@@ -321,3 +321,105 @@ func TestSSEStrategy_WaitForEmail_DefaultInterval(t *testing.T) {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
 }
+
+func TestSSEStrategy_Connected(t *testing.T) {
+	s := NewSSEStrategy(Config{})
+
+	// Channel should not be closed initially
+	select {
+	case <-s.Connected():
+		t.Error("connected channel should not be closed initially")
+	default:
+		// Expected
+	}
+}
+
+func TestSSEStrategy_LastError(t *testing.T) {
+	s := NewSSEStrategy(Config{})
+
+	// Should be nil initially
+	if s.LastError() != nil {
+		t.Error("LastError should be nil initially")
+	}
+}
+
+func TestSSEStrategy_WaitForEmailWithSync(t *testing.T) {
+	s := NewSSEStrategy(Config{})
+
+	var fetchCount int32
+
+	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
+		return &SyncStatus{
+			EmailCount: 1,
+			EmailsHash: "test-hash",
+		}, nil
+	}
+
+	fetcher := func(ctx context.Context) ([]interface{}, error) {
+		count := atomic.AddInt32(&fetchCount, 1)
+		if count >= 2 {
+			return []interface{}{
+				&testEmail{ID: "email1", Subject: "Hello"},
+			}, nil
+		}
+		return nil, nil
+	}
+
+	matcher := func(email interface{}) bool {
+		return email.(*testEmail).Subject == "Hello"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := s.WaitForEmailWithSync(ctx, "hash123", fetcher, matcher, WaitOptions{
+		PollInterval: 10 * time.Millisecond,
+		SyncFetcher:  syncFetcher,
+	})
+	if err != nil {
+		t.Fatalf("WaitForEmailWithSync() error = %v", err)
+	}
+
+	email := result.(*testEmail)
+	if email.ID != "email1" {
+		t.Errorf("email.ID = %s, want email1", email.ID)
+	}
+}
+
+func TestSSEStrategy_WaitForEmailCountWithSync(t *testing.T) {
+	s := NewSSEStrategy(Config{})
+
+	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
+		return &SyncStatus{
+			EmailCount: 3,
+			EmailsHash: "test-hash",
+		}, nil
+	}
+
+	fetcher := func(ctx context.Context) ([]interface{}, error) {
+		return []interface{}{
+			&testEmail{ID: "email1"},
+			&testEmail{ID: "email2"},
+			&testEmail{ID: "email3"},
+		}, nil
+	}
+
+	matcher := func(email interface{}) bool {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	results, err := s.WaitForEmailCountWithSync(ctx, "hash123", fetcher, matcher, 2, WaitOptions{
+		PollInterval: 10 * time.Millisecond,
+		SyncFetcher:  syncFetcher,
+	})
+	if err != nil {
+		t.Fatalf("WaitForEmailCountWithSync() error = %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("got %d results, want 2", len(results))
+	}
+}

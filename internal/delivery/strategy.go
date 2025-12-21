@@ -45,6 +45,21 @@ type EmailFetcher func(ctx context.Context) ([]interface{}, error)
 // EmailMatcher is a function type for matching emails against criteria.
 type EmailMatcher func(email interface{}) bool
 
+// SyncStatus represents the sync status of an inbox for change detection.
+type SyncStatus struct {
+	EmailCount int
+	EmailsHash string
+}
+
+// SyncFetcher is a function type for fetching inbox sync status.
+type SyncFetcher func(ctx context.Context) (*SyncStatus, error)
+
+// WaitOptions contains options for WaitForEmail operations.
+type WaitOptions struct {
+	PollInterval time.Duration
+	SyncFetcher  SyncFetcher // Optional: enables smart polling with hash-based change detection
+}
+
 // FullStrategy combines the event-driven Strategy interface with the
 // polling-based methods for backward compatibility.
 type FullStrategy interface {
@@ -53,8 +68,14 @@ type FullStrategy interface {
 	// WaitForEmail waits for an email matching the criteria using polling.
 	WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error)
 
+	// WaitForEmailWithSync waits for an email using sync-status-based change detection.
+	WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error)
+
 	// WaitForEmailCount waits until at least count emails match the criteria.
 	WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error)
+
+	// WaitForEmailCountWithSync waits for multiple emails using sync-status-based change detection.
+	WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error)
 
 	// Close closes the strategy and releases resources.
 	Close() error

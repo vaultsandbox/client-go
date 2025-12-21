@@ -36,24 +36,35 @@ func (a *AutoStrategy) Start(ctx context.Context, inboxes []InboxInfo, handler E
 	a.handler = handler
 
 	// Try SSE first with timeout
-	sseCtx, cancel := context.WithTimeout(ctx, AutoSSETimeout)
-	defer cancel()
-
 	sse := NewSSEStrategy(a.cfg)
-	err := sse.Start(sseCtx, inboxes, handler)
-
-	if err == nil {
-		a.current = sse
-		return nil
+	err := sse.Start(ctx, inboxes, handler)
+	if err != nil {
+		// SSE failed to start, fall back to polling immediately
+		return a.startPolling(ctx, inboxes, handler)
 	}
 
-	// Fall back to polling
+	// Wait for SSE connection to be established or timeout
+	select {
+	case <-sse.Connected():
+		// SSE connected successfully
+		a.current = sse
+		return nil
+	case <-time.After(AutoSSETimeout):
+		// SSE didn't connect in time, fall back to polling
+		sse.Stop()
+		return a.startPolling(ctx, inboxes, handler)
+	case <-ctx.Done():
+		sse.Stop()
+		return ctx.Err()
+	}
+}
+
+func (a *AutoStrategy) startPolling(ctx context.Context, inboxes []InboxInfo, handler EventHandler) error {
 	polling := NewPollingStrategy(a.cfg)
-	err = polling.Start(ctx, inboxes, handler)
+	err := polling.Start(ctx, inboxes, handler)
 	if err != nil {
 		return err
 	}
-
 	a.current = polling
 	return nil
 }
@@ -86,15 +97,31 @@ func (a *AutoStrategy) RemoveInbox(inboxHash string) error {
 
 // WaitForEmail waits for an email using the best available strategy.
 func (a *AutoStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
+	return a.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, WaitOptions{
+		PollInterval: pollInterval,
+		SyncFetcher:  nil,
+	})
+}
+
+// WaitForEmailWithSync waits for an email using sync-status-based change detection.
+func (a *AutoStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error) {
 	// Use polling for backward compatibility
 	polling := NewPollingStrategy(a.cfg)
-	return polling.WaitForEmail(ctx, inboxHash, fetcher, matcher, pollInterval)
+	return polling.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, opts)
 }
 
 // WaitForEmailCount waits for multiple emails using the best available strategy.
 func (a *AutoStrategy) WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
+	return a.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, WaitOptions{
+		PollInterval: pollInterval,
+		SyncFetcher:  nil,
+	})
+}
+
+// WaitForEmailCountWithSync waits for multiple emails using sync-status-based change detection.
+func (a *AutoStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error) {
 	polling := NewPollingStrategy(a.cfg)
-	return polling.WaitForEmailCount(ctx, inboxHash, fetcher, matcher, count, pollInterval)
+	return polling.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, opts)
 }
 
 // Close closes the auto strategy.

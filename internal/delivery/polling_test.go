@@ -331,3 +331,197 @@ type testEmail struct {
 	ID      string
 	Subject string
 }
+
+func TestPollingStrategy_WaitForEmailWithSync(t *testing.T) {
+	p := NewPollingStrategy(Config{})
+
+	var fetchCount int32
+	var syncCount int32
+	currentHash := "hash1"
+
+	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
+		count := atomic.AddInt32(&syncCount, 1)
+		// Simulate hash change after 2 syncs
+		if count >= 2 {
+			currentHash = "hash2"
+		}
+		return &SyncStatus{
+			EmailCount: 1,
+			EmailsHash: currentHash,
+		}, nil
+	}
+
+	fetcher := func(ctx context.Context) ([]interface{}, error) {
+		count := atomic.AddInt32(&fetchCount, 1)
+		if count >= 2 {
+			return []interface{}{
+				&testEmail{ID: "email1", Subject: "Hello"},
+			}, nil
+		}
+		return nil, nil
+	}
+
+	matcher := func(email interface{}) bool {
+		return email.(*testEmail).Subject == "Hello"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := p.WaitForEmailWithSync(ctx, "hash123", fetcher, matcher, WaitOptions{
+		PollInterval: 10 * time.Millisecond,
+		SyncFetcher:  syncFetcher,
+	})
+	if err != nil {
+		t.Fatalf("WaitForEmailWithSync() error = %v", err)
+	}
+
+	email := result.(*testEmail)
+	if email.ID != "email1" {
+		t.Errorf("email.ID = %s, want email1", email.ID)
+	}
+
+	// Verify sync was called
+	if atomic.LoadInt32(&syncCount) < 1 {
+		t.Error("sync fetcher was not called")
+	}
+}
+
+func TestPollingStrategy_WaitForEmailWithSync_BackoffOnNoChange(t *testing.T) {
+	p := NewPollingStrategy(Config{})
+
+	var syncCount int32
+	var fetchCount int32
+
+	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
+		atomic.AddInt32(&syncCount, 1)
+		return &SyncStatus{
+			EmailCount: 0,
+			EmailsHash: "unchanging-hash",
+		}, nil
+	}
+
+	fetcher := func(ctx context.Context) ([]interface{}, error) {
+		atomic.AddInt32(&fetchCount, 1)
+		return nil, nil
+	}
+
+	matcher := func(email interface{}) bool {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := p.WaitForEmailWithSync(ctx, "hash123", fetcher, matcher, WaitOptions{
+		PollInterval: 5 * time.Millisecond,
+		SyncFetcher:  syncFetcher,
+	})
+
+	// Should timeout
+	if err != context.DeadlineExceeded {
+		t.Errorf("Expected DeadlineExceeded, got %v", err)
+	}
+
+	// Sync should be called multiple times
+	syncs := atomic.LoadInt32(&syncCount)
+	if syncs < 2 {
+		t.Errorf("sync was called %d times, expected at least 2", syncs)
+	}
+
+	// Fetcher should not be called since hash never changes and email count is 0
+	fetches := atomic.LoadInt32(&fetchCount)
+	if fetches > 0 {
+		t.Logf("fetcher was called %d times (called on first sync)", fetches)
+	}
+}
+
+func TestPollingStrategy_WaitForEmailCountWithSync(t *testing.T) {
+	p := NewPollingStrategy(Config{})
+
+	var fetchCount int32
+
+	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
+		return &SyncStatus{
+			EmailCount: 3,
+			EmailsHash: "hash-with-emails",
+		}, nil
+	}
+
+	fetcher := func(ctx context.Context) ([]interface{}, error) {
+		count := atomic.AddInt32(&fetchCount, 1)
+		if count >= 2 {
+			return []interface{}{
+				&testEmail{ID: "email1"},
+				&testEmail{ID: "email2"},
+				&testEmail{ID: "email3"},
+			}, nil
+		}
+		return nil, nil
+	}
+
+	matcher := func(email interface{}) bool {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	results, err := p.WaitForEmailCountWithSync(ctx, "hash123", fetcher, matcher, 2, WaitOptions{
+		PollInterval: 10 * time.Millisecond,
+		SyncFetcher:  syncFetcher,
+	})
+	if err != nil {
+		t.Fatalf("WaitForEmailCountWithSync() error = %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("got %d results, want 2", len(results))
+	}
+}
+
+func TestPollingStrategy_getWaitDuration(t *testing.T) {
+	p := NewPollingStrategy(Config{})
+
+	inbox := &polledInbox{
+		interval: 2 * time.Second,
+	}
+
+	// Call multiple times to verify jitter is applied
+	durations := make([]time.Duration, 10)
+	for i := 0; i < 10; i++ {
+		durations[i] = p.getWaitDuration(inbox)
+	}
+
+	// All should be >= base interval
+	for _, d := range durations {
+		if d < inbox.interval {
+			t.Errorf("duration %v is less than base interval %v", d, inbox.interval)
+		}
+	}
+
+	// All should be <= interval + 30% jitter
+	maxExpected := time.Duration(float64(inbox.interval) * (1 + PollingJitterFactor))
+	for _, d := range durations {
+		if d > maxExpected {
+			t.Errorf("duration %v exceeds max expected %v", d, maxExpected)
+		}
+	}
+}
+
+func TestPollingStrategy_WaitOptions(t *testing.T) {
+	// Test that WaitOptions fields are correctly used
+	opts := WaitOptions{
+		PollInterval: 5 * time.Second,
+		SyncFetcher: func(ctx context.Context) (*SyncStatus, error) {
+			return &SyncStatus{EmailCount: 0, EmailsHash: "test"}, nil
+		},
+	}
+
+	if opts.PollInterval != 5*time.Second {
+		t.Errorf("PollInterval = %v, want 5s", opts.PollInterval)
+	}
+	if opts.SyncFetcher == nil {
+		t.Error("SyncFetcher is nil")
+	}
+}

@@ -101,20 +101,29 @@ func (p *PollingStrategy) RemoveInbox(inboxHash string) error {
 }
 
 func (p *PollingStrategy) pollLoop(ctx context.Context) {
-	ticker := time.NewTicker(PollingInitialInterval)
-	defer ticker.Stop()
-
+	// Use adaptive polling with per-inbox intervals
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			p.pollAll(ctx)
+		default:
+		}
+
+		// Get minimum wait duration across all inboxes
+		minWait := p.pollAll(ctx)
+		if minWait == 0 {
+			minWait = PollingInitialInterval
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(minWait):
 		}
 	}
 }
 
-func (p *PollingStrategy) pollAll(ctx context.Context) {
+func (p *PollingStrategy) pollAll(ctx context.Context) time.Duration {
 	p.mu.RLock()
 	inboxList := make([]*polledInbox, 0, len(p.inboxes))
 	for _, inbox := range p.inboxes {
@@ -122,12 +131,31 @@ func (p *PollingStrategy) pollAll(ctx context.Context) {
 	}
 	p.mu.RUnlock()
 
+	if len(inboxList) == 0 {
+		return PollingInitialInterval
+	}
+
 	for _, inbox := range inboxList {
 		p.pollInbox(ctx, inbox)
 	}
+
+	// Return minimum wait duration with jitter
+	var minWait time.Duration
+	for _, inbox := range inboxList {
+		wait := p.getWaitDuration(inbox)
+		if minWait == 0 || wait < minWait {
+			minWait = wait
+		}
+	}
+	return minWait
 }
 
 func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
+	// Check for nil API client
+	if p.apiClient == nil {
+		return
+	}
+
 	// Check sync status first
 	sync, err := p.apiClient.GetInboxSync(ctx, inbox.emailAddress)
 	if err != nil {
@@ -184,12 +212,18 @@ func (p *PollingStrategy) getWaitDuration(inbox *polledInbox) time.Duration {
 
 // WaitForEmail waits for an email using polling.
 func (p *PollingStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
-	if pollInterval == 0 {
-		pollInterval = 2 * time.Second
-	}
+	return p.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, WaitOptions{
+		PollInterval: pollInterval,
+		SyncFetcher:  nil, // No sync fetcher, use simple polling
+	})
+}
 
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
+// WaitForEmailWithSync waits for an email using sync-status-based change detection.
+func (p *PollingStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error) {
+	pollInterval := opts.PollInterval
+	if pollInterval == 0 {
+		pollInterval = PollingInitialInterval
+	}
 
 	// Check immediately first
 	emails, err := fetcher(ctx)
@@ -200,6 +234,75 @@ func (p *PollingStrategy) WaitForEmail(ctx context.Context, inboxHash string, fe
 			}
 		}
 	}
+
+	// If no sync fetcher, use simple polling
+	if opts.SyncFetcher == nil {
+		return p.waitForEmailSimple(ctx, fetcher, matcher, pollInterval)
+	}
+
+	// Use sync-status-based smart polling with adaptive backoff
+	var lastHash string
+	currentBackoff := pollInterval
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Check sync status first (lightweight call)
+		syncStatus, err := opts.SyncFetcher(ctx)
+		if err != nil {
+			// On error, wait and retry
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(currentBackoff):
+			}
+			continue
+		}
+
+		// Check if there are changes
+		if lastHash == "" || syncStatus.EmailsHash != lastHash {
+			lastHash = syncStatus.EmailsHash
+
+			if syncStatus.EmailCount > 0 {
+				// Changes detected - fetch and check emails
+				emails, err := fetcher(ctx)
+				if err == nil {
+					for _, email := range emails {
+						if matcher(email) {
+							return email, nil
+						}
+					}
+				}
+			}
+			// Reset backoff when changes detected
+			currentBackoff = pollInterval
+		} else {
+			// No changes - increase backoff
+			currentBackoff = time.Duration(float64(currentBackoff) * PollingBackoffMultiplier)
+			if currentBackoff > PollingMaxBackoff {
+				currentBackoff = PollingMaxBackoff
+			}
+		}
+
+		// Apply jitter and wait
+		jitter := time.Duration(rand.Float64() * PollingJitterFactor * float64(currentBackoff))
+		waitTime := currentBackoff + jitter
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(waitTime):
+		}
+	}
+}
+
+func (p *PollingStrategy) waitForEmailSimple(ctx context.Context, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -222,12 +325,18 @@ func (p *PollingStrategy) WaitForEmail(ctx context.Context, inboxHash string, fe
 
 // WaitForEmailCount waits for multiple emails using polling.
 func (p *PollingStrategy) WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
-	if pollInterval == 0 {
-		pollInterval = 2 * time.Second
-	}
+	return p.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, WaitOptions{
+		PollInterval: pollInterval,
+		SyncFetcher:  nil,
+	})
+}
 
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
+// WaitForEmailCountWithSync waits for multiple emails using sync-status-based change detection.
+func (p *PollingStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error) {
+	pollInterval := opts.PollInterval
+	if pollInterval == 0 {
+		pollInterval = PollingInitialInterval
+	}
 
 	// Check immediately first
 	emails, err := fetcher(ctx)
@@ -242,6 +351,79 @@ func (p *PollingStrategy) WaitForEmailCount(ctx context.Context, inboxHash strin
 			return matching[:count], nil
 		}
 	}
+
+	// If no sync fetcher, use simple polling
+	if opts.SyncFetcher == nil {
+		return p.waitForEmailCountSimple(ctx, fetcher, matcher, count, pollInterval)
+	}
+
+	// Use sync-status-based smart polling with adaptive backoff
+	var lastHash string
+	currentBackoff := pollInterval
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Check sync status first (lightweight call)
+		syncStatus, err := opts.SyncFetcher(ctx)
+		if err != nil {
+			// On error, wait and retry
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(currentBackoff):
+			}
+			continue
+		}
+
+		// Check if there are changes
+		if lastHash == "" || syncStatus.EmailsHash != lastHash {
+			lastHash = syncStatus.EmailsHash
+
+			if syncStatus.EmailCount > 0 {
+				// Changes detected - fetch and check emails
+				emails, err := fetcher(ctx)
+				if err == nil {
+					var matching []interface{}
+					for _, email := range emails {
+						if matcher(email) {
+							matching = append(matching, email)
+						}
+					}
+					if len(matching) >= count {
+						return matching[:count], nil
+					}
+				}
+			}
+			// Reset backoff when changes detected
+			currentBackoff = pollInterval
+		} else {
+			// No changes - increase backoff
+			currentBackoff = time.Duration(float64(currentBackoff) * PollingBackoffMultiplier)
+			if currentBackoff > PollingMaxBackoff {
+				currentBackoff = PollingMaxBackoff
+			}
+		}
+
+		// Apply jitter and wait
+		jitter := time.Duration(rand.Float64() * PollingJitterFactor * float64(currentBackoff))
+		waitTime := currentBackoff + jitter
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(waitTime):
+		}
+	}
+}
+
+func (p *PollingStrategy) waitForEmailCountSimple(ctx context.Context, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
 
 	for {
 		select {

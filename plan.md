@@ -213,30 +213,36 @@ Ensure email authentication validation matches.
 
 ---
 
-## Phase 7: Delivery Strategies Alignment
+## Phase 7: Delivery Strategies Alignment ✅ COMPLETED
 
 Ensure SSE and Polling strategies match Node SDK behavior.
 
 ### 7.1 SSE Strategy
-- [ ] Verify SSE endpoint URL format: `/api/events?inboxes={hash1},{hash2},...`
-- [ ] Verify `X-API-Key` header authentication
-- [ ] Implement reconnection with exponential backoff
-- [ ] Match reconnection parameters (5s interval, 10 max attempts, 2x multiplier)
-- [ ] Handle SSE event parsing (JSON payload)
+- [x] Verify SSE endpoint URL format: `/api/events?inboxes={hash1},{hash2},...`
+- [x] Verify `X-API-Key` header authentication
+- [x] Implement reconnection with exponential backoff
+- [x] Match reconnection parameters (5s interval, 10 max attempts, 2x multiplier)
+- [x] Handle SSE event parsing (JSON payload)
 
 ### 7.2 Polling Strategy
-- [ ] Verify polling uses sync status (hash-based change detection)
-- [ ] Implement exponential backoff with jitter:
+- [x] Verify polling uses sync status (hash-based change detection)
+- [x] Implement exponential backoff with jitter:
   - Initial: 2s
   - Max: 30s
   - Multiplier: 1.5
   - Jitter: 0.3
-- [ ] Reset backoff when changes detected
+- [x] Reset backoff when changes detected
 
 ### 7.3 Auto Strategy
-- [ ] Try SSE first with timeout (5s)
-- [ ] Fall back to polling on SSE failure
-- [ ] Use polling for `WaitForEmail`/`WaitForEmailCount` (backward compat)
+- [x] Try SSE first with timeout (5s)
+- [x] Fall back to polling on SSE failure
+- [x] Use polling for `WaitForEmail`/`WaitForEmailCount` (backward compat)
+
+**Implementation Notes:**
+- Added `WaitForEmailWithSync` and `WaitForEmailCountWithSync` methods with optional `SyncFetcher` for hash-based change detection
+- Polling loop now uses adaptive per-inbox intervals with jitter
+- SSE strategy signals connection establishment via `Connected()` channel
+- Auto strategy properly waits for SSE connection before declaring success
 
 ---
 
