@@ -118,7 +118,7 @@ Ensure public Client API matches Node SDK.
 
 ---
 
-## Phase 4: Inbox API Alignment
+## Phase 4: Inbox API Alignment ✅ COMPLETED
 
 Ensure Inbox operations match Node SDK.
 
@@ -133,16 +133,16 @@ Ensure Inbox operations match Node SDK.
 | `getRawEmail(id)` | ✅ | Via `email.GetRaw()` | ✅ |
 | `waitForEmail()` | ✅ | `WaitForEmail()` | ✅ |
 | `waitForEmailCount()` | ✅ | `WaitForEmailCount()` | ✅ |
-| `onNewEmail(cb)` | ✅ | ❌ Missing | Add subscription |
+| `onNewEmail(cb)` | ✅ | `OnNewEmail()` | ✅ |
 | `markEmailAsRead(id)` | ✅ | Via `email.MarkAsRead()` | ✅ |
 | `deleteEmail(id)` | ✅ | Via `email.Delete()` | ✅ |
 | `delete()` | ✅ | `Delete()` | ✅ |
-| `getSyncStatus()` | ✅ | ❌ Missing | Add |
+| `getSyncStatus()` | ✅ | `GetSyncStatus()` | ✅ |
 | `export()` | ✅ | `Export()` | ✅ |
 
 ### 4.2 Missing Inbox Features
-- [ ] Add `GetSyncStatus() (*SyncStatus, error)`
-- [ ] Add `OnNewEmail(callback) Subscription` with unsubscribe
+- [x] Add `GetSyncStatus() (*SyncStatus, error)`
+- [x] Add `OnNewEmail(callback) Subscription` with unsubscribe
 
 ---
 
@@ -320,11 +320,11 @@ Ensure documentation and examples are complete.
 3. Verify decryption produces identical output
 
 ### Medium Priority (Feature Parity)
-1. Add `MonitorInboxes()` with event subscription
-2. Add `OnNewEmail()` subscription on inbox
-3. Add `GetSyncStatus()` on inbox
-4. Add file-based export/import helpers
-5. Expose `CheckKey()` publicly
+1. ~~Add `MonitorInboxes()` with event subscription~~ ✅
+2. ~~Add `OnNewEmail()` subscription on inbox~~ ✅
+3. ~~Add `GetSyncStatus()` on inbox~~ ✅
+4. ~~Add file-based export/import helpers~~ ✅
+5. ~~Expose `CheckKey()` publicly~~ ✅
 
 ### Low Priority (Polish)
 1. Add configurable retry status codes

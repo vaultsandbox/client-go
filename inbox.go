@@ -20,6 +20,14 @@ type Inbox struct {
 	client       *Client
 }
 
+// SyncStatus represents the synchronization status of an inbox.
+type SyncStatus struct {
+	// EmailCount is the number of emails in the inbox.
+	EmailCount int
+	// EmailsHash is a hash of the email list for efficient change detection.
+	EmailsHash string
+}
+
 // ExportedInbox contains all data needed to restore an inbox.
 // WARNING: Contains private key material - handle securely.
 type ExportedInbox struct {
@@ -66,6 +74,20 @@ func (i *Inbox) InboxHash() string {
 // IsExpired checks if the inbox has expired.
 func (i *Inbox) IsExpired() bool {
 	return time.Now().After(i.expiresAt)
+}
+
+// GetSyncStatus retrieves the synchronization status of the inbox.
+// This includes the number of emails and a hash of the email list,
+// which can be used to efficiently check for changes.
+func (i *Inbox) GetSyncStatus(ctx context.Context) (*SyncStatus, error) {
+	status, err := i.client.apiClient.GetInboxSync(ctx, i.emailAddress)
+	if err != nil {
+		return nil, err
+	}
+	return &SyncStatus{
+		EmailCount: status.EmailCount,
+		EmailsHash: status.EmailsHash,
+	}, nil
 }
 
 // GetEmails fetches all emails in the inbox.
@@ -212,6 +234,83 @@ func (i *Inbox) Export() *ExportedInbox {
 		PublicKeyB64: crypto.ToBase64URL(i.keypair.PublicKey),
 		SecretKeyB64: crypto.ToBase64URL(i.keypair.SecretKey),
 		ExportedAt:   time.Now(),
+	}
+}
+
+// InboxEmailCallback is called when a new email arrives in the inbox.
+type InboxEmailCallback func(email *Email)
+
+// OnNewEmail subscribes to new email notifications for this inbox.
+// The callback is invoked whenever a new email arrives.
+// Returns a Subscription that can be used to unsubscribe.
+//
+// Example:
+//
+//	subscription := inbox.OnNewEmail(func(email *Email) {
+//	    fmt.Printf("New email: %s\n", email.Subject)
+//	})
+//	defer subscription.Unsubscribe()
+func (i *Inbox) OnNewEmail(callback InboxEmailCallback) Subscription {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	sub := &inboxEmailSubscription{
+		cancel:       cancel,
+		inbox:        i,
+		callback:     callback,
+		pollInterval: defaultPollInterval,
+	}
+
+	go sub.monitor(ctx)
+
+	return sub
+}
+
+// inboxEmailSubscription implements Subscription for single inbox monitoring.
+type inboxEmailSubscription struct {
+	cancel       context.CancelFunc
+	inbox        *Inbox
+	callback     InboxEmailCallback
+	pollInterval time.Duration
+}
+
+func (s *inboxEmailSubscription) Unsubscribe() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+}
+
+func (s *inboxEmailSubscription) monitor(ctx context.Context) {
+	ticker := time.NewTicker(s.pollInterval)
+	defer ticker.Stop()
+
+	// Track seen email IDs to detect new emails
+	seenEmails := make(map[string]struct{})
+
+	// Initial fetch to populate seen emails
+	if emails, err := s.inbox.GetEmails(ctx); err == nil {
+		for _, email := range emails {
+			seenEmails[email.ID] = struct{}{}
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			emails, err := s.inbox.GetEmails(ctx)
+			if err != nil {
+				continue
+			}
+
+			for _, email := range emails {
+				if _, seen := seenEmails[email.ID]; !seen {
+					seenEmails[email.ID] = struct{}{}
+					// Call callback in a goroutine to prevent blocking
+					go s.callback(email)
+				}
+			}
+		}
 	}
 }
 
