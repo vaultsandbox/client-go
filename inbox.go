@@ -184,7 +184,7 @@ func (i *Inbox) Export() *ExportedInbox {
 	}
 }
 
-func newInboxFromResponse(resp *api.CreateInboxResponse, c *Client) *Inbox {
+func newInboxFromLegacyResponse(resp *api.LegacyCreateInboxResponse, c *Client) *Inbox {
 	return &Inbox{
 		emailAddress: resp.EmailAddress,
 		expiresAt:    resp.ExpiresAt,

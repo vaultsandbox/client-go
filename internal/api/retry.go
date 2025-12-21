@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"math"
+	"math/rand"
 	"time"
 )
 
@@ -12,6 +13,7 @@ type RetryConfig struct {
 	BaseDelay   time.Duration
 	MaxDelay    time.Duration
 	Multiplier  float64
+	Jitter      float64 // 0.0 to 1.0, adds randomness to delays
 	RetryableOn func(statusCode int) bool
 }
 
@@ -22,8 +24,14 @@ func DefaultRetryConfig() *RetryConfig {
 		BaseDelay:  time.Second,
 		MaxDelay:   30 * time.Second,
 		Multiplier: 2.0,
+		Jitter:     0.2,
 		RetryableOn: func(statusCode int) bool {
-			return statusCode >= 500 || statusCode == 429
+			switch statusCode {
+			case 408, 429, 500, 502, 503, 504:
+				return true
+			default:
+				return false
+			}
 		},
 	}
 }
@@ -36,12 +44,19 @@ func (r *RetryConfig) ShouldRetry(attempt int, statusCode int) bool {
 	return r.RetryableOn(statusCode)
 }
 
-// Delay calculates the delay before the next retry attempt.
+// Delay calculates the delay before the next retry attempt with optional jitter.
 func (r *RetryConfig) Delay(attempt int) time.Duration {
 	delay := float64(r.BaseDelay) * math.Pow(r.Multiplier, float64(attempt))
 	if delay > float64(r.MaxDelay) {
 		delay = float64(r.MaxDelay)
 	}
+
+	// Add jitter
+	if r.Jitter > 0 {
+		jitterAmount := delay * r.Jitter
+		delay = delay - jitterAmount + (rand.Float64() * 2 * jitterAmount)
+	}
+
 	return time.Duration(delay)
 }
 
