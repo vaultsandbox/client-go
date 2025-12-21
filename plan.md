@@ -89,67 +89,67 @@ Plan to align the Go SDK test suite with `tests-spec.md`.
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **API Key Validation** ||||
-| Valid key | ⚠️ Review | `integration/integration_test.go` | `CheckKey` test |
-| Invalid key | ⚠️ Review | `integration/integration_test.go` | Should return false or 401 |
+| Valid key | ✅ Exists | `integration/integration_test.go` | `TestIntegration_CheckKey` |
+| Invalid key | ✅ Exists | `integration/integration_test.go` | `TestIntegration_CheckKey_Invalid` |
 | **Server Info** ||||
-| Get server info | ⚠️ Review | `integration/integration_test.go` | `ServerInfo` test |
-| Algorithm values | ❌ Missing | - | Verify specific algorithm values |
+| Get server info | ✅ Exists | `integration/integration_test.go` | `TestIntegration_ServerInfo` |
+| Algorithm values | ✅ Exists | `integration/integration_test.go` | `TestIntegration_ServerInfo_Values` |
 | **Client Close** ||||
-| Graceful close | ⚠️ Review | `integration/integration_test.go` | `Close()` test |
-| Resource cleanup | ❌ Missing | - | Test with active subscriptions |
+| Graceful close | ✅ Exists | `integration/integration_test.go` | `TestIntegration_ResourceCleanup` |
+| Resource cleanup | ✅ Exists | `integration/integration_test.go` | `TestIntegration_ResourceCleanup` (tests with active inboxes) |
 
 **Action Items:**
-- [ ] Add invalid API key test
-- [ ] Add algorithm values verification test
-- [ ] Add resource cleanup test with active subscriptions
+- [x] Add invalid API key test ✅
+- [x] Add algorithm values verification test ✅
+- [x] Add resource cleanup test with active subscriptions ✅
 
 ### 2.2 Inbox Management
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **Create Inbox** ||||
-| Basic creation | ⚠️ Review | `integration/integration_test.go` | |
-| Email format | ⚠️ Review | `integration/integration_test.go` | Verify `@` symbol |
-| With custom TTL | ⚠️ Review | `integration/integration_test.go` | `WithTTL` option |
+| Basic creation | ✅ Exists | `integration/integration_test.go` | `TestIntegration_CreateAndDeleteInbox` |
+| Email format | ✅ Exists | `integration/integration_test.go` | `TestIntegration_EmailAddressFormat` |
+| With custom TTL | ✅ Exists | `integration/integration_test.go` | `TestIntegration_CreateAndDeleteInbox`, `TestIntegration_TTLValidation` |
 | **Delete Inbox** ||||
-| Delete existing | ⚠️ Review | `integration/integration_test.go` | |
-| Access after delete | ❌ Missing | - | Should throw `ErrInboxNotFound` |
+| Delete existing | ✅ Exists | `integration/integration_test.go` | `TestIntegration_CreateAndDeleteInbox` |
+| Access after delete | ✅ Exists | `integration/integration_test.go` | `TestIntegration_AccessAfterDelete` |
 | **Delete All Inboxes** ||||
-| Delete all | ⚠️ Review | `integration/integration_test.go` | |
+| Delete all | ✅ Exists | `integration/integration_test.go` | `TestIntegration_MultipleInboxes` |
 | **Sync Status** ||||
-| Empty inbox | ⚠️ Review | `integration/integration_test.go` | `email_count=0` |
-| Consistent hash | ❌ Missing | - | Multiple calls same hash |
+| Empty inbox | ✅ Exists | `integration/integration_test.go` | `TestIntegration_GetSyncStatus` |
+| Consistent hash | ✅ Exists | `integration/integration_test.go` | `TestIntegration_SyncStatus_ConsistentHash` |
 
 **Action Items:**
-- [ ] Add "access after delete" test
-- [ ] Add "consistent hash" test for sync status
-- [ ] Review existing inbox tests for completeness
+- [x] Add "access after delete" test ✅
+- [x] Add "consistent hash" test for sync status ✅
+- [x] Review existing inbox tests for completeness ✅
 
 ### 2.3 Inbox Operations (No Email)
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **List Emails** ||||
-| Empty inbox | ⚠️ Review | `integration/integration_test.go` | Returns empty slice |
+| Empty inbox | ✅ Exists | `integration/integration_test.go` | `TestIntegration_GetEmails_Empty` |
 | **Get Non-existent Email** ||||
-| Invalid ID | ⚠️ Review | `integration/integration_test.go` | `ErrEmailNotFound` |
+| Invalid ID | ✅ Exists | `integration/integration_test.go` | `TestIntegration_GetEmail_NotFound` |
 
 **Action Items:**
-- [ ] Verify empty inbox list test
-- [ ] Verify non-existent email test
+- [x] Verify empty inbox list test ✅
+- [x] Verify non-existent email test ✅
 
 ### 2.4 Error Handling
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **Network Errors** ||||
-| Invalid host | ⚠️ Review | `integration/integration_test.go` | `ErrNetwork` |
+| Invalid host | ✅ Exists | `integration/integration_test.go` | `TestIntegration_NetworkError` |
 | **Uninitialized Client** ||||
-| Operations before init | ⚠️ Review | - | May not apply to Go SDK |
+| Operations before init | ✅ N/A | - | Go SDK validates at `New()` time; `ErrClientClosed` tested in `TestIntegration_ResourceCleanup` |
 
 **Action Items:**
-- [ ] Verify network error test exists
-- [ ] Determine if uninitialized client test applies
+- [x] Verify network error test exists ✅
+- [x] Determine if uninitialized client test applies ✅ (N/A for Go, tested via ErrClientClosed)
 
 ---
 

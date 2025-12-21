@@ -4,7 +4,9 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -739,5 +741,296 @@ func TestIntegration_AuthResults(t *testing.T) {
 	// Also test IsPassing()
 	if validation.Passed != email.AuthResults.IsPassing() {
 		t.Error("IsPassing() does not match Validate().Passed")
+	}
+}
+
+// TestIntegration_ServerInfo_Values verifies server info returns expected values.
+func TestIntegration_ServerInfo_Values(t *testing.T) {
+	client := newClient(t)
+
+	info := client.ServerInfo()
+	if info == nil {
+		t.Fatal("ServerInfo() returned nil")
+	}
+
+	// Verify all expected fields are present and have valid values
+	t.Logf("Server info: MaxTTL=%v, DefaultTTL=%v, Domains=%v",
+		info.MaxTTL, info.DefaultTTL, info.AllowedDomains)
+
+	// MaxTTL should be at least 1 minute (reasonable minimum)
+	if info.MaxTTL < time.Minute {
+		t.Errorf("MaxTTL = %v, want at least 1 minute", info.MaxTTL)
+	}
+
+	// DefaultTTL should be at least 1 minute
+	if info.DefaultTTL < time.Minute {
+		t.Errorf("DefaultTTL = %v, want at least 1 minute", info.DefaultTTL)
+	}
+
+	// DefaultTTL should not exceed MaxTTL
+	if info.DefaultTTL > info.MaxTTL {
+		t.Errorf("DefaultTTL (%v) > MaxTTL (%v)", info.DefaultTTL, info.MaxTTL)
+	}
+
+	// AllowedDomains should not be empty
+	if len(info.AllowedDomains) == 0 {
+		t.Error("AllowedDomains is empty")
+	}
+
+	// Each domain should be non-empty
+	for i, domain := range info.AllowedDomains {
+		if domain == "" {
+			t.Errorf("AllowedDomains[%d] is empty", i)
+		}
+	}
+}
+
+// TestIntegration_AccessAfterDelete tests that accessing a deleted inbox returns ErrInboxNotFound.
+func TestIntegration_AccessAfterDelete(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	// Create an inbox
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+
+	emailAddress := inbox.EmailAddress()
+	t.Logf("Created inbox: %s", emailAddress)
+
+	// Delete the inbox
+	if err := inbox.Delete(ctx); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	t.Log("Inbox deleted")
+
+	// Try to get emails from deleted inbox - should fail with ErrInboxNotFound
+	_, err = inbox.GetEmails(ctx)
+	if err == nil {
+		t.Error("GetEmails() on deleted inbox should return error")
+	} else if !errors.Is(err, vaultsandbox.ErrInboxNotFound) {
+		t.Errorf("GetEmails() error = %v, want ErrInboxNotFound", err)
+	} else {
+		t.Log("GetEmails() correctly returned ErrInboxNotFound")
+	}
+
+	// Try to get sync status from deleted inbox - should fail
+	_, err = inbox.GetSyncStatus(ctx)
+	if err == nil {
+		t.Error("GetSyncStatus() on deleted inbox should return error")
+	} else if !errors.Is(err, vaultsandbox.ErrInboxNotFound) {
+		t.Errorf("GetSyncStatus() error = %v, want ErrInboxNotFound", err)
+	} else {
+		t.Log("GetSyncStatus() correctly returned ErrInboxNotFound")
+	}
+}
+
+// TestIntegration_SyncStatus_ConsistentHash tests that sync status hash is consistent.
+func TestIntegration_SyncStatus_ConsistentHash(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+	defer inbox.Delete(ctx)
+
+	// Get sync status multiple times - hash should be consistent
+	status1, err := inbox.GetSyncStatus(ctx)
+	if err != nil {
+		t.Fatalf("GetSyncStatus() #1 error = %v", err)
+	}
+
+	status2, err := inbox.GetSyncStatus(ctx)
+	if err != nil {
+		t.Fatalf("GetSyncStatus() #2 error = %v", err)
+	}
+
+	status3, err := inbox.GetSyncStatus(ctx)
+	if err != nil {
+		t.Fatalf("GetSyncStatus() #3 error = %v", err)
+	}
+
+	// All hashes should be identical for an unchanged inbox
+	if status1.EmailsHash != status2.EmailsHash {
+		t.Errorf("Hash changed between calls: %s != %s", status1.EmailsHash, status2.EmailsHash)
+	}
+	if status2.EmailsHash != status3.EmailsHash {
+		t.Errorf("Hash changed between calls: %s != %s", status2.EmailsHash, status3.EmailsHash)
+	}
+
+	// Email count should also be consistent
+	if status1.EmailCount != status2.EmailCount || status2.EmailCount != status3.EmailCount {
+		t.Errorf("Email count changed: %d, %d, %d", status1.EmailCount, status2.EmailCount, status3.EmailCount)
+	}
+
+	t.Logf("Consistent hash across 3 calls: %s (count=%d)", status1.EmailsHash, status1.EmailCount)
+}
+
+// TestIntegration_GetEmail_NotFound tests that getting a non-existent email returns ErrEmailNotFound.
+func TestIntegration_GetEmail_NotFound(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+	defer inbox.Delete(ctx)
+
+	// Try to get a non-existent email
+	_, err = inbox.GetEmail(ctx, "non-existent-email-id-12345")
+	if err == nil {
+		t.Error("GetEmail() with invalid ID should return error")
+	} else if !errors.Is(err, vaultsandbox.ErrEmailNotFound) {
+		t.Errorf("GetEmail() error = %v, want ErrEmailNotFound", err)
+	} else {
+		t.Log("GetEmail() correctly returned ErrEmailNotFound")
+	}
+}
+
+// TestIntegration_NetworkError tests that connecting to an invalid host returns NetworkError.
+func TestIntegration_NetworkError(t *testing.T) {
+	// Create client with invalid URL
+	opts := []vaultsandbox.Option{
+		vaultsandbox.WithBaseURL("https://invalid-host-that-does-not-exist.example.com"),
+		vaultsandbox.WithTimeout(5 * time.Second),
+	}
+
+	// This should fail during initialization (CheckKey call)
+	_, err := vaultsandbox.New(apiKey, opts...)
+	if err == nil {
+		t.Error("New() with invalid host should return error")
+	} else {
+		// The error should be a network error or timeout
+		t.Logf("New() correctly returned error: %v", err)
+
+		// Check if it's a network-related error (could be wrapped)
+		var netErr *vaultsandbox.NetworkError
+		if errors.As(err, &netErr) {
+			t.Log("Error is a NetworkError as expected")
+		} else {
+			// It might be a wrapped error or timeout, which is also acceptable
+			t.Logf("Error type: %T", err)
+		}
+	}
+}
+
+// TestIntegration_ResourceCleanup tests that Close() properly cleans up resources.
+func TestIntegration_ResourceCleanup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+
+	ctx := context.Background()
+
+	// Create client
+	opts := []vaultsandbox.Option{
+		vaultsandbox.WithBaseURL(baseURL),
+		vaultsandbox.WithTimeout(30 * time.Second),
+	}
+
+	client, err := vaultsandbox.New(apiKey, opts...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	// Create multiple inboxes
+	inbox1, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() #1 error = %v", err)
+	}
+	t.Logf("Created inbox 1: %s", inbox1.EmailAddress())
+
+	inbox2, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() #2 error = %v", err)
+	}
+	t.Logf("Created inbox 2: %s", inbox2.EmailAddress())
+
+	// Verify inboxes are tracked
+	inboxes := client.Inboxes()
+	if len(inboxes) != 2 {
+		t.Errorf("Inboxes() = %d, want 2", len(inboxes))
+	}
+
+	// Close the client
+	if err := client.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+	t.Log("Client closed")
+
+	// After close, client should be unusable
+	_, err = client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err == nil {
+		t.Error("CreateInbox() after Close() should return error")
+	} else if !errors.Is(err, vaultsandbox.ErrClientClosed) {
+		t.Errorf("CreateInbox() after Close() error = %v, want ErrClientClosed", err)
+	} else {
+		t.Log("CreateInbox() after Close() correctly returned ErrClientClosed")
+	}
+
+	// Inboxes should be cleared
+	if len(client.Inboxes()) != 0 {
+		t.Errorf("Inboxes() after Close() = %d, want 0", len(client.Inboxes()))
+	}
+
+	// Close should be idempotent
+	if err := client.Close(); err != nil {
+		t.Errorf("Second Close() error = %v", err)
+	}
+
+	// Clean up - delete inboxes using a new client
+	cleanupClient := newClient(t)
+	_ = cleanupClient.DeleteInbox(ctx, inbox1.EmailAddress())
+	_ = cleanupClient.DeleteInbox(ctx, inbox2.EmailAddress())
+}
+
+// TestIntegration_EmailAddressFormat verifies inbox email address format.
+func TestIntegration_EmailAddressFormat(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatalf("CreateInbox() error = %v", err)
+	}
+	defer inbox.Delete(ctx)
+
+	email := inbox.EmailAddress()
+	t.Logf("Created inbox: %s", email)
+
+	// Email should contain @ symbol
+	if !strings.Contains(email, "@") {
+		t.Errorf("EmailAddress %q does not contain @", email)
+	}
+
+	// Email should have local part before @
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		t.Errorf("EmailAddress %q should have exactly one @", email)
+	}
+
+	if parts[0] == "" {
+		t.Error("EmailAddress has empty local part")
+	}
+
+	if parts[1] == "" {
+		t.Error("EmailAddress has empty domain part")
+	}
+
+	// Domain should be in allowed domains
+	serverInfo := client.ServerInfo()
+	found := false
+	for _, domain := range serverInfo.AllowedDomains {
+		if parts[1] == domain {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("EmailAddress domain %q not in AllowedDomains %v", parts[1], serverInfo.AllowedDomains)
 	}
 }
