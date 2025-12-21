@@ -7,11 +7,12 @@ import (
 
 // Sentinel errors for errors.Is() checks
 var (
-	ErrUnauthorized      = errors.New("invalid or expired API key")
-	ErrInboxNotFound     = errors.New("inbox not found")
-	ErrEmailNotFound     = errors.New("email not found")
+	ErrUnauthorized       = errors.New("invalid or expired API key")
+	ErrInboxNotFound      = errors.New("inbox not found")
+	ErrEmailNotFound      = errors.New("email not found")
 	ErrInboxAlreadyExists = errors.New("inbox already exists")
-	ErrInvalidAPIKey     = errors.New("invalid API key")
+	ErrInvalidAPIKey      = errors.New("invalid API key")
+	ErrRateLimited        = errors.New("rate limit exceeded")
 )
 
 // APIError represents an HTTP error from the VaultSandbox API.
@@ -28,6 +29,9 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("API error %d", e.StatusCode)
 }
 
+// VaultSandboxError implements the VaultSandboxError interface.
+func (e *APIError) VaultSandboxError() {}
+
 // Is implements errors.Is for sentinel error matching.
 func (e *APIError) Is(target error) bool {
 	switch e.StatusCode {
@@ -37,6 +41,8 @@ func (e *APIError) Is(target error) bool {
 		return target == ErrInboxNotFound || target == ErrEmailNotFound
 	case 409:
 		return target == ErrInboxAlreadyExists
+	case 429:
+		return target == ErrRateLimited
 	}
 	return false
 }
@@ -55,6 +61,9 @@ func (e *NetworkError) Error() string {
 func (e *NetworkError) Unwrap() error {
 	return e.Err
 }
+
+// VaultSandboxError implements the VaultSandboxError interface.
+func (e *NetworkError) VaultSandboxError() {}
 
 // Error is an alias for APIError for backward compatibility.
 type Error = APIError
