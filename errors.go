@@ -217,3 +217,24 @@ func (e *ValidationError) Error() string {
 
 // VaultSandboxError implements the VaultSandboxError interface.
 func (e *ValidationError) VaultSandboxError() {}
+
+// StrategyError indicates a delivery strategy failure.
+type StrategyError struct {
+	Message string
+	Err     error
+}
+
+func (e *StrategyError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("strategy error: %s: %v", e.Message, e.Err)
+	}
+	return fmt.Sprintf("strategy error: %s", e.Message)
+}
+
+// Unwrap returns the underlying error.
+func (e *StrategyError) Unwrap() error {
+	return e.Err
+}
+
+// VaultSandboxError implements the VaultSandboxError interface.
+func (e *StrategyError) VaultSandboxError() {}

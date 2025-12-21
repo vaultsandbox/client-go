@@ -2,7 +2,9 @@ package vaultsandbox
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -251,6 +253,92 @@ func (c *Client) ServerInfo() *ServerInfo {
 		MaxTTL:         time.Duration(c.serverInfo.MaxTTL) * time.Second,
 		DefaultTTL:     time.Duration(c.serverInfo.DefaultTTL) * time.Second,
 	}
+}
+
+// CheckKey validates the API key.
+// Returns nil if the key is valid, otherwise returns an error.
+func (c *Client) CheckKey(ctx context.Context) error {
+	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		return ErrClientClosed
+	}
+	c.mu.RUnlock()
+
+	return c.apiClient.CheckKey(ctx)
+}
+
+// ExportInboxToFile exports an inbox to a JSON file.
+// The inbox can be specified by its email address or by passing an *Inbox directly.
+func (c *Client) ExportInboxToFile(inbox *Inbox, filePath string) error {
+	if inbox == nil {
+		return fmt.Errorf("inbox is nil")
+	}
+
+	data := inbox.Export()
+
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal inbox data: %w", err)
+	}
+
+	if err := os.WriteFile(filePath, jsonData, 0600); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+
+	return nil
+}
+
+// ImportInboxFromFile imports an inbox from a JSON file.
+// Returns the imported inbox or an error if the file cannot be read or parsed.
+func (c *Client) ImportInboxFromFile(ctx context.Context, filePath string) (*Inbox, error) {
+	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		return nil, ErrClientClosed
+	}
+	c.mu.RUnlock()
+
+	jsonData, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+
+	var data ExportedInbox
+	if err := json.Unmarshal(jsonData, &data); err != nil {
+		return nil, fmt.Errorf("parse inbox data: %w", err)
+	}
+
+	return c.ImportInbox(ctx, &data)
+}
+
+// MonitorInboxes creates a monitor that watches multiple inboxes for new emails.
+// The returned InboxMonitor can be used to register callbacks for email events.
+//
+// Example:
+//
+//	monitor := client.MonitorInboxes([]*Inbox{inbox1, inbox2})
+//	monitor.OnEmail(func(inbox *Inbox, email *Email) {
+//	    fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
+//	})
+//	defer monitor.Unsubscribe()
+func (c *Client) MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error) {
+	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		return nil, ErrClientClosed
+	}
+	if c.strategy == nil {
+		c.mu.RUnlock()
+		return nil, &StrategyError{Message: "no delivery strategy available"}
+	}
+	c.mu.RUnlock()
+
+	if len(inboxes) == 0 {
+		return nil, fmt.Errorf("at least one inbox is required")
+	}
+
+	return newInboxMonitor(c, inboxes), nil
 }
 
 // Close closes the client and releases resources.

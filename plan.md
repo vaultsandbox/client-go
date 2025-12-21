@@ -91,7 +91,7 @@ Ensure HTTP client behavior matches Node SDK.
 
 ---
 
-## Phase 3: Client API Alignment
+## Phase 3: Client API Alignment ✅ COMPLETED
 
 Ensure public Client API matches Node SDK.
 
@@ -103,18 +103,18 @@ Ensure public Client API matches Node SDK.
 | `deleteAllInboxes()` | ✅ | `DeleteAllInboxes()` | ✅ |
 | `exportInbox()` | ✅ | Via `inbox.Export()` | ✅ |
 | `importInbox()` | ✅ | `ImportInbox()` | ✅ |
-| `exportInboxToFile()` | ✅ | ❌ Missing | Add helper |
-| `importInboxFromFile()` | ✅ | ❌ Missing | Add helper |
-| `monitorInboxes()` | ✅ | ❌ Missing | Add |
+| `exportInboxToFile()` | ✅ | `ExportInboxToFile()` | ✅ |
+| `importInboxFromFile()` | ✅ | `ImportInboxFromFile()` | ✅ |
+| `monitorInboxes()` | ✅ | `MonitorInboxes()` | ✅ |
 | `getServerInfo()` | ✅ | `ServerInfo()` | ✅ |
-| `checkKey()` | ✅ | ❌ Missing (internal) | Expose |
+| `checkKey()` | ✅ | `CheckKey()` | ✅ |
 | `close()` | ✅ | `Close()` | ✅ |
 
 ### 3.2 Missing Client Features
-- [ ] Add `CheckKey() error` public method
-- [ ] Add `ExportInboxToFile(inbox, path) error`
-- [ ] Add `ImportInboxFromFile(path) (*Inbox, error)`
-- [ ] Add `MonitorInboxes(inboxes) *InboxMonitor` with EventEmitter pattern
+- [x] Add `CheckKey() error` public method
+- [x] Add `ExportInboxToFile(inbox, path) error`
+- [x] Add `ImportInboxFromFile(path) (*Inbox, error)`
+- [x] Add `MonitorInboxes(inboxes) *InboxMonitor` with EventEmitter pattern
 
 ---
 
@@ -254,10 +254,10 @@ Ensure error types match Node SDK.
 | `SSEError` | `ErrSSEConnection` | ✅ |
 | `InboxAlreadyExistsError` | `ErrInboxAlreadyExists` | ✅ |
 | `InvalidImportDataError` | `ErrInvalidImportData` | ✅ |
-| `StrategyError` | ❌ Missing | Add |
+| `StrategyError` | `StrategyError` | ✅ |
 
 ### 8.2 Error Enhancements
-- [ ] Add `StrategyError` type
+- [x] Add `StrategyError` type
 - [ ] Ensure all errors implement `VaultSandboxError` interface
 - [ ] Add `Unwrap()` for error chaining
 
