@@ -41,19 +41,47 @@ type ReverseDNSResult struct {
 	Info     string `json:"info,omitempty"`
 }
 
-// IsPassing returns true if all authentication checks passed.
-func (a *AuthResults) IsPassing() bool {
+// AuthValidation provides a summary of email authentication validation.
+type AuthValidation struct {
+	// Passed indicates whether all primary checks (SPF, DKIM, DMARC) passed.
+	Passed bool `json:"passed"`
+	// SPFPassed indicates whether the SPF check passed.
+	SPFPassed bool `json:"spfPassed"`
+	// DKIMPassed indicates whether at least one DKIM signature passed.
+	DKIMPassed bool `json:"dkimPassed"`
+	// DMARCPassed indicates whether the DMARC check passed.
+	DMARCPassed bool `json:"dmarcPassed"`
+	// ReverseDNSPassed indicates whether the reverse DNS check passed.
+	ReverseDNSPassed bool `json:"reverseDnsPassed"`
+	// Failures contains descriptive messages for any failed checks.
+	Failures []string `json:"failures"`
+}
+
+// Validate validates the authentication results and provides a summary.
+// It returns an AuthValidation struct with details about each check.
+func (a *AuthResults) Validate() AuthValidation {
 	if a == nil {
-		return false
+		return AuthValidation{
+			Passed:   false,
+			Failures: []string{"no authentication results available"},
+		}
 	}
 
-	if a.SPF != nil && a.SPF.Status != "pass" {
-		return false
+	var failures []string
+
+	// Check SPF
+	spfPassed := a.SPF != nil && a.SPF.Status == "pass"
+	if a.SPF != nil && !spfPassed {
+		msg := "SPF check failed: " + a.SPF.Status
+		if a.SPF.Domain != "" {
+			msg += " (domain: " + a.SPF.Domain + ")"
+		}
+		failures = append(failures, msg)
 	}
 
-	// At least one DKIM must pass
+	// Check DKIM (at least one signature must pass)
+	dkimPassed := false
 	if len(a.DKIM) > 0 {
-		dkimPassed := false
 		for _, dkim := range a.DKIM {
 			if dkim.Status == "pass" {
 				dkimPassed = true
@@ -61,17 +89,70 @@ func (a *AuthResults) IsPassing() bool {
 			}
 		}
 		if !dkimPassed {
-			return false
+			var failedDomains []string
+			for _, dkim := range a.DKIM {
+				if dkim.Status != "pass" && dkim.Domain != "" {
+					failedDomains = append(failedDomains, dkim.Domain)
+				}
+			}
+			msg := "DKIM signature failed"
+			if len(failedDomains) > 0 {
+				msg += ": " + joinStrings(failedDomains, ", ")
+			}
+			failures = append(failures, msg)
 		}
 	}
 
-	if a.DMARC != nil && a.DMARC.Status != "pass" {
-		return false
+	// Check DMARC
+	dmarcPassed := a.DMARC != nil && a.DMARC.Status == "pass"
+	if a.DMARC != nil && !dmarcPassed {
+		msg := "DMARC policy: " + a.DMARC.Status
+		if a.DMARC.Policy != "" {
+			msg += " (policy: " + a.DMARC.Policy + ")"
+		}
+		failures = append(failures, msg)
 	}
 
-	if a.ReverseDNS != nil && a.ReverseDNS.Status != "pass" {
-		return false
+	// Check Reverse DNS
+	reverseDNSPassed := a.ReverseDNS != nil && a.ReverseDNS.Status == "pass"
+	if a.ReverseDNS != nil && !reverseDNSPassed {
+		msg := "Reverse DNS check failed: " + a.ReverseDNS.Status
+		if a.ReverseDNS.Hostname != "" {
+			msg += " (hostname: " + a.ReverseDNS.Hostname + ")"
+		}
+		failures = append(failures, msg)
 	}
 
-	return true
+	// Ensure failures is never nil (match Node SDK behavior)
+	if failures == nil {
+		failures = []string{}
+	}
+
+	return AuthValidation{
+		Passed:           spfPassed && dkimPassed && dmarcPassed,
+		SPFPassed:        spfPassed,
+		DKIMPassed:       dkimPassed,
+		DMARCPassed:      dmarcPassed,
+		ReverseDNSPassed: reverseDNSPassed,
+		Failures:         failures,
+	}
+}
+
+// joinStrings joins strings with a separator (helper to avoid strings import).
+func joinStrings(strs []string, sep string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	result := strs[0]
+	for i := 1; i < len(strs); i++ {
+		result += sep + strs[i]
+	}
+	return result
+}
+
+// IsPassing returns true if all primary authentication checks (SPF, DKIM, DMARC) passed.
+// This is a convenience method equivalent to calling Validate().Passed.
+// Note: Reverse DNS is not included in this check to match the Node SDK behavior.
+func (a *AuthResults) IsPassing() bool {
+	return a.Validate().Passed
 }
