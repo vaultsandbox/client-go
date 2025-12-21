@@ -246,7 +246,7 @@ Ensure SSE and Polling strategies match Node SDK behavior.
 
 ---
 
-## Phase 8: Error Types Alignment
+## Phase 8: Error Types Alignment ✅ COMPLETED
 
 Ensure error types match Node SDK.
 
@@ -268,8 +268,14 @@ Ensure error types match Node SDK.
 
 ### 8.2 Error Enhancements
 - [x] Add `StrategyError` type
-- [ ] Ensure all errors implement `VaultSandboxError` interface
-- [ ] Add `Unwrap()` for error chaining
+- [x] Ensure all errors implement `VaultSandboxError` interface
+- [x] Add `Unwrap()` for error chaining
+
+**Implementation Notes:**
+- All error types implement the `VaultSandboxError` interface via marker method
+- Errors that wrap other errors (`NetworkError`, `DecryptionError`, `SSEError`, `StrategyError`) implement `Unwrap()` for `errors.Is()` / `errors.As()` chaining
+- Errors without wrapped errors (`APIError`, `TimeoutError`, `SignatureVerificationError`, `ValidationError`) don't need `Unwrap()` - this is idiomatic Go
+- Sentinel errors (`ErrInboxNotFound`, `ErrEmailNotFound`, etc.) work with `errors.Is()` via custom `Is()` methods on structured error types
 
 ---
 

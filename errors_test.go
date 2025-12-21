@@ -327,6 +327,53 @@ func TestValidationError_VaultSandboxError(t *testing.T) {
 	var _ VaultSandboxError = err
 }
 
+func TestStrategyError_Error(t *testing.T) {
+	t.Run("with underlying error", func(t *testing.T) {
+		underlying := errors.New("SSE failed")
+		err := &StrategyError{Message: "delivery failed", Err: underlying}
+
+		expected := "strategy error: delivery failed: SSE failed"
+		if err.Error() != expected {
+			t.Errorf("Error() = %s, want %s", err.Error(), expected)
+		}
+	})
+
+	t.Run("without underlying error", func(t *testing.T) {
+		err := &StrategyError{Message: "no strategy available"}
+
+		expected := "strategy error: no strategy available"
+		if err.Error() != expected {
+			t.Errorf("Error() = %s, want %s", err.Error(), expected)
+		}
+	})
+}
+
+func TestStrategyError_Unwrap(t *testing.T) {
+	underlying := errors.New("root cause")
+	err := &StrategyError{Message: "test", Err: underlying}
+
+	unwrapped := err.Unwrap()
+	if unwrapped != underlying {
+		t.Errorf("Unwrap() = %v, want %v", unwrapped, underlying)
+	}
+}
+
+func TestStrategyError_Is(t *testing.T) {
+	underlying := errors.New("connection refused")
+	err := &StrategyError{Message: "test", Err: underlying}
+
+	if !errors.Is(err, underlying) {
+		t.Error("errors.Is() should match underlying error")
+	}
+}
+
+func TestStrategyError_VaultSandboxError(t *testing.T) {
+	err := &StrategyError{}
+	err.VaultSandboxError()
+
+	var _ VaultSandboxError = err
+}
+
 func TestVaultSandboxError_Interface(t *testing.T) {
 	// Verify all error types implement VaultSandboxError interface
 	var _ VaultSandboxError = &APIError{}
@@ -336,6 +383,7 @@ func TestVaultSandboxError_Interface(t *testing.T) {
 	var _ VaultSandboxError = &SignatureVerificationError{}
 	var _ VaultSandboxError = &SSEError{}
 	var _ VaultSandboxError = &ValidationError{}
+	var _ VaultSandboxError = &StrategyError{}
 }
 
 func TestErrorWrapping(t *testing.T) {
