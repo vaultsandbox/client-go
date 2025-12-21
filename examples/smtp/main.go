@@ -77,28 +77,8 @@ func main() {
 	// Wait for the email to arrive
 	fmt.Println("\nWaiting for email to arrive...")
 
-	// Debug: poll manually to see what's happening
-	for i := 0; i < 10; i++ {
-		time.Sleep(2 * time.Second)
-		fmt.Printf("  Attempt %d: fetching emails...\n", i+1)
-
-		emails, err := inbox.GetEmails(ctx)
-		if err != nil {
-			fmt.Printf("    Error: %v\n", err)
-			continue
-		}
-
-		fmt.Printf("    Found %d email(s)\n", len(emails))
-		for _, e := range emails {
-			fmt.Printf("      - Subject: %q, From: %s\n", e.Subject, e.From)
-		}
-
-		if len(emails) > 0 {
-			break
-		}
-	}
-
 	email, err := inbox.WaitForEmail(ctx,
+		vaultsandbox.WithSubject(subject),
 		vaultsandbox.WithWaitTimeout(30*time.Second),
 	)
 	if err != nil {
