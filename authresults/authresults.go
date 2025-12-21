@@ -123,7 +123,7 @@ func (a *AuthResults) Validate() AuthValidation {
 		failures = append(failures, msg)
 	}
 
-	// Ensure failures is never nil (match Node SDK behavior)
+	// Ensure failures is never nil
 	if failures == nil {
 		failures = []string{}
 	}
@@ -152,7 +152,7 @@ func joinStrings(strs []string, sep string) string {
 
 // IsPassing returns true if all primary authentication checks (SPF, DKIM, DMARC) passed.
 // This is a convenience method equivalent to calling Validate().Passed.
-// Note: Reverse DNS is not included in this check to match the Node SDK behavior.
+// Note: Reverse DNS is not included in this check.
 func (a *AuthResults) IsPassing() bool {
 	return a.Validate().Passed
 }

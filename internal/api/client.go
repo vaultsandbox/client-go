@@ -17,7 +17,6 @@ const (
 )
 
 // DefaultRetryOn contains the default HTTP status codes that trigger a retry.
-// Matches Node SDK: [408, 429, 500, 502, 503, 504]
 var DefaultRetryOn = []int{408, 429, 500, 502, 503, 504}
 
 // Client handles HTTP communication with the VaultSandbox API.

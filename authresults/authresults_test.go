@@ -130,9 +130,9 @@ func TestValidate_ReverseDNSFailedDoesNotAffectPassed(t *testing.T) {
 
 	v := ar.Validate()
 
-	// Node SDK: passed = spfPassed && dkimPassed && dmarcPassed (NOT reverseDnsPassed)
+	// passed = spfPassed && dkimPassed && dmarcPassed (NOT reverseDnsPassed)
 	if !v.Passed {
-		t.Error("expected Passed to be true even when ReverseDNS fails (matches Node SDK)")
+		t.Error("expected Passed to be true even when ReverseDNS fails")
 	}
 	if v.ReverseDNSPassed {
 		t.Error("expected ReverseDNSPassed to be false")

@@ -13,20 +13,18 @@ import (
 	"github.com/vaultsandbox/client-go/internal/crypto"
 )
 
-// NodeSDKExportedInbox represents the export format from Node SDK.
-// This matches the ExportedInboxData interface in Node SDK.
-type NodeSDKExportedInbox struct {
+// ExternalExportedInbox represents the expected export format for cross-SDK compatibility.
+type ExternalExportedInbox struct {
 	EmailAddress string `json:"emailAddress"`
-	ExpiresAt    string `json:"expiresAt"`    // ISO string
+	ExpiresAt    string `json:"expiresAt"`
 	InboxHash    string `json:"inboxHash"`
 	ServerSigPk  string `json:"serverSigPk"`
 	PublicKeyB64 string `json:"publicKeyB64"`
 	SecretKeyB64 string `json:"secretKeyB64"`
-	ExportedAt   string `json:"exportedAt"`   // ISO string
+	ExportedAt   string `json:"exportedAt"`
 }
 
-// TestCrossSDK_ExportFormatCompatibility verifies Go SDK export format
-// is compatible with Node SDK import format.
+// TestCrossSDK_ExportFormatCompatibility verifies the export format is compatible.
 func TestCrossSDK_ExportFormatCompatibility(t *testing.T) {
 	client := newClient(t)
 	ctx := testContext(t)
@@ -48,55 +46,55 @@ func TestCrossSDK_ExportFormatCompatibility(t *testing.T) {
 
 	t.Logf("Go SDK export:\n%s", string(jsonData))
 
-	// Verify it can be parsed as Node SDK format
-	var nodeFormat NodeSDKExportedInbox
-	if err := json.Unmarshal(jsonData, &nodeFormat); err != nil {
-		t.Fatalf("Failed to parse as Node SDK format: %v", err)
+	// Verify it can be parsed as the standard format
+	var externalFormat ExternalExportedInbox
+	if err := json.Unmarshal(jsonData, &externalFormat); err != nil {
+		t.Fatalf("Failed to parse as external format: %v", err)
 	}
 
 	// Verify all fields are present and valid
-	if nodeFormat.EmailAddress != exported.EmailAddress {
-		t.Errorf("emailAddress mismatch: got %s, want %s", nodeFormat.EmailAddress, exported.EmailAddress)
+	if externalFormat.EmailAddress != exported.EmailAddress {
+		t.Errorf("emailAddress mismatch: got %s, want %s", externalFormat.EmailAddress, exported.EmailAddress)
 	}
-	if nodeFormat.InboxHash != exported.InboxHash {
-		t.Errorf("inboxHash mismatch: got %s, want %s", nodeFormat.InboxHash, exported.InboxHash)
+	if externalFormat.InboxHash != exported.InboxHash {
+		t.Errorf("inboxHash mismatch: got %s, want %s", externalFormat.InboxHash, exported.InboxHash)
 	}
-	if nodeFormat.ServerSigPk != exported.ServerSigPk {
-		t.Errorf("serverSigPk mismatch: got %s, want %s", nodeFormat.ServerSigPk, exported.ServerSigPk)
+	if externalFormat.ServerSigPk != exported.ServerSigPk {
+		t.Errorf("serverSigPk mismatch: got %s, want %s", externalFormat.ServerSigPk, exported.ServerSigPk)
 	}
-	if nodeFormat.PublicKeyB64 != exported.PublicKeyB64 {
-		t.Errorf("publicKeyB64 mismatch: got %s, want %s", nodeFormat.PublicKeyB64, exported.PublicKeyB64)
+	if externalFormat.PublicKeyB64 != exported.PublicKeyB64 {
+		t.Errorf("publicKeyB64 mismatch: got %s, want %s", externalFormat.PublicKeyB64, exported.PublicKeyB64)
 	}
-	if nodeFormat.SecretKeyB64 != exported.SecretKeyB64 {
-		t.Errorf("secretKeyB64 mismatch: got %s, want %s", nodeFormat.SecretKeyB64, exported.SecretKeyB64)
+	if externalFormat.SecretKeyB64 != exported.SecretKeyB64 {
+		t.Errorf("secretKeyB64 mismatch: got %s, want %s", externalFormat.SecretKeyB64, exported.SecretKeyB64)
 	}
 
 	// Verify timestamps can be parsed
-	if _, err := time.Parse(time.RFC3339Nano, nodeFormat.ExpiresAt); err != nil {
+	if _, err := time.Parse(time.RFC3339Nano, externalFormat.ExpiresAt); err != nil {
 		t.Errorf("Failed to parse expiresAt as RFC3339: %v", err)
 	}
-	if _, err := time.Parse(time.RFC3339Nano, nodeFormat.ExportedAt); err != nil {
+	if _, err := time.Parse(time.RFC3339Nano, externalFormat.ExportedAt); err != nil {
 		t.Errorf("Failed to parse exportedAt as RFC3339: %v", err)
 	}
 }
 
-// TestCrossSDK_ImportNodeExport tests importing an inbox exported from Node SDK.
-func TestCrossSDK_ImportNodeExport(t *testing.T) {
-	nodePath := os.Getenv("NODE_EXPORT_FILE")
-	if nodePath == "" {
-		t.Skip("skipping: NODE_EXPORT_FILE not set")
+// TestCrossSDK_ImportExternalExport tests importing an inbox exported from another SDK.
+func TestCrossSDK_ImportExternalExport(t *testing.T) {
+	externalPath := os.Getenv("EXTERNAL_EXPORT_FILE")
+	if externalPath == "" {
+		t.Skip("skipping: EXTERNAL_EXPORT_FILE not set")
 	}
 
 	client := newClient(t)
 	ctx := testContext(t)
 
-	// Import from Node SDK export file
-	inbox, err := client.ImportInboxFromFile(ctx, nodePath)
+	// Import from external export file
+	inbox, err := client.ImportInboxFromFile(ctx, externalPath)
 	if err != nil {
 		t.Fatalf("ImportInboxFromFile() error = %v", err)
 	}
 
-	t.Logf("Imported from Node SDK: %s", inbox.EmailAddress())
+	t.Logf("Imported from external SDK: %s", inbox.EmailAddress())
 
 	// Verify inbox works
 	if inbox.EmailAddress() == "" {
@@ -133,8 +131,7 @@ func TestCrossSDK_KeypairCompatibility(t *testing.T) {
 		t.Fatalf("GenerateKeypair() error = %v", err)
 	}
 
-	// Verify key sizes match Node SDK expectations
-	// Node SDK uses ML-KEM-768: publicKey=1184, secretKey=2400
+	// Verify key sizes (ML-KEM-768: publicKey=1184, secretKey=2400)
 	if len(kp.PublicKey) != crypto.MLKEMPublicKeySize {
 		t.Errorf("PublicKey size = %d, want %d", len(kp.PublicKey), crypto.MLKEMPublicKeySize)
 	}
@@ -155,7 +152,7 @@ func TestCrossSDK_KeypairCompatibility(t *testing.T) {
 		len(kp.PublicKey), len(kp.SecretKey), len(kp.PublicKeyB64))
 }
 
-// TestCrossSDK_Base64Compatibility verifies base64 encoding matches Node SDK.
+// TestCrossSDK_Base64Compatibility verifies base64 encoding is correct.
 func TestCrossSDK_Base64Compatibility(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -171,8 +168,7 @@ func TestCrossSDK_Base64Compatibility(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			encoded := crypto.ToBase64URL(tt.input)
-			// Node SDK uses RawURLEncoding (no padding, URL-safe)
-			// Verify it matches expected
+			// Uses RawURLEncoding (no padding, URL-safe)
 			if tt.expected != "" && encoded != tt.expected {
 				t.Errorf("ToBase64URL(%v) = %s, want %s", tt.input, encoded, tt.expected)
 			}
@@ -189,7 +185,7 @@ func TestCrossSDK_Base64Compatibility(t *testing.T) {
 	}
 }
 
-// TestCrossSDK_ExportedInboxJSONFields verifies JSON field naming matches Node SDK.
+// TestCrossSDK_ExportedInboxJSONFields verifies JSON field naming is correct.
 func TestCrossSDK_ExportedInboxJSONFields(t *testing.T) {
 	exported := &vaultsandbox.ExportedInbox{
 		EmailAddress: "test@example.com",
@@ -212,7 +208,7 @@ func TestCrossSDK_ExportedInboxJSONFields(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 
-	// Verify expected field names (camelCase to match Node SDK)
+	// Verify expected field names (camelCase for cross-SDK compatibility)
 	expectedFields := []string{
 		"emailAddress",
 		"expiresAt",
@@ -236,9 +232,8 @@ func TestCrossSDK_ExportedInboxJSONFields(t *testing.T) {
 	}
 }
 
-// TestCrossSDK_CryptoConstants verifies crypto constants match Node SDK.
+// TestCrossSDK_CryptoConstants verifies crypto constants are correct.
 func TestCrossSDK_CryptoConstants(t *testing.T) {
-	// These values must match Node SDK for cross-SDK compatibility
 	tests := []struct {
 		name     string
 		got      int
@@ -263,7 +258,7 @@ func TestCrossSDK_CryptoConstants(t *testing.T) {
 	}
 }
 
-// TestCrossSDK_HKDFContext verifies HKDF context string matches Node SDK.
+// TestCrossSDK_HKDFContext verifies HKDF context string is correct.
 func TestCrossSDK_HKDFContext(t *testing.T) {
 	expected := "vaultsandbox:email:v1"
 	if crypto.HKDFContext != expected {
@@ -271,14 +266,14 @@ func TestCrossSDK_HKDFContext(t *testing.T) {
 	}
 }
 
-// TestCrossSDK_CompareExports compares export from both SDKs.
-// Requires both a Go export and Node export file to be provided.
+// TestCrossSDK_CompareExports compares exports from different SDKs.
+// Requires both a Go export and external export file to be provided.
 func TestCrossSDK_CompareExports(t *testing.T) {
 	goPath := os.Getenv("GO_EXPORT_FILE")
-	nodePath := os.Getenv("NODE_EXPORT_FILE")
+	externalPath := os.Getenv("EXTERNAL_EXPORT_FILE")
 
-	if goPath == "" || nodePath == "" {
-		t.Skip("skipping: GO_EXPORT_FILE and NODE_EXPORT_FILE not set")
+	if goPath == "" || externalPath == "" {
+		t.Skip("skipping: GO_EXPORT_FILE and EXTERNAL_EXPORT_FILE not set")
 	}
 
 	// Read Go export
@@ -287,10 +282,10 @@ func TestCrossSDK_CompareExports(t *testing.T) {
 		t.Fatalf("Failed to read Go export: %v", err)
 	}
 
-	// Read Node export
-	nodeData, err := os.ReadFile(nodePath)
+	// Read external export
+	externalData, err := os.ReadFile(externalPath)
 	if err != nil {
-		t.Fatalf("Failed to read Node export: %v", err)
+		t.Fatalf("Failed to read external export: %v", err)
 	}
 
 	// Parse both
@@ -299,9 +294,9 @@ func TestCrossSDK_CompareExports(t *testing.T) {
 		t.Fatalf("Failed to parse Go export: %v", err)
 	}
 
-	var nodeExport NodeSDKExportedInbox
-	if err := json.Unmarshal(nodeData, &nodeExport); err != nil {
-		t.Fatalf("Failed to parse Node export: %v", err)
+	var externalExport ExternalExportedInbox
+	if err := json.Unmarshal(externalData, &externalExport); err != nil {
+		t.Fatalf("Failed to parse external export: %v", err)
 	}
 
 	t.Log("=== Go Export ===")
@@ -309,17 +304,17 @@ func TestCrossSDK_CompareExports(t *testing.T) {
 	t.Logf("InboxHash: %s", goExport.InboxHash)
 	t.Logf("SecretKeyB64: %s...%s", goExport.SecretKeyB64[:20], goExport.SecretKeyB64[len(goExport.SecretKeyB64)-20:])
 
-	t.Log("=== Node Export ===")
-	t.Logf("EmailAddress: %s", nodeExport.EmailAddress)
-	t.Logf("InboxHash: %s", nodeExport.InboxHash)
-	t.Logf("SecretKeyB64: %s...%s", nodeExport.SecretKeyB64[:20], nodeExport.SecretKeyB64[len(nodeExport.SecretKeyB64)-20:])
+	t.Log("=== External Export ===")
+	t.Logf("EmailAddress: %s", externalExport.EmailAddress)
+	t.Logf("InboxHash: %s", externalExport.InboxHash)
+	t.Logf("SecretKeyB64: %s...%s", externalExport.SecretKeyB64[:20], externalExport.SecretKeyB64[len(externalExport.SecretKeyB64)-20:])
 
 	// If they're the same inbox, verify keys match
-	if goExport.EmailAddress == nodeExport.EmailAddress {
-		if goExport.SecretKeyB64 != nodeExport.SecretKeyB64 {
+	if goExport.EmailAddress == externalExport.EmailAddress {
+		if goExport.SecretKeyB64 != externalExport.SecretKeyB64 {
 			t.Error("Same inbox but secretKeyB64 differs")
 		}
-		if goExport.PublicKeyB64 != nodeExport.PublicKeyB64 {
+		if goExport.PublicKeyB64 != externalExport.PublicKeyB64 {
 			t.Error("Same inbox but publicKeyB64 differs")
 		}
 	}

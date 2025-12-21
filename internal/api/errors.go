@@ -52,7 +52,6 @@ func (e *APIError) Is(target error) bool {
 		return target == ErrUnauthorized || target == ErrInvalidAPIKey
 	case 404:
 		// Check message content to distinguish inbox vs email errors
-		// Matches Node SDK behavior
 		msgLower := strings.ToLower(e.Message)
 		hasInbox := strings.Contains(msgLower, "inbox")
 		hasEmail := strings.Contains(msgLower, "email")

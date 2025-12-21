@@ -422,7 +422,7 @@ func TestIsPassing(t *testing.T) {
 		{
 			name:     "empty results",
 			results:  &AuthResults{},
-			expected: false, // Node SDK: all three checks (SPF, DKIM, DMARC) must pass
+			expected: false, // all three checks (SPF, DKIM, DMARC) must pass
 		},
 		{
 			name: "all passing",
@@ -467,7 +467,7 @@ func TestIsPassing(t *testing.T) {
 			results: &AuthResults{
 				SPF: &SPFResult{Status: "pass"},
 			},
-			expected: false, // Node SDK: DKIM and DMARC also required
+			expected: false, // DKIM and DMARC also required
 		},
 		{
 			name: "multiple DKIM one passes",
@@ -477,7 +477,7 @@ func TestIsPassing(t *testing.T) {
 					{Status: "pass"},
 				},
 			},
-			expected: false, // Node SDK: SPF and DMARC also required
+			expected: false, // SPF and DMARC also required
 		},
 		{
 			name: "multiple DKIM one passes with all checks",
