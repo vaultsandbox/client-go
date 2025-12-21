@@ -31,6 +31,7 @@ type clientConfig struct {
 	deliveryStrategy DeliveryStrategy
 	timeout          time.Duration
 	retries          int
+	retryOn          []int
 }
 
 // inboxConfig holds configuration for inbox creation.
@@ -91,6 +92,14 @@ func WithTimeout(timeout time.Duration) Option {
 func WithRetries(count int) Option {
 	return func(c *clientConfig) {
 		c.retries = count
+	}
+}
+
+// WithRetryOn sets the HTTP status codes that trigger a retry.
+// Default: [408, 429, 500, 502, 503, 504]
+func WithRetryOn(statusCodes []int) Option {
+	return func(c *clientConfig) {
+		c.retryOn = statusCodes
 	}
 }
 

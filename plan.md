@@ -46,7 +46,7 @@ Ensure cryptographic operations are identical between both SDKs.
 
 ---
 
-## Phase 2: API Client Alignment
+## Phase 2: API Client Alignment ✅ COMPLETED
 
 Ensure HTTP client behavior matches Node SDK.
 
@@ -59,35 +59,35 @@ Ensure HTTP client behavior matches Node SDK.
 | `pollingInterval` | 2000ms default | `defaultPollInterval` | ✅ |
 | `maxRetries` | 3 default | `WithRetries()` | ✅ |
 | `retryDelay` | 1000ms default | `DefaultRetryDelay` | ✅ |
-| `retryOn` | `[408,429,500,502,503,504]` | Hardcoded | ⚠️ Make configurable |
+| `retryOn` | `[408,429,500,502,503,504]` | `WithRetryOn()` | ✅ |
 | `sseReconnectInterval` | 5000ms | `SSEReconnectInterval` | ✅ |
 | `sseMaxReconnectAttempts` | 10 | `SSEMaxReconnectAttempts` | ✅ |
 
 ### 2.2 API Endpoints
-- [ ] `GET /api/check-key` - Validate API key
-- [ ] `GET /api/server-info` - Get server capabilities
-- [ ] `POST /api/inboxes` - Create inbox
-- [ ] `DELETE /api/inboxes` - Delete all inboxes
-- [ ] `DELETE /api/inboxes/{email}` - Delete specific inbox
-- [ ] `GET /api/inboxes/{email}/sync` - Get sync status
-- [ ] `GET /api/inboxes/{email}/emails` - List emails
-- [ ] `GET /api/inboxes/{email}/emails/{id}` - Get email
-- [ ] `GET /api/inboxes/{email}/emails/{id}/raw` - Get raw email
-- [ ] `PATCH /api/inboxes/{email}/emails/{id}/read` - Mark as read
-- [ ] `DELETE /api/inboxes/{email}/emails/{id}` - Delete email
-- [ ] `GET /api/events?inboxes=...` - SSE stream
+- [x] `GET /api/check-key` - Validate API key
+- [x] `GET /api/server-info` - Get server capabilities
+- [x] `POST /api/inboxes` - Create inbox
+- [x] `DELETE /api/inboxes` - Delete all inboxes
+- [x] `DELETE /api/inboxes/{email}` - Delete specific inbox
+- [x] `GET /api/inboxes/{email}/sync` - Get sync status
+- [x] `GET /api/inboxes/{email}/emails` - List emails
+- [x] `GET /api/inboxes/{email}/emails/{id}` - Get email
+- [x] `GET /api/inboxes/{email}/emails/{id}/raw` - Get raw email
+- [x] `PATCH /api/inboxes/{email}/emails/{id}/read` - Mark as read
+- [x] `DELETE /api/inboxes/{email}/emails/{id}` - Delete email
+- [x] `GET /api/events?inboxes=...` - SSE stream
 
 ### 2.3 Error Handling
-- [ ] Map HTTP 404 + "inbox" → `ErrInboxNotFound`
-- [ ] Map HTTP 404 + "email" → `ErrEmailNotFound`
-- [ ] Map HTTP 401 → `ErrUnauthorized`
-- [ ] Map HTTP 429 → `ErrRateLimited`
-- [ ] Include RequestID in error messages
+- [x] Map HTTP 404 + "inbox" → `ErrInboxNotFound`
+- [x] Map HTTP 404 + "email" → `ErrEmailNotFound`
+- [x] Map HTTP 401 → `ErrUnauthorized`
+- [x] Map HTTP 429 → `ErrRateLimited`
+- [x] Include RequestID in error messages
 
 ### 2.4 Retry Logic
-- [ ] Exponential backoff: `delay * 2^retryCount`
-- [ ] Verify retryable status codes
-- [ ] Add configurable `retryOn` status codes
+- [x] Exponential backoff: `delay * 2^retryCount`
+- [x] Verify retryable status codes
+- [x] Add configurable `retryOn` status codes
 
 ---
 

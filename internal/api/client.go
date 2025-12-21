@@ -16,6 +16,10 @@ const (
 	DefaultRetryDelay = 1 * time.Second
 )
 
+// DefaultRetryOn contains the default HTTP status codes that trigger a retry.
+// Matches Node SDK: [408, 429, 500, 502, 503, 504]
+var DefaultRetryOn = []int{408, 429, 500, 502, 503, 504}
+
 // Client handles HTTP communication with the VaultSandbox API.
 type Client struct {
 	httpClient *http.Client
@@ -23,6 +27,7 @@ type Client struct {
 	apiKey     string
 	maxRetries int
 	retryDelay time.Duration
+	retryOn    []int
 }
 
 // Config holds API client configuration.
@@ -33,6 +38,7 @@ type Config struct {
 	MaxRetries int
 	RetryDelay time.Duration
 	Timeout    time.Duration
+	RetryOn    []int // HTTP status codes that trigger a retry
 }
 
 // NewClient creates a new API client.
@@ -65,12 +71,18 @@ func NewClient(cfg Config) (*Client, error) {
 		retryDelay = DefaultRetryDelay
 	}
 
+	retryOn := cfg.RetryOn
+	if len(retryOn) == 0 {
+		retryOn = DefaultRetryOn
+	}
+
 	return &Client{
 		httpClient: httpClient,
 		baseURL:    cfg.BaseURL,
 		apiKey:     cfg.APIKey,
 		maxRetries: maxRetries,
 		retryDelay: retryDelay,
+		retryOn:    retryOn,
 	}, nil
 }
 
@@ -88,6 +100,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		},
 		maxRetries: DefaultMaxRetries,
 		retryDelay: DefaultRetryDelay,
+		retryOn:    DefaultRetryOn,
 	}
 
 	for _, opt := range opts {
@@ -129,6 +142,13 @@ func WithTimeout(timeout time.Duration) Option {
 func WithHTTPClient(client *http.Client) Option {
 	return func(c *Client) {
 		c.httpClient = client
+	}
+}
+
+// WithRetryOn sets the HTTP status codes that trigger a retry.
+func WithRetryOn(statusCodes []int) Option {
+	return func(c *Client) {
+		c.retryOn = statusCodes
 	}
 }
 
@@ -197,7 +217,7 @@ func (c *Client) doWithRetry(ctx context.Context, method, path string, body io.R
 		}
 
 		// Check for retryable status codes
-		if isRetryable(resp.StatusCode) && attempt < c.maxRetries {
+		if c.isRetryable(resp.StatusCode) && attempt < c.maxRetries {
 			lastErr = &APIError{StatusCode: resp.StatusCode}
 			resp.Body.Close()
 			continue
@@ -237,13 +257,13 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}, 
 }
 
 // isRetryable checks if a status code should trigger a retry.
-func isRetryable(statusCode int) bool {
-	switch statusCode {
-	case 408, 429, 500, 502, 503, 504:
-		return true
-	default:
-		return false
+func (c *Client) isRetryable(statusCode int) bool {
+	for _, code := range c.retryOn {
+		if statusCode == code {
+			return true
+		}
 	}
+	return false
 }
 
 func parseErrorResponse(resp *http.Response) error {

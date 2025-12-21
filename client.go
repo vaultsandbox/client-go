@@ -59,6 +59,9 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	if cfg.retries > 0 {
 		apiOpts = append(apiOpts, api.WithRetries(cfg.retries))
 	}
+	if len(cfg.retryOn) > 0 {
+		apiOpts = append(apiOpts, api.WithRetryOn(cfg.retryOn))
+	}
 
 	apiClient, err := api.New(apiKey, apiOpts...)
 	if err != nil {

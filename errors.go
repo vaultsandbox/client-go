@@ -3,6 +3,7 @@ package vaultsandbox
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -62,6 +63,12 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
+	if e.RequestID != "" {
+		if e.Message != "" {
+			return fmt.Sprintf("API error %d: %s (request_id: %s)", e.StatusCode, e.Message, e.RequestID)
+		}
+		return fmt.Sprintf("API error %d (request_id: %s)", e.StatusCode, e.RequestID)
+	}
 	if e.Message != "" {
 		return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Message)
 	}
@@ -77,8 +84,21 @@ func (e *APIError) Is(target error) bool {
 	case 401:
 		return target == ErrUnauthorized
 	case 404:
-		// Could be inbox or email, caller should use specific errors
-		return target == ErrInboxNotFound || target == ErrEmailNotFound
+		// Check message content to distinguish inbox vs email errors
+		// Matches Node SDK behavior
+		msgLower := strings.ToLower(e.Message)
+		hasInbox := strings.Contains(msgLower, "inbox")
+		hasEmail := strings.Contains(msgLower, "email")
+
+		if target == ErrInboxNotFound {
+			// Match if message contains "inbox" OR no specific keyword (backward compat)
+			return hasInbox || (!hasInbox && !hasEmail)
+		}
+		if target == ErrEmailNotFound {
+			// Match if message contains "email" OR no specific keyword (backward compat)
+			return hasEmail || (!hasInbox && !hasEmail)
+		}
+		return false
 	case 409:
 		return target == ErrInboxAlreadyExists
 	case 429:

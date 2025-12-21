@@ -25,7 +25,12 @@ func TestAPIError_Error(t *testing.T) {
 		{
 			name:     "with request ID",
 			err:      &APIError{StatusCode: 404, Message: "not found", RequestID: "req-123"},
-			expected: "API error 404: not found",
+			expected: "API error 404: not found (request_id: req-123)",
+		},
+		{
+			name:     "with request ID only",
+			err:      &APIError{StatusCode: 500, RequestID: "req-456"},
+			expected: "API error 500 (request_id: req-456)",
 		},
 	}
 

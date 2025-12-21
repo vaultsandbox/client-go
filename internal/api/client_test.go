@@ -380,6 +380,12 @@ func TestClient_SetHTTPClient(t *testing.T) {
 }
 
 func TestIsRetryable(t *testing.T) {
+	// Create a client with default retryOn status codes
+	client, _ := NewClient(Config{
+		BaseURL: "https://example.com",
+		APIKey:  "test-key",
+	})
+
 	tests := []struct {
 		statusCode int
 		expected   bool
@@ -401,7 +407,36 @@ func TestIsRetryable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(http.StatusText(tt.statusCode), func(t *testing.T) {
-			result := isRetryable(tt.statusCode)
+			result := client.isRetryable(tt.statusCode)
+			if result != tt.expected {
+				t.Errorf("isRetryable(%d) = %v, want %v", tt.statusCode, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsRetryable_CustomStatusCodes(t *testing.T) {
+	// Create a client with custom retryOn status codes
+	client, _ := NewClient(Config{
+		BaseURL: "https://example.com",
+		APIKey:  "test-key",
+		RetryOn: []int{502, 503}, // Only retry on these
+	})
+
+	tests := []struct {
+		statusCode int
+		expected   bool
+	}{
+		{429, false}, // Not in custom list
+		{500, false}, // Not in custom list
+		{502, true},  // In custom list
+		{503, true},  // In custom list
+		{504, false}, // Not in custom list
+	}
+
+	for _, tt := range tests {
+		t.Run(http.StatusText(tt.statusCode), func(t *testing.T) {
+			result := client.isRetryable(tt.statusCode)
 			if result != tt.expected {
 				t.Errorf("isRetryable(%d) = %v, want %v", tt.statusCode, result, tt.expected)
 			}

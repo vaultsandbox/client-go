@@ -55,6 +55,16 @@ func TestAPIError_Error(t *testing.T) {
 			err:      &APIError{StatusCode: 500},
 			expected: "API error 500",
 		},
+		{
+			name:     "with request ID",
+			err:      &APIError{StatusCode: 404, Message: "not found", RequestID: "req-123"},
+			expected: "API error 404: not found (request_id: req-123)",
+		},
+		{
+			name:     "with request ID only",
+			err:      &APIError{StatusCode: 500, RequestID: "req-456"},
+			expected: "API error 500 (request_id: req-456)",
+		},
 	}
 
 	for _, tt := range tests {
@@ -89,6 +99,45 @@ func TestAPIError_Is(t *testing.T) {
 			result := errors.Is(err, tt.target)
 			if result != tt.expected {
 				t.Errorf("errors.Is() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAPIError_Is_404Differentiation(t *testing.T) {
+	tests := []struct {
+		name     string
+		message  string
+		target   error
+		expected bool
+	}{
+		// Message contains "inbox" - only matches ErrInboxNotFound
+		{"inbox message matches ErrInboxNotFound", "inbox not found", ErrInboxNotFound, true},
+		{"inbox message does not match ErrEmailNotFound", "inbox not found", ErrEmailNotFound, false},
+
+		// Message contains "email" - only matches ErrEmailNotFound
+		{"email message matches ErrEmailNotFound", "email not found", ErrEmailNotFound, true},
+		{"email message does not match ErrInboxNotFound", "email not found", ErrInboxNotFound, false},
+
+		// Message contains both - matches both (first keyword wins)
+		{"both keywords matches ErrInboxNotFound", "inbox email not found", ErrInboxNotFound, true},
+		{"both keywords matches ErrEmailNotFound", "inbox email not found", ErrEmailNotFound, true},
+
+		// Empty message - matches both (backward compat)
+		{"empty message matches ErrInboxNotFound", "", ErrInboxNotFound, true},
+		{"empty message matches ErrEmailNotFound", "", ErrEmailNotFound, true},
+
+		// Case insensitive
+		{"INBOX uppercase matches ErrInboxNotFound", "INBOX NOT FOUND", ErrInboxNotFound, true},
+		{"EMAIL uppercase matches ErrEmailNotFound", "EMAIL NOT FOUND", ErrEmailNotFound, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := &APIError{StatusCode: 404, Message: tt.message}
+			result := errors.Is(err, tt.target)
+			if result != tt.expected {
+				t.Errorf("errors.Is() = %v, want %v for message %q", result, tt.expected, tt.message)
 			}
 		})
 	}
