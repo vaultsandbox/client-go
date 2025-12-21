@@ -16,6 +16,11 @@ type Email struct {
 	Text        string
 	HTML        string
 	ReceivedAt  time.Time
+	// Headers contains email headers as string key-value pairs.
+	// Note: Unlike the Node SDK which uses Record<string, unknown> to preserve
+	// complex header values, the Go SDK uses map[string]string for type safety.
+	// Non-string header values from the server are omitted during parsing.
+	// This is intentional as email headers are typically string values.
 	Headers     map[string]string
 	Attachments []Attachment
 	Links       []string

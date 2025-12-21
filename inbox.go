@@ -437,7 +437,10 @@ func (i *Inbox) decryptEmailWithContext(ctx context.Context, raw *api.RawEmail) 
 		decrypted.Links = parsed.Links
 		decrypted.AuthResults = parsed.AuthResults
 
-		// Convert headers
+		// Convert headers from interface{} to string map.
+		// The server may send headers with non-string values, but for type safety
+		// and consistency with Go idioms, we only preserve string-typed values.
+		// This differs from the Node SDK which uses Record<string, unknown>.
 		if len(parsed.Headers) > 0 {
 			decrypted.Headers = make(map[string]string)
 			for k, v := range parsed.Headers {

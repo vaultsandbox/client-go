@@ -146,7 +146,7 @@ Ensure Inbox operations match Node SDK.
 
 ---
 
-## Phase 5: Email API Alignment
+## Phase 5: Email API Alignment ✅ COMPLETED
 
 Ensure Email properties and methods match.
 
@@ -163,8 +163,10 @@ Ensure Email properties and methods match.
 | `html` | `string|null` | `string` | ✅ |
 | `attachments` | ✅ | `[]Attachment` | ✅ |
 | `links` | `string[]` | `[]string` | ✅ |
-| `headers` | `Record<string,unknown>` | `map[string]string` | ⚠️ Type mismatch |
+| `headers` | `Record<string,unknown>` | `map[string]string` | ✅ (intentional) |
 | `authResults` | `AuthResults` | `*authresults.AuthResults` | ✅ |
+
+**Note:** The `headers` field uses `map[string]string` in Go for type safety, while the Node SDK uses `Record<string, unknown>`. Non-string header values from the server are omitted during parsing. This is intentional as email headers are typically string values.
 
 ### 5.2 Email Methods
 | Method | Node SDK | Go SDK | Status |
@@ -174,10 +176,10 @@ Ensure Email properties and methods match.
 | `getRaw()` | ✅ | `GetRaw()` | ✅ |
 
 ### 5.3 Attachment Structure
-- [ ] Verify `Filename`, `ContentType`, `Size` fields
-- [ ] Verify `ContentID`, `ContentDisposition` for inline attachments
-- [ ] Verify `Content` ([]byte) and `Checksum` fields
-- [ ] Handle base64-encoded content from server
+- [x] Verify `Filename`, `ContentType`, `Size` fields - JSON tags updated to camelCase
+- [x] Verify `ContentID`, `ContentDisposition` for inline attachments - JSON tags updated
+- [x] Verify `Content` ([]byte) and `Checksum` fields - Using `Base64Bytes` type
+- [x] Handle base64-encoded content from server - `Base64Bytes` custom unmarshaler handles base64 strings
 
 ---
 

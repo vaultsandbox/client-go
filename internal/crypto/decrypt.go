@@ -49,13 +49,53 @@ type DecryptedEmail struct {
 
 // DecryptedAttachment represents a decrypted attachment.
 type DecryptedAttachment struct {
-	Filename           string `json:"filename"`
-	ContentType        string `json:"content_type"`
-	Size               int    `json:"size"`
-	ContentID          string `json:"content_id"`
-	ContentDisposition string `json:"content_disposition"`
-	Content            []byte `json:"content"`
-	Checksum           string `json:"checksum"`
+	Filename           string      `json:"filename"`
+	ContentType        string      `json:"contentType"`
+	Size               int         `json:"size"`
+	ContentID          string      `json:"contentId,omitempty"`
+	ContentDisposition string      `json:"contentDisposition,omitempty"`
+	Content            Base64Bytes `json:"content,omitempty"`
+	Checksum           string      `json:"checksum,omitempty"`
+}
+
+// Base64Bytes handles JSON unmarshaling of base64-encoded content.
+// The server may send attachment content as a base64-encoded string,
+// which this type automatically decodes to []byte.
+type Base64Bytes []byte
+
+// UnmarshalJSON implements json.Unmarshaler for Base64Bytes.
+// It handles both raw bytes and base64-encoded strings.
+func (b *Base64Bytes) UnmarshalJSON(data []byte) error {
+	// Handle null
+	if string(data) == "null" {
+		*b = nil
+		return nil
+	}
+
+	// If it's a quoted string, it's base64-encoded
+	if len(data) >= 2 && data[0] == '"' && data[len(data)-1] == '"' {
+		// Remove quotes
+		encoded := string(data[1 : len(data)-1])
+		if encoded == "" {
+			*b = nil
+			return nil
+		}
+		// Try standard base64 first (for attachment content)
+		decoded, err := FromBase64(encoded)
+		if err != nil {
+			// Fall back to URL-safe base64
+			decoded, err = FromBase64URL(encoded)
+			if err != nil {
+				return err
+			}
+		}
+		*b = decoded
+		return nil
+	}
+
+	// Otherwise, treat as raw JSON bytes (shouldn't happen for attachments)
+	*b = data
+	return nil
 }
 
 // Decrypt decrypts an encrypted payload using the provided keypair.

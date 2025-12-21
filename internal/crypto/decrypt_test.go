@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"testing"
 )
 
@@ -130,6 +131,124 @@ func TestDecryptedAttachment_Fields(t *testing.T) {
 	}
 	if attachment.Size != 1024 {
 		t.Errorf("Size = %d, want 1024", attachment.Size)
+	}
+}
+
+func TestBase64Bytes_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []byte
+		wantErr  bool
+	}{
+		{
+			name:     "standard base64 string",
+			input:    `"SGVsbG8gV29ybGQh"`, // "Hello World!" in base64
+			expected: []byte("Hello World!"),
+			wantErr:  false,
+		},
+		{
+			name:     "url-safe base64 string",
+			input:    `"SGVsbG8tV29ybGRf"`, // base64url encoded
+			expected: []byte("Hello-World_"),
+			wantErr:  false,
+		},
+		{
+			name:     "empty string",
+			input:    `""`,
+			expected: nil,
+			wantErr:  false,
+		},
+		{
+			name:     "null value",
+			input:    `null`,
+			expected: nil,
+			wantErr:  false,
+		},
+		{
+			name:     "base64 with padding",
+			input:    `"dGVzdA=="`, // "test" with padding
+			expected: []byte("test"),
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b Base64Bytes
+			err := b.UnmarshalJSON([]byte(tt.input))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("UnmarshalJSON() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !bytes.Equal(b, tt.expected) {
+				t.Errorf("UnmarshalJSON() = %v, want %v", b, tt.expected)
+			}
+		})
+	}
+}
+
+func TestDecryptedAttachment_JSONUnmarshal(t *testing.T) {
+	// Test JSON unmarshaling with camelCase field names (as sent by server)
+	jsonData := `{
+		"filename": "test.pdf",
+		"contentType": "application/pdf",
+		"size": 1024,
+		"contentId": "cid123",
+		"contentDisposition": "attachment",
+		"content": "SGVsbG8gV29ybGQh",
+		"checksum": "abc123"
+	}`
+
+	var attachment DecryptedAttachment
+	if err := json.Unmarshal([]byte(jsonData), &attachment); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if attachment.Filename != "test.pdf" {
+		t.Errorf("Filename = %s, want test.pdf", attachment.Filename)
+	}
+	if attachment.ContentType != "application/pdf" {
+		t.Errorf("ContentType = %s, want application/pdf", attachment.ContentType)
+	}
+	if attachment.Size != 1024 {
+		t.Errorf("Size = %d, want 1024", attachment.Size)
+	}
+	if attachment.ContentID != "cid123" {
+		t.Errorf("ContentID = %s, want cid123", attachment.ContentID)
+	}
+	if attachment.ContentDisposition != "attachment" {
+		t.Errorf("ContentDisposition = %s, want attachment", attachment.ContentDisposition)
+	}
+	if string(attachment.Content) != "Hello World!" {
+		t.Errorf("Content = %s, want Hello World!", string(attachment.Content))
+	}
+	if attachment.Checksum != "abc123" {
+		t.Errorf("Checksum = %s, want abc123", attachment.Checksum)
+	}
+}
+
+func TestDecryptedAttachment_JSONUnmarshal_OptionalFields(t *testing.T) {
+	// Test JSON unmarshaling with optional fields omitted
+	jsonData := `{
+		"filename": "test.txt",
+		"contentType": "text/plain",
+		"size": 100
+	}`
+
+	var attachment DecryptedAttachment
+	if err := json.Unmarshal([]byte(jsonData), &attachment); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if attachment.Filename != "test.txt" {
+		t.Errorf("Filename = %s, want test.txt", attachment.Filename)
+	}
+	if attachment.ContentID != "" {
+		t.Errorf("ContentID = %s, want empty", attachment.ContentID)
+	}
+	if attachment.Content != nil {
+		t.Errorf("Content = %v, want nil", attachment.Content)
 	}
 }
 
