@@ -68,7 +68,7 @@ func (i *Inbox) IsExpired() bool {
 
 // GetEmails fetches all emails in the inbox.
 func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
-	resp, err := i.client.apiClient.GetEmails(ctx, i.inboxHash)
+	resp, err := i.client.apiClient.GetEmails(ctx, i.emailAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
 
 // GetEmail fetches a specific email by ID.
 func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
-	resp, err := i.client.apiClient.GetEmail(ctx, i.inboxHash, emailID)
+	resp, err := i.client.apiClient.GetEmail(ctx, i.emailAddress, emailID)
 	if err != nil {
 		return nil, err
 	}

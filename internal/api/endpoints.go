@@ -157,17 +157,17 @@ func (c *Client) CreateInbox(ctx context.Context, req *LegacyCreateInboxRequest)
 	}
 
 	apiReq := &createInboxAPIRequest{
-		PublicKey:    crypto.EncodeBase64(keypair.PublicKey),
+		ClientKemPk:  crypto.EncodeBase64(keypair.PublicKey),
 		TTL:          int(req.TTL.Seconds()),
 		EmailAddress: req.EmailAddress,
 	}
 
 	var apiResp createInboxAPIResponse
-	if err := c.do(ctx, http.MethodPost, "/v1/inboxes", apiReq, &apiResp); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/api/inboxes", apiReq, &apiResp); err != nil {
 		return nil, err
 	}
 
-	serverSigPk, err := crypto.DecodeBase64(apiResp.ServerSignaturePublicKey)
+	serverSigPk, err := crypto.DecodeBase64(apiResp.ServerSigPk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode server signature public key: %w", err)
 	}
@@ -197,14 +197,15 @@ type EncryptedEmail struct {
 }
 
 // GetEmails fetches all emails in an inbox (legacy API).
-func (c *Client) GetEmails(ctx context.Context, inboxHash string) (*GetEmailsResponse, error) {
-	var resp getEmailsAPIResponse
-	if err := c.do(ctx, http.MethodGet, "/v1/inboxes/"+inboxHash+"/emails", nil, &resp); err != nil {
+func (c *Client) GetEmails(ctx context.Context, emailAddress string) (*GetEmailsResponse, error) {
+	var resp []emailAPIResponse
+	path := fmt.Sprintf("/api/inboxes/%s/emails", url.PathEscape(emailAddress))
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 
-	emails := make([]*EncryptedEmail, 0, len(resp.Emails))
-	for _, e := range resp.Emails {
+	emails := make([]*EncryptedEmail, 0, len(resp))
+	for _, e := range resp {
 		encrypted, err := parseEncryptedEmail(&e)
 		if err != nil {
 			return nil, err
@@ -216,9 +217,10 @@ func (c *Client) GetEmails(ctx context.Context, inboxHash string) (*GetEmailsRes
 }
 
 // GetEmail fetches a specific email (legacy API).
-func (c *Client) GetEmail(ctx context.Context, inboxHash, emailID string) (*EncryptedEmail, error) {
+func (c *Client) GetEmail(ctx context.Context, emailAddress, emailID string) (*EncryptedEmail, error) {
 	var resp emailAPIResponse
-	if err := c.do(ctx, http.MethodGet, "/v1/inboxes/"+inboxHash+"/emails/"+emailID, nil, &resp); err != nil {
+	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 
@@ -226,29 +228,33 @@ func (c *Client) GetEmail(ctx context.Context, inboxHash, emailID string) (*Encr
 }
 
 // GetEmailRaw fetches the raw email content (legacy API).
-func (c *Client) GetEmailRaw(ctx context.Context, inboxHash, emailID string) (string, error) {
+func (c *Client) GetEmailRaw(ctx context.Context, emailAddress, emailID string) (string, error) {
 	var resp struct {
 		Raw string `json:"raw"`
 	}
-	if err := c.do(ctx, http.MethodGet, "/v1/inboxes/"+inboxHash+"/emails/"+emailID+"/raw", nil, &resp); err != nil {
+	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/raw", url.PathEscape(emailAddress), url.PathEscape(emailID))
+	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return "", err
 	}
 	return resp.Raw, nil
 }
 
 // MarkEmailAsRead marks an email as read (legacy API).
-func (c *Client) MarkEmailAsRead(ctx context.Context, inboxHash, emailID string) error {
-	return c.do(ctx, http.MethodPatch, "/v1/inboxes/"+inboxHash+"/emails/"+emailID, map[string]bool{"is_read": true}, nil)
+func (c *Client) MarkEmailAsRead(ctx context.Context, emailAddress, emailID string) error {
+	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
+	return c.do(ctx, http.MethodPatch, path, map[string]bool{"isRead": true}, nil)
 }
 
 // DeleteEmail deletes an email (legacy API).
-func (c *Client) DeleteEmail(ctx context.Context, inboxHash, emailID string) error {
-	return c.do(ctx, http.MethodDelete, "/v1/inboxes/"+inboxHash+"/emails/"+emailID, nil, nil)
+func (c *Client) DeleteEmail(ctx context.Context, emailAddress, emailID string) error {
+	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }
 
 // DeleteInbox deletes an inbox (legacy API).
-func (c *Client) DeleteInbox(ctx context.Context, inboxHash string) error {
-	return c.do(ctx, http.MethodDelete, "/v1/inboxes/"+inboxHash, nil, nil)
+func (c *Client) DeleteInbox(ctx context.Context, emailAddress string) error {
+	path := fmt.Sprintf("/api/inboxes/%s", url.PathEscape(emailAddress))
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }
 
 func parseEncryptedEmail(resp *emailAPIResponse) (*EncryptedEmail, error) {

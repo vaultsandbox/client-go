@@ -64,16 +64,16 @@ type SSEEvent struct {
 // Legacy types for backward compatibility with existing endpoints.go code
 
 type createInboxAPIRequest struct {
-	PublicKey    string `json:"public_key"`
+	ClientKemPk  string `json:"clientKemPk"`
 	TTL          int    `json:"ttl,omitempty"`
-	EmailAddress string `json:"email_address,omitempty"`
+	EmailAddress string `json:"emailAddress,omitempty"`
 }
 
 type createInboxAPIResponse struct {
-	EmailAddress             string    `json:"email_address"`
-	ExpiresAt                time.Time `json:"expires_at"`
-	InboxHash                string    `json:"inbox_hash"`
-	ServerSignaturePublicKey string    `json:"server_signature_public_key"`
+	EmailAddress string    `json:"emailAddress"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+	InboxHash    string    `json:"inboxHash"`
+	ServerSigPk  string    `json:"serverSigPk"`
 }
 
 type getEmailsAPIResponse struct {
@@ -82,9 +82,9 @@ type getEmailsAPIResponse struct {
 
 type emailAPIResponse struct {
 	ID              string    `json:"id"`
-	EncapsulatedKey string    `json:"encapsulated_key"`
+	EncapsulatedKey string    `json:"encapsulatedKey"`
 	Ciphertext      string    `json:"ciphertext"`
 	Signature       string    `json:"signature"`
-	ReceivedAt      time.Time `json:"received_at"`
-	IsRead          bool      `json:"is_read"`
+	ReceivedAt      time.Time `json:"receivedAt"`
+	IsRead          bool      `json:"isRead"`
 }
