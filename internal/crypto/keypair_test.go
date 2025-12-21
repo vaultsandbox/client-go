@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -306,4 +307,52 @@ func BenchmarkKeypairFromSecretKey(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// ExampleGenerateKeypair demonstrates creating and validating an ML-KEM-768 keypair.
+func ExampleGenerateKeypair() {
+	// Generate a new ML-KEM-768 keypair.
+	keypair, err := GenerateKeypair()
+	if err != nil {
+		panic(err)
+	}
+
+	// The keypair contains the raw keys and base64-encoded public key.
+	fmt.Printf("Public key size: %d bytes\n", len(keypair.PublicKey))
+	fmt.Printf("Secret key size: %d bytes\n", len(keypair.SecretKey))
+	fmt.Printf("Has base64 public key: %v\n", keypair.PublicKeyB64 != "")
+
+	// Validate the keypair structure.
+	isValid := ValidateKeypair(keypair)
+	fmt.Printf("Keypair is valid: %v\n", isValid)
+
+	// Output:
+	// Public key size: 1184 bytes
+	// Secret key size: 2400 bytes
+	// Has base64 public key: true
+	// Keypair is valid: true
+}
+
+// ExampleKeypairFromSecretKey demonstrates reconstructing a keypair from the secret key.
+func ExampleKeypairFromSecretKey() {
+	// Generate a keypair.
+	original, err := GenerateKeypair()
+	if err != nil {
+		panic(err)
+	}
+
+	// Reconstruct the keypair from just the secret key.
+	// This works because ML-KEM embeds the public key in the secret key.
+	reconstructed, err := KeypairFromSecretKey(original.SecretKey)
+	if err != nil {
+		panic(err)
+	}
+
+	// The reconstructed keypair has the same keys.
+	fmt.Printf("Public keys match: %v\n", bytes.Equal(original.PublicKey, reconstructed.PublicKey))
+	fmt.Printf("Secret keys match: %v\n", bytes.Equal(original.SecretKey, reconstructed.SecretKey))
+
+	// Output:
+	// Public keys match: true
+	// Secret keys match: true
 }

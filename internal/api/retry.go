@@ -7,13 +7,20 @@ import (
 	"time"
 )
 
-// RetryConfig configures retry behavior.
+// RetryConfig configures retry behavior for failed HTTP requests.
 type RetryConfig struct {
-	MaxRetries  int
-	BaseDelay   time.Duration
-	MaxDelay    time.Duration
-	Multiplier  float64
-	Jitter      float64 // 0.0 to 1.0, adds randomness to delays
+	// MaxRetries is the maximum number of retry attempts.
+	MaxRetries int
+	// BaseDelay is the initial delay between retry attempts.
+	BaseDelay time.Duration
+	// MaxDelay is the maximum delay between retry attempts.
+	MaxDelay time.Duration
+	// Multiplier is the factor by which the delay increases after each attempt.
+	Multiplier float64
+	// Jitter is the randomization factor (0.0 to 1.0) added to delays
+	// to prevent thundering herd.
+	Jitter float64
+	// RetryableOn determines if a status code should trigger a retry.
 	RetryableOn func(statusCode int) bool
 }
 

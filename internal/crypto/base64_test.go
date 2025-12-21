@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -278,4 +279,29 @@ func BenchmarkFromBase64URL(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = FromBase64URL(encoded)
 	}
+}
+
+// Example_base64Encoding demonstrates the two base64 encoding variants.
+func Example_base64Encoding() {
+	data := []byte("Hello, World!")
+
+	// URL-safe base64 without padding (for protocol values).
+	urlSafe := ToBase64URL(data)
+	fmt.Printf("URL-safe: %s\n", urlSafe)
+
+	// Standard base64 with padding (for attachments).
+	standard := ToBase64(data)
+	fmt.Printf("Standard: %s\n", standard)
+
+	// Decode both variants.
+	decoded1, _ := FromBase64URL(urlSafe)
+	decoded2, _ := FromBase64(standard)
+	fmt.Printf("Both decode to: %s\n", string(decoded1))
+	fmt.Printf("Decoded match: %v\n", bytes.Equal(decoded1, decoded2))
+
+	// Output:
+	// URL-safe: SGVsbG8sIFdvcmxkIQ
+	// Standard: SGVsbG8sIFdvcmxkIQ==
+	// Both decode to: Hello, World!
+	// Decoded match: true
 }

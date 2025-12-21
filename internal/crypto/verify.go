@@ -8,22 +8,34 @@ import (
 
 // EncryptedPayload represents the encrypted data structure from the server.
 type EncryptedPayload struct {
-	V           int            `json:"v"`
-	Algs        AlgorithmSuite `json:"algs"`
-	CtKem       string         `json:"ct_kem"`
-	Nonce       string         `json:"nonce"`
-	AAD         string         `json:"aad"`
-	Ciphertext  string         `json:"ciphertext"`
-	Sig         string         `json:"sig"`
-	ServerSigPk string         `json:"server_sig_pk"`
+	// V is the protocol version number.
+	V int `json:"v"`
+	// Algs specifies the cryptographic algorithm suite used.
+	Algs AlgorithmSuite `json:"algs"`
+	// CtKem is the ML-KEM-768 ciphertext (base64url-encoded).
+	CtKem string `json:"ct_kem"`
+	// Nonce is the AES-GCM nonce/IV (base64url-encoded).
+	Nonce string `json:"nonce"`
+	// AAD is the additional authenticated data (base64url-encoded).
+	AAD string `json:"aad"`
+	// Ciphertext is the AES-GCM encrypted content (base64url-encoded).
+	Ciphertext string `json:"ciphertext"`
+	// Sig is the ML-DSA-65 signature over the transcript (base64url-encoded).
+	Sig string `json:"sig"`
+	// ServerSigPk is the server's ML-DSA-65 public key (base64url-encoded).
+	ServerSigPk string `json:"server_sig_pk"`
 }
 
 // AlgorithmSuite represents the cryptographic algorithm suite.
 type AlgorithmSuite struct {
-	KEM  string `json:"kem"`
-	Sig  string `json:"sig"`
+	// KEM is the key encapsulation mechanism (e.g., "ML-KEM-768").
+	KEM string `json:"kem"`
+	// Sig is the signature algorithm (e.g., "ML-DSA-65").
+	Sig string `json:"sig"`
+	// AEAD is the authenticated encryption algorithm (e.g., "AES-256-GCM").
 	AEAD string `json:"aead"`
-	KDF  string `json:"kdf"`
+	// KDF is the key derivation function (e.g., "HKDF-SHA-512").
+	KDF string `json:"kdf"`
 }
 
 // VerifySignature verifies the ML-DSA-65 signature on the encrypted payload.

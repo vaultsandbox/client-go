@@ -1,10 +1,3 @@
-// Package api provides HTTP client functionality for communicating with the
-// VaultSandbox API. It handles authentication, request/response serialization,
-// and automatic retry logic with exponential backoff for transient failures.
-//
-// The package provides two ways to create a client: the functional options
-// pattern via [New] for flexibility, or the struct-based [NewClient] for
-// explicit configuration.
 package api
 
 import (

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -255,4 +256,36 @@ func BenchmarkDecryptAES(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = DecryptAES(key, ciphertext)
 	}
+}
+
+// Example_encryptDecrypt demonstrates encrypting and decrypting data with AES-256-GCM.
+func Example_encryptDecrypt() {
+	// Generate a random 256-bit key.
+	key := make([]byte, AESKeySize)
+	if _, err := rand.Read(key); err != nil {
+		panic(err)
+	}
+
+	// Generate a random 96-bit nonce.
+	// IMPORTANT: Never reuse a nonce with the same key.
+	nonce := make([]byte, AESNonceSize)
+	if _, err := rand.Read(nonce); err != nil {
+		panic(err)
+	}
+
+	// Encrypt the plaintext.
+	plaintext := []byte("Hello, World!")
+	ciphertext, err := EncryptAES(key, plaintext, nonce)
+	if err != nil {
+		panic(err)
+	}
+
+	// Decrypt the ciphertext.
+	decrypted, err := DecryptAES(key, ciphertext)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(string(decrypted))
+	// Output: Hello, World!
 }

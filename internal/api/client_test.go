@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -468,4 +469,38 @@ func isAPIError(err error, target **APIError) bool {
 		return true
 	}
 	return false
+}
+
+// ExampleNewClient demonstrates creating an API client with struct-based configuration.
+func ExampleNewClient() {
+	// Create a client with explicit configuration.
+	client, err := NewClient(Config{
+		BaseURL:    "https://api.vaultsandbox.com",
+		APIKey:     "your-api-key",
+		MaxRetries: 3,
+		RetryDelay: time.Second,
+		Timeout:    30 * time.Second,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Client created for: %s\n", client.BaseURL())
+	// Output: Client created for: https://api.vaultsandbox.com
+}
+
+// ExampleNew demonstrates creating an API client with functional options.
+func ExampleNew() {
+	// Create a client using the functional options pattern.
+	client, err := New("your-api-key",
+		WithBaseURL("https://api.vaultsandbox.com"),
+		WithRetries(5),
+		WithTimeout(60*time.Second),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Client created for: %s\n", client.BaseURL())
+	// Output: Client created for: https://api.vaultsandbox.com
 }

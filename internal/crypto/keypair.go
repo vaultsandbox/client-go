@@ -4,10 +4,13 @@ import (
 	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 )
 
-// Keypair represents an ML-KEM-768 keypair.
+// Keypair represents an ML-KEM-768 keypair for key encapsulation.
 type Keypair struct {
-	PublicKey    []byte
-	SecretKey    []byte
+	// PublicKey is the raw ML-KEM-768 public key bytes.
+	PublicKey []byte
+	// SecretKey is the raw ML-KEM-768 secret key bytes.
+	SecretKey []byte
+	// PublicKeyB64 is the public key encoded as URL-safe base64.
 	PublicKeyB64 string
 }
 

@@ -6,14 +6,20 @@ import (
 	"strings"
 )
 
-// Sentinel errors for errors.Is() checks
+// Common API errors that can be checked with errors.Is.
 var (
-	ErrUnauthorized       = errors.New("invalid or expired API key")
-	ErrInboxNotFound      = errors.New("inbox not found")
-	ErrEmailNotFound      = errors.New("email not found")
+	// ErrUnauthorized indicates the API key is invalid or expired.
+	ErrUnauthorized = errors.New("invalid or expired API key")
+	// ErrInboxNotFound indicates the requested inbox does not exist.
+	ErrInboxNotFound = errors.New("inbox not found")
+	// ErrEmailNotFound indicates the requested email does not exist.
+	ErrEmailNotFound = errors.New("email not found")
+	// ErrInboxAlreadyExists indicates an inbox with that address already exists.
 	ErrInboxAlreadyExists = errors.New("inbox already exists")
-	ErrInvalidAPIKey      = errors.New("invalid API key")
-	ErrRateLimited        = errors.New("rate limit exceeded")
+	// ErrInvalidAPIKey indicates the API key format is invalid.
+	ErrInvalidAPIKey = errors.New("invalid API key")
+	// ErrRateLimited indicates the rate limit has been exceeded.
+	ErrRateLimited = errors.New("rate limit exceeded")
 )
 
 // APIError represents an HTTP error from the VaultSandbox API.
