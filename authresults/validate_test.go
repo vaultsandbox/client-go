@@ -246,6 +246,11 @@ func TestValidateSPF(t *testing.T) {
 			results: &AuthResults{SPF: &SPFResult{Status: "neutral"}},
 			wantErr: ErrSPFFailed,
 		},
+		{
+			name:    "SPF none",
+			results: &AuthResults{SPF: &SPFResult{Status: "none"}},
+			wantErr: ErrSPFFailed,
+		},
 	}
 
 	for _, tt := range tests {

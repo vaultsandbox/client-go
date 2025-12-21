@@ -28,18 +28,18 @@ Plan to align the Go SDK test suite with `tests-spec.md`.
 | URL-safe chars | ✅ Exists | `internal/crypto/base64_test.go` | `TestBase64URLSafeChars` |
 | **Keypair Generation** ||||
 | Generate keypair | ✅ Exists | `internal/crypto/keypair_test.go` | `TestGenerateKeypair` |
-| Unique keypairs | ⚠️ Review | `internal/crypto/keypair_test.go` | Verify uniqueness test exists |
+| Unique keypairs | ✅ Exists | `internal/crypto/keypair_test.go` | `TestGenerateKeypair_Uniqueness` |
 | Correct sizes | ✅ Exists | `internal/crypto/keypair_test.go` | `TestKeypairSizes` |
 | **Keypair Validation** ||||
 | Valid keypair | ✅ Exists | `internal/crypto/keypair_test.go` | `TestValidateKeypair` |
-| Invalid sizes | ⚠️ Review | `internal/crypto/keypair_test.go` | Verify invalid size test |
-| Mismatched base64 | ❌ Missing | - | Add test for mismatched base64 |
-| Missing fields | ⚠️ Review | `internal/crypto/keypair_test.go` | Verify nil/empty field handling |
+| Invalid sizes | ✅ Exists | `internal/crypto/keypair_test.go` | `TestKeypairFromSecretKey_InvalidSize`, `TestNewKeypairFromBytes_Invalid*` |
+| Mismatched base64 | ✅ Exists | `internal/crypto/keypair_test.go` | `TestValidateKeypair/mismatched public key b64` |
+| Missing fields | ✅ Exists | `internal/crypto/keypair_test.go` | `TestValidateKeypair` (nil keypair, nil public key, etc.) |
 
 **Action Items:**
-- [ ] Review `keypair_test.go` for unique keypair test
-- [ ] Add test for mismatched base64 in keypair validation
-- [ ] Verify missing/nil field validation test exists
+- [x] Review `keypair_test.go` for unique keypair test ✅ (TestGenerateKeypair_Uniqueness exists)
+- [x] Add test for mismatched base64 in keypair validation ✅ (TestValidateKeypair/mismatched public key b64 exists)
+- [x] Verify missing/nil field validation test exists ✅ (TestValidateKeypair covers nil/empty fields)
 
 ### 1.2 Type Validation
 
@@ -50,33 +50,33 @@ Plan to align the Go SDK test suite with `tests-spec.md`.
 | SPF fail | ✅ Exists | `authresults/validate_test.go` | |
 | DKIM fail | ✅ Exists | `authresults/validate_test.go` | |
 | DMARC fail | ✅ Exists | `authresults/validate_test.go` | |
-| DKIM partial pass | ⚠️ Review | `authresults/validate_test.go` | Verify multiple DKIM results test |
-| None status | ⚠️ Review | `authresults/validate_test.go` | Verify "none" status handling |
-| Empty results | ⚠️ Review | `authresults/validate_test.go` | Verify nil/empty handling |
-| Reverse DNS fail | ⚠️ Review | `authresults/validate_test.go` | Verify doesn't affect overall |
+| DKIM partial pass | ✅ Exists | `authresults/validate_test.go` | `TestValidate/multiple_DKIM_one_passes` |
+| None status | ✅ Exists | `authresults/validate_test.go` | `TestValidateSPF/SPF_none`, `TestValidateDMARC/DMARC_none`, `TestValidateReverseDNS/ReverseDNS_none` |
+| Empty results | ✅ Exists | `authresults/validate_test.go` | `TestIsPassing/empty_results` |
+| Reverse DNS fail | ✅ Exists | `authresults/validate_test.go` | `TestValidate/reverse_DNS_fails` |
 
 **Action Items:**
-- [ ] Review `validate_test.go` for all edge cases
-- [ ] Add any missing AuthResults validation tests
+- [x] Review `validate_test.go` for all edge cases ✅ (comprehensive coverage)
+- [x] Add any missing AuthResults validation tests ✅ (added SPF "none" status test)
 
 ### 1.3 Client Configuration
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **Default Configuration** ||||
-| Default values | ✅ Exists | `options_test.go` | |
-| Verify defaults | ⚠️ Review | `options_test.go` | Verify specific default values |
+| Default values | ✅ Exists | `options_test.go` | `TestDefaultConstants` |
+| Verify defaults | ✅ Exists | `options_test.go` | `TestDefaultConstants` (baseURL, timeout, pollInterval) |
 | **Custom Configuration** ||||
-| Custom URL | ✅ Exists | `options_test.go` | `WithBaseURL` |
-| Custom timeout | ✅ Exists | `options_test.go` | `WithTimeout` |
-| Custom retries | ✅ Exists | `options_test.go` | `WithRetries` |
-| Custom strategy | ✅ Exists | `options_test.go` | `WithDeliveryStrategy` |
-| Polling config | ⚠️ Review | `internal/delivery/polling_test.go` | |
-| SSE config | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| Custom URL | ✅ Exists | `options_test.go` | `TestWithBaseURL` |
+| Custom timeout | ✅ Exists | `options_test.go` | `TestWithTimeout` |
+| Custom retries | ✅ Exists | `options_test.go` | `TestWithRetries` |
+| Custom strategy | ✅ Exists | `options_test.go` | `TestWithDeliveryStrategy` |
+| Polling config | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingConstants`, `TestPollingStrategy_*` |
+| SSE config | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEConstants`, `TestSSEStrategy_*` |
 
 **Action Items:**
-- [ ] Review options tests for comprehensive default validation
-- [ ] Verify polling and SSE configuration tests
+- [x] Review options tests for comprehensive default validation ✅ (TestDefaultConstants, all WithXxx options tested)
+- [x] Verify polling and SSE configuration tests ✅ (comprehensive tests in polling_test.go and sse_test.go)
 
 ---
 
