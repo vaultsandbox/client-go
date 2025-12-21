@@ -253,9 +253,6 @@ func (p *PollingStrategy) getWaitDuration(inbox *polledInbox) time.Duration {
 	return inbox.interval + jitter
 }
 
-// Legacy interface implementation for backward compatibility.
-// These methods provide the polling-based WaitForEmail API.
-
 // WaitForEmail waits for an email matching the given criteria using simple polling.
 // It blocks until a matching email is found or the context is canceled.
 func (p *PollingStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {

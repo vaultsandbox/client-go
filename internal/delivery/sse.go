@@ -248,12 +248,8 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 	return scanner.Err()
 }
 
-// Legacy interface implementation for backward compatibility.
-// SSE strategy delegates WaitForEmail operations to polling since the
-// event-driven model is used for the primary Start/Stop API.
-
 // WaitForEmail waits for an email matching the given criteria.
-// This method delegates to PollingStrategy for backward compatibility.
+// SSE strategy delegates to PollingStrategy for WaitForEmail operations.
 func (s *SSEStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
 	return s.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, WaitOptions{
 		PollInterval: pollInterval,
@@ -262,7 +258,7 @@ func (s *SSEStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetche
 }
 
 // WaitForEmailWithSync waits for an email using sync-status-based change detection.
-// This method delegates to PollingStrategy for backward compatibility.
+// SSE strategy delegates to PollingStrategy for WaitForEmail operations.
 func (s *SSEStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error) {
 	// SSE strategy uses polling for WaitForEmail operations
 	polling := &PollingStrategy{apiClient: s.apiClient}
@@ -270,7 +266,7 @@ func (s *SSEStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash string
 }
 
 // WaitForEmailCount waits until at least count emails match the criteria.
-// This method delegates to PollingStrategy for backward compatibility.
+// SSE strategy delegates to PollingStrategy for WaitForEmail operations.
 func (s *SSEStrategy) WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
 	return s.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, WaitOptions{
 		PollInterval: pollInterval,
@@ -279,7 +275,7 @@ func (s *SSEStrategy) WaitForEmailCount(ctx context.Context, inboxHash string, f
 }
 
 // WaitForEmailCountWithSync waits for multiple emails using sync-status-based
-// change detection. This method delegates to PollingStrategy for backward compatibility.
+// change detection. SSE strategy delegates to PollingStrategy.
 func (s *SSEStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error) {
 	// SSE strategy uses polling for WaitForEmailCount operations
 	polling := &PollingStrategy{apiClient: s.apiClient}

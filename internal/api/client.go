@@ -110,9 +110,6 @@ func NewClient(cfg Config) (*Client, error) {
 // The apiKey is required for authentication. Use [Option] functions like
 // [WithBaseURL], [WithTimeout], and [WithRetries] to customize behavior.
 //
-// This constructor is provided for backward compatibility; prefer [NewClient]
-// for new code as it provides more explicit configuration.
-//
 // Returns an error if apiKey is empty or if baseURL is not set via [WithBaseURL].
 func New(apiKey string, opts ...Option) (*Client, error) {
 	if apiKey == "" {
@@ -292,8 +289,7 @@ func (c *Client) doWithRetry(ctx context.Context, method, path string, body io.R
 	return lastErr
 }
 
-// do is the backward-compatible method for existing code.
-// Deprecated: Use [Client.Do] instead.
+// do is a convenience wrapper for internal use.
 func (c *Client) do(ctx context.Context, method, path string, body interface{}, result interface{}) error {
 	return c.Do(ctx, method, path, body, result)
 }

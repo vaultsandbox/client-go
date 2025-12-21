@@ -228,8 +228,6 @@ func deriveKey(sharedSecret, aad, ctKem []byte) ([]byte, error) {
 //   - salt: optional salt value; if empty, a zero-filled salt is used
 //   - info: context/application-specific info for domain separation
 //   - length: desired output key length in bytes
-//
-// This function is provided for backward compatibility with the legacy API.
 func DeriveKey(secret, salt, info []byte, length int) ([]byte, error) {
 	if len(salt) == 0 {
 		salt = make([]byte, sha512.Size)
@@ -243,73 +241,4 @@ func DeriveKey(secret, salt, info []byte, length int) ([]byte, error) {
 	}
 
 	return key, nil
-}
-
-// EncryptedEmail represents an encrypted email for decryption in the legacy format.
-// This type is provided for backward compatibility with the original API.
-type EncryptedEmail struct {
-	// ID is the unique email identifier.
-	ID string
-	// EncapsulatedKey is the ML-KEM-768 encapsulated key (raw bytes).
-	EncapsulatedKey []byte
-	// Ciphertext is the AES-256-GCM encrypted content (nonce || ciphertext || tag).
-	Ciphertext []byte
-	// Signature is the Ed25519 signature over (EncapsulatedKey || Ciphertext).
-	Signature []byte
-	// ReceivedAt is when the email was received.
-	ReceivedAt time.Time
-	// IsRead indicates whether the email has been marked as read.
-	IsRead bool
-}
-
-// DecryptEmail decrypts an encrypted email using the legacy format.
-//
-// The function performs these steps:
-//  1. Verifies the Ed25519 signature using serverSigPk
-//  2. Decapsulates the shared secret using the keypair
-//  3. Derives the AES key using HKDF-SHA-512
-//  4. Decrypts the ciphertext using AES-256-GCM
-//  5. Parses the JSON payload into [DecryptedEmail]
-//
-// Security: Signature verification is performed BEFORE decryption to prevent
-// chosen-ciphertext attacks. If verification fails, decryption is not attempted.
-//
-// This function is provided for backward compatibility; prefer using [Decrypt]
-// with the newer [EncryptedPayload] format for new code.
-func DecryptEmail(encrypted *EncryptedEmail, keypair *Keypair, serverSigPk []byte) (*DecryptedEmail, error) {
-	// Verify signature first
-	signedData := append(encrypted.EncapsulatedKey, encrypted.Ciphertext...)
-	if err := Verify(serverSigPk, signedData, encrypted.Signature); err != nil {
-		return nil, fmt.Errorf("signature verification failed: %w", err)
-	}
-
-	// Decapsulate shared secret
-	sharedSecret, err := keypair.Decapsulate(encrypted.EncapsulatedKey)
-	if err != nil {
-		return nil, fmt.Errorf("decapsulation failed: %w", err)
-	}
-
-	// Derive AES key using HKDF
-	aesKey, err := DeriveKey(sharedSecret, nil, []byte("vaultsandbox-email-encryption"), 32)
-	if err != nil {
-		return nil, fmt.Errorf("key derivation failed: %w", err)
-	}
-
-	// Decrypt ciphertext
-	plaintext, err := DecryptAES(aesKey, encrypted.Ciphertext)
-	if err != nil {
-		return nil, fmt.Errorf("decryption failed: %w", err)
-	}
-
-	// Parse JSON payload
-	var email DecryptedEmail
-	if err := json.Unmarshal(plaintext, &email); err != nil {
-		return nil, fmt.Errorf("failed to parse email: %w", err)
-	}
-
-	email.ID = encrypted.ID
-	email.ReceivedAt = encrypted.ReceivedAt
-	email.IsRead = encrypted.IsRead
-
-	return &email, nil
 }

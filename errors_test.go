@@ -123,7 +123,7 @@ func TestAPIError_Is_404Differentiation(t *testing.T) {
 		{"both keywords matches ErrInboxNotFound", "inbox email not found", ErrInboxNotFound, true},
 		{"both keywords matches ErrEmailNotFound", "inbox email not found", ErrEmailNotFound, true},
 
-		// Empty message - matches both (backward compat)
+		// Empty message - matches both (fallback behavior)
 		{"empty message matches ErrInboxNotFound", "", ErrInboxNotFound, true},
 		{"empty message matches ErrEmailNotFound", "", ErrEmailNotFound, true},
 

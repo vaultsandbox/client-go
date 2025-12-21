@@ -165,10 +165,3 @@ func TestSentinelErrors(t *testing.T) {
 	}
 }
 
-func TestErrorTypeAlias(t *testing.T) {
-	// Error is an alias for APIError
-	var err Error = APIError{StatusCode: 400, Message: "test"}
-	if err.StatusCode != 400 {
-		t.Errorf("StatusCode = %d, want 400", err.StatusCode)
-	}
-}

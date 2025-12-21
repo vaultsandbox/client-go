@@ -137,7 +137,7 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 		}
 	}
 
-	req := &api.LegacyCreateInboxRequest{
+	req := &api.CreateInboxParams{
 		TTL:          cfg.ttl,
 		EmailAddress: cfg.emailAddress,
 	}
@@ -147,7 +147,7 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 		return nil, wrapError(err)
 	}
 
-	inbox := newInboxFromLegacyResponse(resp, c)
+	inbox := newInboxFromResult(resp, c)
 
 	c.mu.Lock()
 	c.inboxes[inbox.emailAddress] = inbox

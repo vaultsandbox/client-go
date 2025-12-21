@@ -27,8 +27,7 @@ func FromBase64URL(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(s)
 }
 
-// EncodeBase64 is an alias for [ToBase64URL] for backward compatibility.
-// Deprecated: Use [ToBase64URL] instead.
+// EncodeBase64 is an alias for [ToBase64URL].
 func EncodeBase64(data []byte) string {
 	return ToBase64URL(data)
 }

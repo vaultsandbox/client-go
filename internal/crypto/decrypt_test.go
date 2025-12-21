@@ -252,22 +252,6 @@ func TestDecryptedAttachment_JSONUnmarshal_OptionalFields(t *testing.T) {
 	}
 }
 
-func TestEncryptedEmail_Fields(t *testing.T) {
-	encrypted := EncryptedEmail{
-		ID:              "test-id",
-		EncapsulatedKey: make([]byte, MLKEMCiphertextSize),
-		Ciphertext:      []byte("encrypted data"),
-		Signature:       make([]byte, MLDSASignatureSize),
-		IsRead:          false,
-	}
-
-	if encrypted.ID != "test-id" {
-		t.Errorf("ID = %s, want test-id", encrypted.ID)
-	}
-	if len(encrypted.EncapsulatedKey) != MLKEMCiphertextSize {
-		t.Errorf("EncapsulatedKey length = %d, want %d", len(encrypted.EncapsulatedKey), MLKEMCiphertextSize)
-	}
-}
 
 func TestDecrypt_InvalidBase64(t *testing.T) {
 	kp, _ := GenerateKeypair()

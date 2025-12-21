@@ -51,7 +51,6 @@ func decryptAESGCM(key, nonce, aad, ciphertext []byte) ([]byte, error) {
 //   - ciphertext: combined nonce, encrypted data, and authentication tag
 //
 // This function extracts the nonce from the ciphertext prefix and uses no AAD.
-// It is provided for backward compatibility with the legacy encryption format.
 func DecryptAES(key, ciphertext []byte) ([]byte, error) {
 	if len(key) != AESKeySize {
 		return nil, fmt.Errorf("%w: got %d, want %d", ErrInvalidKeySize, len(key), AESKeySize)

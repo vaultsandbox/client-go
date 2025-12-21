@@ -91,9 +91,6 @@ type SSEEvent struct {
 	EncryptedMetadata *crypto.EncryptedPayload `json:"encryptedMetadata"`
 }
 
-// Legacy types for backward compatibility with existing endpoints.go code.
-// These mirror the exported types but are used internally.
-
 type createInboxAPIRequest struct {
 	ClientKemPk  string `json:"clientKemPk"`
 	TTL          int    `json:"ttl,omitempty"`
@@ -107,17 +104,3 @@ type createInboxAPIResponse struct {
 	ServerSigPk  string    `json:"serverSigPk"`
 }
 
-type getEmailsAPIResponse struct {
-	Emails []emailAPIResponse `json:"emails"`
-}
-
-// emailAPIResponse represents an email in the legacy API format with separate
-// encapsulatedKey, ciphertext, and signature fields (pre-EncryptedPayload format).
-type emailAPIResponse struct {
-	ID              string    `json:"id"`
-	EncapsulatedKey string    `json:"encapsulatedKey"` // KEM ciphertext (base64url)
-	Ciphertext      string    `json:"ciphertext"`      // AES-GCM encrypted content (base64url)
-	Signature       string    `json:"signature"`       // Ed25519 signature (base64url)
-	ReceivedAt      time.Time `json:"receivedAt"`
-	IsRead          bool      `json:"isRead"`
-}

@@ -142,20 +142,17 @@ func (c *Client) OpenEventStream(ctx context.Context, inboxHashes []string) (*ht
 	return c.httpClient.Do(req)
 }
 
-// Legacy methods for backward compatibility with existing code.
-
-// LegacyCreateInboxRequest contains parameters for creating an inbox
-// using the legacy API format.
-type LegacyCreateInboxRequest struct {
+// CreateInboxParams contains parameters for creating an inbox.
+type CreateInboxParams struct {
 	// TTL is the time-to-live for the inbox.
 	TTL time.Duration
 	// EmailAddress is the optional desired email address.
 	EmailAddress string
 }
 
-// LegacyCreateInboxResponse contains the result of creating an inbox
-// using the legacy API format, including the generated keypair.
-type LegacyCreateInboxResponse struct {
+// CreateInboxResult contains the result of creating an inbox,
+// including the generated keypair.
+type CreateInboxResult struct {
 	// EmailAddress is the created inbox's email address.
 	EmailAddress string
 	// ExpiresAt is when the inbox will be deleted.
@@ -169,7 +166,7 @@ type LegacyCreateInboxResponse struct {
 }
 
 // CreateInbox creates a new inbox with an automatically generated keypair.
-func (c *Client) CreateInbox(ctx context.Context, req *LegacyCreateInboxRequest) (*LegacyCreateInboxResponse, error) {
+func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*CreateInboxResult, error) {
 	keypair, err := crypto.GenerateKeypair()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate keypair: %w", err)
@@ -191,7 +188,7 @@ func (c *Client) CreateInbox(ctx context.Context, req *LegacyCreateInboxRequest)
 		return nil, fmt.Errorf("failed to decode server signature public key: %w", err)
 	}
 
-	return &LegacyCreateInboxResponse{
+	return &CreateInboxResult{
 		EmailAddress: apiResp.EmailAddress,
 		ExpiresAt:    apiResp.ExpiresAt,
 		InboxHash:    apiResp.InboxHash,
@@ -204,22 +201,6 @@ func (c *Client) CreateInbox(ctx context.Context, req *LegacyCreateInboxRequest)
 type GetEmailsResponse struct {
 	// Emails is the list of emails in the inbox.
 	Emails []*RawEmail
-}
-
-// EncryptedEmail represents an encrypted email in the legacy API format.
-type EncryptedEmail struct {
-	// ID is the unique email identifier.
-	ID string
-	// EncapsulatedKey is the ML-KEM-768 encapsulated key.
-	EncapsulatedKey []byte
-	// Ciphertext is the AES-256-GCM encrypted content.
-	Ciphertext []byte
-	// Signature is the Ed25519 signature.
-	Signature []byte
-	// ReceivedAt is when the email was received.
-	ReceivedAt time.Time
-	// IsRead indicates whether the email has been read.
-	IsRead bool
 }
 
 // GetEmails returns all emails in an inbox.
@@ -279,28 +260,3 @@ func (c *Client) DeleteInbox(ctx context.Context, emailAddress string) error {
 	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }
 
-func parseEncryptedEmail(resp *emailAPIResponse) (*EncryptedEmail, error) {
-	encapsulatedKey, err := crypto.DecodeBase64(resp.EncapsulatedKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode encapsulated key: %w", err)
-	}
-
-	ciphertext, err := crypto.DecodeBase64(resp.Ciphertext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode ciphertext: %w", err)
-	}
-
-	signature, err := crypto.DecodeBase64(resp.Signature)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode signature: %w", err)
-	}
-
-	return &EncryptedEmail{
-		ID:              resp.ID,
-		EncapsulatedKey: encapsulatedKey,
-		Ciphertext:      ciphertext,
-		Signature:       signature,
-		ReceivedAt:      resp.ReceivedAt,
-		IsRead:          resp.IsRead,
-	}, nil
-}

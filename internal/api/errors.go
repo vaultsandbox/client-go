@@ -58,11 +58,11 @@ func (e *APIError) Is(target error) bool {
 		hasEmail := strings.Contains(msgLower, "email")
 
 		if target == ErrInboxNotFound {
-			// Match if message contains "inbox" OR no specific keyword (backward compat)
+			// Match if message contains "inbox" OR no specific keyword (fallback)
 			return hasInbox || (!hasInbox && !hasEmail)
 		}
 		if target == ErrEmailNotFound {
-			// Match if message contains "email" OR no specific keyword (backward compat)
+			// Match if message contains "email" OR no specific keyword (fallback)
 			return hasEmail || (!hasInbox && !hasEmail)
 		}
 		return false
@@ -92,5 +92,3 @@ func (e *NetworkError) Unwrap() error {
 // VaultSandboxError implements the VaultSandboxError interface.
 func (e *NetworkError) VaultSandboxError() {}
 
-// Error is an alias for APIError for backward compatibility.
-type Error = APIError

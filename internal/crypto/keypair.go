@@ -55,7 +55,6 @@ func KeypairFromSecretKey(secretKey []byte) (*Keypair, error) {
 }
 
 // NewKeypairFromBytes creates a keypair from raw bytes.
-// This is provided for backward compatibility.
 func NewKeypairFromBytes(privateKeyBytes, publicKeyBytes []byte) (*Keypair, error) {
 	if len(privateKeyBytes) != MLKEMSecretKeySize {
 		return nil, ErrInvalidSecretKeySize

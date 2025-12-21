@@ -314,7 +314,7 @@ func (s *inboxEmailSubscription) monitor(ctx context.Context) {
 	}
 }
 
-func newInboxFromLegacyResponse(resp *api.LegacyCreateInboxResponse, c *Client) *Inbox {
+func newInboxFromResult(resp *api.CreateInboxResult, c *Client) *Inbox {
 	return &Inbox{
 		emailAddress: resp.EmailAddress,
 		expiresAt:    resp.ExpiresAt,
