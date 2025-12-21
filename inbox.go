@@ -179,8 +179,8 @@ func (i *Inbox) Export() *ExportedInbox {
 		ExpiresAt:    i.expiresAt,
 		InboxHash:    i.inboxHash,
 		ServerSigPk:  i.serverSigPk,
-		PrivateKey:   i.keypair.PrivateKey(),
-		PublicKey:    i.keypair.PublicKey(),
+		PrivateKey:   i.keypair.SecretKey,
+		PublicKey:    i.keypair.PublicKey,
 	}
 }
 

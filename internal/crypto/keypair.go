@@ -1,73 +1,97 @@
 package crypto
 
 import (
-	"fmt"
-
 	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 )
 
-// SharedSecretSize is the size of the shared secret in bytes.
-const SharedSecretSize = 32
-
-// CiphertextSize is the size of the ciphertext in bytes.
-const CiphertextSize = 1088
-
-// Keypair holds ML-KEM-768 key pair.
+// Keypair represents an ML-KEM-768 keypair.
 type Keypair struct {
-	privateKey *mlkem768.PrivateKey
-	publicKey  *mlkem768.PublicKey
+	PublicKey    []byte
+	SecretKey    []byte
+	PublicKeyB64 string
 }
 
-// GenerateKeypair generates a new ML-KEM-768 key pair.
+// GenerateKeypair creates a new ML-KEM-768 keypair.
 func GenerateKeypair() (*Keypair, error) {
 	pub, priv, err := mlkem768.GenerateKeyPair(nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate ML-KEM-768 keypair: %w", err)
+		return nil, err
+	}
+
+	pubBytes, err := pub.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	privBytes, err := priv.MarshalBinary()
+	if err != nil {
+		return nil, err
 	}
 
 	return &Keypair{
-		privateKey: priv,
-		publicKey:  pub,
+		PublicKey:    pubBytes,
+		SecretKey:    privBytes,
+		PublicKeyB64: ToBase64URL(pubBytes),
+	}, nil
+}
+
+// KeypairFromSecretKey reconstructs a keypair from the secret key.
+// The public key is embedded in the secret key at offset 1152.
+func KeypairFromSecretKey(secretKey []byte) (*Keypair, error) {
+	if len(secretKey) != MLKEMSecretKeySize {
+		return nil, ErrInvalidSecretKeySize
+	}
+
+	publicKey := secretKey[PublicKeyOffset : PublicKeyOffset+MLKEMPublicKeySize]
+
+	return &Keypair{
+		PublicKey:    publicKey,
+		SecretKey:    secretKey,
+		PublicKeyB64: ToBase64URL(publicKey),
 	}, nil
 }
 
 // NewKeypairFromBytes creates a keypair from raw bytes.
+// This is provided for backward compatibility.
 func NewKeypairFromBytes(privateKeyBytes, publicKeyBytes []byte) (*Keypair, error) {
+	if len(privateKeyBytes) != MLKEMSecretKeySize {
+		return nil, ErrInvalidSecretKeySize
+	}
+	if len(publicKeyBytes) != MLKEMPublicKeySize {
+		return nil, ErrInvalidPublicKeySize
+	}
+
+	// Validate that keys can be parsed
 	priv := &mlkem768.PrivateKey{}
 	if err := priv.Unpack(privateKeyBytes); err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %w", err)
+		return nil, err
 	}
 
 	pub := &mlkem768.PublicKey{}
 	if err := pub.Unpack(publicKeyBytes); err != nil {
-		return nil, fmt.Errorf("failed to parse public key: %w", err)
+		return nil, err
 	}
 
 	return &Keypair{
-		privateKey: priv,
-		publicKey:  pub,
+		PublicKey:    publicKeyBytes,
+		SecretKey:    privateKeyBytes,
+		PublicKeyB64: ToBase64URL(publicKeyBytes),
 	}, nil
-}
-
-// PrivateKey returns the private key bytes.
-func (k *Keypair) PrivateKey() []byte {
-	data, _ := k.privateKey.MarshalBinary()
-	return data
-}
-
-// PublicKey returns the public key bytes.
-func (k *Keypair) PublicKey() []byte {
-	data, _ := k.publicKey.MarshalBinary()
-	return data
 }
 
 // Decapsulate decapsulates a shared secret from the encapsulated key.
 func (k *Keypair) Decapsulate(encapsulatedKey []byte) ([]byte, error) {
-	if len(encapsulatedKey) != CiphertextSize {
-		return nil, fmt.Errorf("invalid ciphertext size: expected %d, got %d", CiphertextSize, len(encapsulatedKey))
+	if len(encapsulatedKey) != MLKEMCiphertextSize {
+		return nil, ErrInvalidCiphertextSize
 	}
 
-	sharedSecret := make([]byte, SharedSecretSize)
-	k.privateKey.DecapsulateTo(sharedSecret, encapsulatedKey)
+	var privKey mlkem768.PrivateKey
+	if err := privKey.Unpack(k.SecretKey); err != nil {
+		return nil, err
+	}
+
+	sharedSecret := make([]byte, MLKEMSharedKeySize)
+	privKey.DecapsulateTo(sharedSecret, encapsulatedKey)
+
 	return sharedSecret, nil
 }

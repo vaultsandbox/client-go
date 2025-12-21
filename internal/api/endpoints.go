@@ -17,7 +17,7 @@ func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxRequest) (*Cre
 	}
 
 	apiReq := &createInboxAPIRequest{
-		PublicKey:    crypto.EncodeBase64(keypair.PublicKey()),
+		PublicKey:    crypto.EncodeBase64(keypair.PublicKey),
 		TTL:          int(req.TTL.Seconds()),
 		EmailAddress: req.EmailAddress,
 	}
