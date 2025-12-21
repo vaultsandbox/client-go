@@ -2,6 +2,15 @@ package vaultsandbox
 
 import "errors"
 
+// ErrMissingAPIKey is returned when no API key is provided.
+var ErrMissingAPIKey = errors.New("API key is required")
+
+// ErrClientClosed is returned when operations are attempted on a closed client.
+var ErrClientClosed = errors.New("client is closed")
+
+// ErrInboxAlreadyExists is returned when trying to import an inbox that already exists.
+var ErrInboxAlreadyExists = errors.New("inbox already exists")
+
 // ErrInboxNotFound is returned when an inbox is not found.
 var ErrInboxNotFound = errors.New("inbox not found")
 
