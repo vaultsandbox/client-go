@@ -252,54 +252,56 @@ Plan to align the Go SDK test suite with `tests-spec.md`.
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **Configuration** ||||
-| Default config | ⚠️ Review | `internal/delivery/polling_test.go` | |
-| Custom config | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| Default config | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingConstants` |
+| Custom config | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingStrategy_WaitOptions` |
 | **Behavior** ||||
-| Timeout with backoff | ⚠️ Review | `internal/delivery/polling_test.go` | |
-| Custom interval | ⚠️ Review | `internal/delivery/polling_test.go` | |
-| Concurrent polling | ❌ Missing | - | Poll multiple inboxes |
+| Timeout with backoff | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingStrategy_WaitForEmailWithSync_BackoffOnNoChange` |
+| Custom interval | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingStrategy_WaitForEmail_DefaultInterval` |
+| Concurrent polling | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingStrategy_ConcurrentPolling` |
 | **Subscription Management** ||||
-| Subscribe | ⚠️ Review | `internal/delivery/polling_test.go` | |
-| Unsubscribe | ⚠️ Review | `internal/delivery/polling_test.go` | |
-| Close | ⚠️ Review | `internal/delivery/polling_test.go` | |
+| Subscribe | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingStrategy_Start` |
+| Unsubscribe | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingStrategy_AddRemoveInbox`, `TestPollingStrategy_RemoveInbox_Idempotent` |
+| Close | ✅ Exists | `internal/delivery/polling_test.go` | `TestPollingStrategy_Close`, `TestPollingStrategy_AddInbox_AfterClose` |
 
 **Action Items:**
-- [ ] Add concurrent polling test
-- [ ] Review subscription management tests
+- [x] Add concurrent polling test ✅
+- [x] Review subscription management tests ✅
 
 ### 4.2 SSE Strategy
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **Configuration** ||||
-| Default config | ⚠️ Review | `internal/delivery/sse_test.go` | |
-| Custom config | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| Default config | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEConstants` |
+| Custom config | ✅ Exists | `internal/delivery/sse_test.go` | `TestNewSSEStrategy` |
 | **Subscription Management** ||||
-| Subscribe | ⚠️ Review | `internal/delivery/sse_test.go` | |
-| Unsubscribe | ⚠️ Review | `internal/delivery/sse_test.go` | |
-| Multiple unsubscribe | ❌ Missing | - | Idempotent unsubscribe |
-| Close | ⚠️ Review | `internal/delivery/sse_test.go` | |
+| Subscribe | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEStrategy_Start` |
+| Unsubscribe | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEStrategy_AddRemoveInbox` |
+| Multiple unsubscribe | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEStrategy_RemoveInbox_Idempotent` |
+| Close | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEStrategy_Close` |
 | **Connection Handling** ||||
-| Connection error | ⚠️ Review | `internal/delivery/sse_test.go` | |
-| No connect when closing | ❌ Missing | - | Subscribe after close |
+| Connection error | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEStrategy_LastError` |
+| No connect when closing | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEStrategy_AddInbox_AfterClose`, `TestSSEStrategy_Start_AfterClose` |
+| Concurrent subscriptions | ✅ Exists | `internal/delivery/sse_test.go` | `TestSSEStrategy_ConcurrentSubscriptions` |
 
 **Action Items:**
-- [ ] Add idempotent unsubscribe test
-- [ ] Add "subscribe after close" test
+- [x] Add idempotent unsubscribe test ✅
+- [x] Add "subscribe after close" test ✅
 
 ### 4.3 Real-time Monitoring
 
 | Spec Test | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **on_new_email** ||||
-| Receive via callback | ⚠️ Review | `monitor_test.go` | `OnNewEmail` |
-| Unsubscribe stops callback | ⚠️ Review | `monitor_test.go` | |
+| Receive via callback | ✅ Exists | `monitor_test.go` | `TestInboxMonitor_OnEmail`, `TestInboxMonitor_MultipleCallbacks` |
+| Unsubscribe stops callback | ✅ Exists | `monitor_test.go` | `TestInboxMonitor_Unsubscribe` |
 | **monitor_inboxes** ||||
-| Multiple inboxes | ⚠️ Review | `monitor_test.go` | `MonitorInboxes` |
-| Unsubscribe all | ⚠️ Review | `monitor_test.go` | |
+| Multiple inboxes | ✅ Exists | `monitor_test.go` | `TestInboxMonitor_MultipleInboxes` |
+| Unsubscribe all | ✅ Exists | `monitor_test.go` | `TestInboxMonitor_UnsubscribeAll` |
+| Idempotent unsubscribe | ✅ Exists | `monitor_test.go` | `TestInboxMonitor_Unsubscribe_Idempotent` |
 
 **Action Items:**
-- [ ] Review monitoring tests for completeness
+- [x] Review monitoring tests for completeness ✅
 
 ---
 

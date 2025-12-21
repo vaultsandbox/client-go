@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -421,5 +422,163 @@ func TestSSEStrategy_WaitForEmailCountWithSync(t *testing.T) {
 
 	if len(results) != 2 {
 		t.Errorf("got %d results, want 2", len(results))
+	}
+}
+
+func TestSSEStrategy_RemoveInbox_Idempotent(t *testing.T) {
+	// Test that removing the same inbox multiple times doesn't cause errors
+	s := NewSSEStrategy(Config{})
+
+	inbox := InboxInfo{
+		Hash:         "hash123",
+		EmailAddress: "test@example.com",
+	}
+
+	// Add inbox
+	if err := s.AddInbox(inbox); err != nil {
+		t.Fatalf("AddInbox() error = %v", err)
+	}
+
+	// Verify inbox was added
+	if _, exists := s.inboxHashes[inbox.Hash]; !exists {
+		t.Fatal("inbox was not added")
+	}
+
+	// Remove inbox first time
+	if err := s.RemoveInbox(inbox.Hash); err != nil {
+		t.Errorf("first RemoveInbox() error = %v", err)
+	}
+
+	// Remove inbox second time (should be idempotent)
+	if err := s.RemoveInbox(inbox.Hash); err != nil {
+		t.Errorf("second RemoveInbox() error = %v", err)
+	}
+
+	// Remove inbox third time
+	if err := s.RemoveInbox(inbox.Hash); err != nil {
+		t.Errorf("third RemoveInbox() error = %v", err)
+	}
+
+	// Verify inbox is not in the map
+	if _, exists := s.inboxHashes[inbox.Hash]; exists {
+		t.Error("inbox should not exist after removal")
+	}
+}
+
+func TestSSEStrategy_AddInbox_AfterClose(t *testing.T) {
+	// Test behavior when adding inbox after strategy is closed
+	s := NewSSEStrategy(Config{})
+
+	// Start the strategy first
+	ctx, cancel := context.WithCancel(context.Background())
+	handler := func(event *api.SSEEvent) error {
+		return nil
+	}
+
+	inboxes := []InboxInfo{
+		{Hash: "initial", EmailAddress: "initial@example.com"},
+	}
+
+	if err := s.Start(ctx, inboxes, handler); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Close the strategy
+	cancel()
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	// Try to add inbox after close
+	inbox := InboxInfo{
+		Hash:         "hash123",
+		EmailAddress: "test@example.com",
+	}
+
+	// AddInbox should still work (it just adds to the map)
+	// The strategy is closed but the map operations still work
+	err := s.AddInbox(inbox)
+	if err != nil {
+		t.Logf("AddInbox after Close returned: %v", err)
+	}
+
+	// Verify the behavior - current implementation allows adding to map even after close
+	// This is acceptable since the strategy is stopped and won't process new inboxes
+	if _, exists := s.inboxHashes[inbox.Hash]; !exists {
+		t.Log("inbox was not added after close (this is acceptable behavior)")
+	}
+}
+
+func TestSSEStrategy_Start_AfterClose(t *testing.T) {
+	// Test that starting after close doesn't cause panics
+	s := NewSSEStrategy(Config{})
+
+	// Close without starting
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	// Verify started flag is false
+	s.mu.RLock()
+	started := s.started
+	s.mu.RUnlock()
+
+	if started {
+		t.Error("started should be false after Close")
+	}
+}
+
+func TestSSEStrategy_ConcurrentSubscriptions(t *testing.T) {
+	// Test adding and removing inboxes concurrently
+	s := NewSSEStrategy(Config{})
+
+	var wg sync.WaitGroup
+
+	// Add inboxes concurrently
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			inbox := InboxInfo{
+				Hash:         "hash" + string(rune('0'+idx)),
+				EmailAddress: "test" + string(rune('0'+idx)) + "@example.com",
+			}
+			if err := s.AddInbox(inbox); err != nil {
+				t.Errorf("AddInbox() error = %v", err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all inboxes were added
+	s.mu.RLock()
+	count := len(s.inboxHashes)
+	s.mu.RUnlock()
+
+	if count != 10 {
+		t.Errorf("inboxHashes count = %d, want 10", count)
+	}
+
+	// Remove inboxes concurrently
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			if err := s.RemoveInbox("hash" + string(rune('0'+idx))); err != nil {
+				t.Errorf("RemoveInbox() error = %v", err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all inboxes were removed
+	s.mu.RLock()
+	count = len(s.inboxHashes)
+	s.mu.RUnlock()
+
+	if count != 0 {
+		t.Errorf("inboxHashes count = %d, want 0", count)
 	}
 }

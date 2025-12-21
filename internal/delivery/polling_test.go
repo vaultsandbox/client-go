@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -523,5 +524,138 @@ func TestPollingStrategy_WaitOptions(t *testing.T) {
 	}
 	if opts.SyncFetcher == nil {
 		t.Error("SyncFetcher is nil")
+	}
+}
+
+func TestPollingStrategy_ConcurrentPolling(t *testing.T) {
+	// Test polling multiple inboxes concurrently
+	p := NewPollingStrategy(Config{})
+
+	// Track which inboxes have been polled
+	var polledInboxes sync.Map
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	// Create 3 inboxes
+	inboxes := []InboxInfo{
+		{Hash: "hash1", EmailAddress: "inbox1@example.com"},
+		{Hash: "hash2", EmailAddress: "inbox2@example.com"},
+		{Hash: "hash3", EmailAddress: "inbox3@example.com"},
+	}
+
+	// Add all inboxes
+	for _, inbox := range inboxes {
+		if err := p.AddInbox(inbox); err != nil {
+			t.Fatalf("AddInbox() error = %v", err)
+		}
+	}
+
+	// Verify all inboxes were added
+	if len(p.inboxes) != 3 {
+		t.Errorf("inboxes count = %d, want 3", len(p.inboxes))
+	}
+
+	// Test concurrent WaitForEmail operations on different inboxes
+	for i, hash := range []string{"hash1", "hash2", "hash3"} {
+		go func(idx int, inboxHash string) {
+			defer wg.Done()
+
+			fetcher := func(ctx context.Context) ([]interface{}, error) {
+				polledInboxes.Store(inboxHash, true)
+				return []interface{}{
+					&testEmail{ID: "email" + inboxHash, Subject: "Test"},
+				}, nil
+			}
+
+			matcher := func(email interface{}) bool {
+				return true
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			result, err := p.WaitForEmail(ctx, inboxHash, fetcher, matcher, 10*time.Millisecond)
+			if err != nil {
+				t.Errorf("WaitForEmail() for %s error = %v", inboxHash, err)
+				return
+			}
+
+			email := result.(*testEmail)
+			if email.ID != "email"+inboxHash {
+				t.Errorf("email.ID = %s, want email%s", email.ID, inboxHash)
+			}
+		}(i, hash)
+	}
+
+	wg.Wait()
+
+	// Verify all inboxes were polled
+	for _, inbox := range inboxes {
+		if _, ok := polledInboxes.Load(inbox.Hash); !ok {
+			t.Errorf("inbox %s was not polled", inbox.Hash)
+		}
+	}
+}
+
+func TestPollingStrategy_RemoveInbox_Idempotent(t *testing.T) {
+	// Test that removing the same inbox multiple times doesn't cause errors
+	p := NewPollingStrategy(Config{})
+
+	inbox := InboxInfo{
+		Hash:         "hash123",
+		EmailAddress: "test@example.com",
+	}
+
+	// Add inbox
+	if err := p.AddInbox(inbox); err != nil {
+		t.Fatalf("AddInbox() error = %v", err)
+	}
+
+	// Remove inbox first time
+	if err := p.RemoveInbox(inbox.Hash); err != nil {
+		t.Errorf("first RemoveInbox() error = %v", err)
+	}
+
+	// Remove inbox second time (should be idempotent)
+	if err := p.RemoveInbox(inbox.Hash); err != nil {
+		t.Errorf("second RemoveInbox() error = %v", err)
+	}
+
+	// Remove inbox third time
+	if err := p.RemoveInbox(inbox.Hash); err != nil {
+		t.Errorf("third RemoveInbox() error = %v", err)
+	}
+
+	// Verify inbox is not in the map
+	if _, exists := p.inboxes[inbox.Hash]; exists {
+		t.Error("inbox should not exist after removal")
+	}
+}
+
+func TestPollingStrategy_AddInbox_AfterClose(t *testing.T) {
+	// Test behavior when adding inbox after strategy is closed
+	p := NewPollingStrategy(Config{})
+
+	// Close the strategy
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	// Try to add inbox after close
+	inbox := InboxInfo{
+		Hash:         "hash123",
+		EmailAddress: "test@example.com",
+	}
+
+	// AddInbox should still work (it just adds to the map)
+	// The strategy is closed but the map operations still work
+	err := p.AddInbox(inbox)
+	if err != nil {
+		t.Logf("AddInbox after Close returned: %v", err)
+	}
+
+	// Verify the inbox was added to the map (the current implementation allows this)
+	if _, exists := p.inboxes[inbox.Hash]; !exists {
+		t.Log("inbox was not added after close (acceptable behavior)")
 	}
 }

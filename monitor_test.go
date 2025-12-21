@@ -250,3 +250,171 @@ func TestMonitorInboxes_ClosedClient(t *testing.T) {
 		t.Errorf("MonitorInboxes error = %v, want ErrClientClosed", err)
 	}
 }
+
+func TestInboxMonitor_MultipleInboxes(t *testing.T) {
+	c := &Client{
+		inboxes: make(map[string]*Inbox),
+	}
+
+	// Create multiple inboxes
+	inbox1 := &Inbox{
+		emailAddress: "test1@example.com",
+		inboxHash:    "hash1",
+		client:       c,
+	}
+	inbox2 := &Inbox{
+		emailAddress: "test2@example.com",
+		inboxHash:    "hash2",
+		client:       c,
+	}
+	inbox3 := &Inbox{
+		emailAddress: "test3@example.com",
+		inboxHash:    "hash3",
+		client:       c,
+	}
+
+	// Create monitor without starting it
+	monitor := &InboxMonitor{
+		client:       c,
+		inboxes:      []*Inbox{inbox1, inbox2, inbox3},
+		callbacks:    make([]EmailCallback, 0),
+		pollInterval: time.Second,
+	}
+
+	// Track callback invocations per inbox
+	var invocations sync.Map
+	var mu sync.Mutex
+
+	// Add a callback that tracks which inbox received the email
+	monitor.mu.Lock()
+	monitor.callbacks = append(monitor.callbacks, func(inbox *Inbox, email *Email) {
+		mu.Lock()
+		defer mu.Unlock()
+		count, _ := invocations.LoadOrStore(inbox.inboxHash, 0)
+		invocations.Store(inbox.inboxHash, count.(int)+1)
+	})
+	monitor.mu.Unlock()
+
+	// Emit emails from different inboxes
+	monitor.emitEmail(inbox1, &Email{ID: "email1", Subject: "Test1"})
+	monitor.emitEmail(inbox2, &Email{ID: "email2", Subject: "Test2"})
+	monitor.emitEmail(inbox3, &Email{ID: "email3", Subject: "Test3"})
+	monitor.emitEmail(inbox1, &Email{ID: "email4", Subject: "Test4"})
+
+	// Wait for callbacks to execute
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify each inbox received the correct number of invocations
+	mu.Lock()
+	defer mu.Unlock()
+
+	count1, _ := invocations.Load("hash1")
+	if count1 != 2 {
+		t.Errorf("inbox1 received %v emails, want 2", count1)
+	}
+
+	count2, _ := invocations.Load("hash2")
+	if count2 != 1 {
+		t.Errorf("inbox2 received %v email, want 1", count2)
+	}
+
+	count3, _ := invocations.Load("hash3")
+	if count3 != 1 {
+		t.Errorf("inbox3 received %v email, want 1", count3)
+	}
+}
+
+func TestInboxMonitor_UnsubscribeAll(t *testing.T) {
+	c := &Client{
+		inboxes: make(map[string]*Inbox),
+	}
+
+	inbox := &Inbox{
+		emailAddress: "test@example.com",
+		inboxHash:    "hash123",
+		client:       c,
+	}
+
+	// Create monitor without starting (to avoid API calls)
+	monitor := &InboxMonitor{
+		client:       c,
+		inboxes:      []*Inbox{inbox},
+		callbacks:    make([]EmailCallback, 0),
+		pollInterval: time.Second,
+	}
+
+	var count1, count2, count3 int
+	var mu sync.Mutex
+
+	// Manually add multiple callbacks
+	monitor.mu.Lock()
+	monitor.callbacks = append(monitor.callbacks, func(inbox *Inbox, email *Email) {
+		mu.Lock()
+		count1++
+		mu.Unlock()
+	})
+	monitor.callbacks = append(monitor.callbacks, func(inbox *Inbox, email *Email) {
+		mu.Lock()
+		count2++
+		mu.Unlock()
+	})
+	monitor.callbacks = append(monitor.callbacks, func(inbox *Inbox, email *Email) {
+		mu.Lock()
+		count3++
+		mu.Unlock()
+	})
+	monitor.mu.Unlock()
+
+	// Emit an email event before unsubscribe
+	email := &Email{ID: "email1", Subject: "Test"}
+	monitor.emitEmail(inbox, email)
+
+	// Wait for callbacks to execute
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	if count1 != 1 || count2 != 1 || count3 != 1 {
+		t.Errorf("callbacks before unsubscribe: count1=%d, count2=%d, count3=%d, want all 1", count1, count2, count3)
+	}
+	mu.Unlock()
+
+	// Unsubscribe all
+	monitor.Unsubscribe()
+
+	// Emit an email event after unsubscribe
+	monitor.emitEmail(inbox, &Email{ID: "email2", Subject: "Test2"})
+
+	// Wait a bit
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	if count1 != 1 || count2 != 1 || count3 != 1 {
+		t.Errorf("callbacks after unsubscribe: count1=%d, count2=%d, count3=%d, want all still 1", count1, count2, count3)
+	}
+	mu.Unlock()
+}
+
+func TestInboxMonitor_Unsubscribe_Idempotent(t *testing.T) {
+	c := &Client{
+		inboxes: make(map[string]*Inbox),
+	}
+
+	inbox := &Inbox{
+		emailAddress: "test@example.com",
+		inboxHash:    "hash123",
+		client:       c,
+	}
+
+	// Create monitor without starting
+	monitor := &InboxMonitor{
+		client:       c,
+		inboxes:      []*Inbox{inbox},
+		callbacks:    make([]EmailCallback, 0),
+		pollInterval: time.Second,
+	}
+
+	// Unsubscribe multiple times should not panic
+	monitor.Unsubscribe()
+	monitor.Unsubscribe()
+	monitor.Unsubscribe()
+}
