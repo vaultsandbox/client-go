@@ -1,3 +1,10 @@
+// Package api provides HTTP client functionality for communicating with the
+// VaultSandbox API. It handles authentication, request/response serialization,
+// and automatic retry logic with exponential backoff for transient failures.
+//
+// The package provides two ways to create a client: the functional options
+// pattern via [New] for flexibility, or the struct-based [NewClient] for
+// explicit configuration.
 package api
 
 import (
@@ -21,27 +28,47 @@ const (
 var DefaultRetryOn = []int{408, 429, 500, 502, 503, 504}
 
 // Client handles HTTP communication with the VaultSandbox API.
+// It provides automatic retry logic with exponential backoff for transient failures.
 type Client struct {
+	// httpClient is the underlying HTTP client used for requests.
 	httpClient *http.Client
-	baseURL    string
-	apiKey     string
+	// baseURL is the VaultSandbox API base URL (e.g., "https://api.vaultsandbox.com").
+	baseURL string
+	// apiKey is the API key used for authentication via the X-API-Key header.
+	apiKey string
+	// maxRetries is the maximum number of retry attempts for failed requests.
 	maxRetries int
+	// retryDelay is the base delay between retry attempts (doubles with each attempt).
 	retryDelay time.Duration
-	retryOn    []int
+	// retryOn contains HTTP status codes that trigger automatic retry.
+	retryOn []int
 }
 
-// Config holds API client configuration.
+// Config holds API client configuration for use with [NewClient].
 type Config struct {
-	BaseURL    string
-	APIKey     string
+	// BaseURL is the VaultSandbox API base URL (required).
+	BaseURL string
+	// APIKey is the API key for authentication (required).
+	APIKey string
+	// HTTPClient is an optional custom HTTP client. If nil, a default client
+	// with the configured Timeout is created.
 	HTTPClient *http.Client
+	// MaxRetries is the maximum retry attempts. Defaults to [DefaultMaxRetries].
 	MaxRetries int
+	// RetryDelay is the base delay between retries. Defaults to [DefaultRetryDelay].
 	RetryDelay time.Duration
-	Timeout    time.Duration
-	RetryOn    []int // HTTP status codes that trigger a retry
+	// Timeout is the HTTP client timeout. Defaults to [DefaultTimeout].
+	// Ignored if HTTPClient is provided.
+	Timeout time.Duration
+	// RetryOn specifies HTTP status codes that trigger a retry.
+	// Defaults to [DefaultRetryOn].
+	RetryOn []int
 }
 
-// NewClient creates a new API client.
+// NewClient creates a new API client from the provided configuration.
+// Both BaseURL and APIKey are required; all other fields have sensible defaults.
+//
+// Returns an error if required fields are missing.
 func NewClient(cfg Config) (*Client, error) {
 	if cfg.APIKey == "" {
 		return nil, fmt.Errorf("API key is required")
@@ -86,7 +113,14 @@ func NewClient(cfg Config) (*Client, error) {
 	}, nil
 }
 
-// New creates a new API client (backward compatible).
+// New creates a new API client using the functional options pattern.
+// The apiKey is required for authentication. Use [Option] functions like
+// [WithBaseURL], [WithTimeout], and [WithRetries] to customize behavior.
+//
+// This constructor is provided for backward compatibility; prefer [NewClient]
+// for new code as it provides more explicit configuration.
+//
+// Returns an error if apiKey is empty or if baseURL is not set via [WithBaseURL].
 func New(apiKey string, opts ...Option) (*Client, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("API key is required")
@@ -167,7 +201,17 @@ func (c *Client) HTTPClient() *http.Client {
 	return c.httpClient
 }
 
-// Do executes an HTTP request with retry logic.
+// Do executes an HTTP request with automatic retry logic.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout control.
+//   - method: HTTP method (GET, POST, DELETE, etc.).
+//   - path: API path to append to the base URL (e.g., "/api/inboxes").
+//   - body: Request body to JSON-encode, or nil for no body.
+//   - result: Pointer to unmarshal the JSON response into, or nil to discard.
+//
+// The request includes X-API-Key, Content-Type, and Accept headers automatically.
+// Retries are attempted with exponential backoff for status codes in retryOn.
 func (c *Client) Do(ctx context.Context, method, path string, body any, result any) error {
 	var bodyReader io.Reader
 	if body != nil {
@@ -181,6 +225,10 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, result a
 	return c.doWithRetry(ctx, method, path, bodyReader, result)
 }
 
+// doWithRetry implements the retry logic with exponential backoff.
+// It handles network errors, retryable status codes, error response parsing,
+// and successful response decoding. The body must be an io.Seeker if retries
+// are needed, as it will be reset between attempts.
 func (c *Client) doWithRetry(ctx context.Context, method, path string, body io.Reader, result any) error {
 	var lastErr error
 
@@ -252,11 +300,12 @@ func (c *Client) doWithRetry(ctx context.Context, method, path string, body io.R
 }
 
 // do is the backward-compatible method for existing code.
+// Deprecated: Use [Client.Do] instead.
 func (c *Client) do(ctx context.Context, method, path string, body interface{}, result interface{}) error {
 	return c.Do(ctx, method, path, body, result)
 }
 
-// isRetryable checks if a status code should trigger a retry.
+// isRetryable checks if a status code should trigger a retry based on retryOn.
 func (c *Client) isRetryable(statusCode int) bool {
 	for _, code := range c.retryOn {
 		if statusCode == code {
@@ -266,6 +315,9 @@ func (c *Client) isRetryable(statusCode int) bool {
 	return false
 }
 
+// parseErrorResponse extracts error information from an HTTP error response.
+// It attempts to parse a JSON error body with "error", "message", and "request_id"
+// fields. If parsing fails, the raw body is used as the error message.
 func parseErrorResponse(resp *http.Response) error {
 	body, _ := io.ReadAll(resp.Body)
 

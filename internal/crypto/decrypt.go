@@ -13,49 +13,83 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-// DecryptedMetadata represents the decrypted email metadata (from list endpoint).
+// DecryptedMetadata represents the decrypted email metadata returned from the
+// list endpoint. This provides a lightweight preview without fetching the full
+// email body.
 type DecryptedMetadata struct {
-	From       string `json:"from"`
-	To         string `json:"to"` // Single recipient in metadata
-	Subject    string `json:"subject"`
+	// From is the sender's email address.
+	From string `json:"from"`
+	// To is the primary recipient. Note: only one recipient is included in
+	// metadata; use DecryptedParsed.Headers for full recipient list.
+	To string `json:"to"`
+	// Subject is the email subject line.
+	Subject string `json:"subject"`
+	// ReceivedAt is the timestamp when the email was received (ISO 8601 format).
 	ReceivedAt string `json:"receivedAt"`
 }
 
-// DecryptedParsed represents the decrypted parsed email content.
+// DecryptedParsed represents the decrypted parsed email content including
+// the body, headers, and attachments.
 type DecryptedParsed struct {
-	Text        string                 `json:"text"`
-	HTML        string                 `json:"html"`
-	Headers     map[string]interface{} `json:"headers"`
-	Attachments []DecryptedAttachment  `json:"attachments"`
-	Links       []string               `json:"links"`
-	AuthResults json.RawMessage        `json:"authResults"`
+	// Text is the plain text body of the email.
+	Text string `json:"text"`
+	// HTML is the HTML body of the email, if present.
+	HTML string `json:"html"`
+	// Headers contains the full email headers as key-value pairs.
+	Headers map[string]interface{} `json:"headers"`
+	// Attachments contains the email attachments with their content.
+	Attachments []DecryptedAttachment `json:"attachments"`
+	// Links contains URLs extracted from the email body.
+	Links []string `json:"links"`
+	// AuthResults contains email authentication results (SPF, DKIM, DMARC).
+	AuthResults json.RawMessage `json:"authResults"`
 }
 
-// DecryptedEmail represents a fully decrypted email (combined metadata + parsed).
+// DecryptedEmail represents a fully decrypted email combining metadata and
+// parsed content. This is the primary type returned to users after decryption.
 type DecryptedEmail struct {
-	ID          string
-	From        string
-	To          []string
-	Subject     string
-	Text        string
-	HTML        string
-	ReceivedAt  time.Time
-	Headers     map[string]string
+	// ID is the unique email identifier.
+	ID string
+	// From is the sender's email address.
+	From string
+	// To contains all recipient email addresses.
+	To []string
+	// Subject is the email subject line.
+	Subject string
+	// Text is the plain text body.
+	Text string
+	// HTML is the HTML body, if present.
+	HTML string
+	// ReceivedAt is when the email was received.
+	ReceivedAt time.Time
+	// Headers contains email headers as string key-value pairs.
+	Headers map[string]string
+	// Attachments contains the email attachments.
 	Attachments []DecryptedAttachment
-	Links       []string
+	// Links contains URLs extracted from the email body.
+	Links []string
+	// AuthResults contains email authentication results (SPF, DKIM, DMARC).
 	AuthResults json.RawMessage
-	IsRead      bool
+	// IsRead indicates whether the email has been marked as read.
+	IsRead bool
 }
 
-// DecryptedAttachment represents a decrypted attachment.
+// DecryptedAttachment represents a decrypted email attachment.
 type DecryptedAttachment struct {
-	Filename           string      `json:"filename"`
-	ContentType        string      `json:"contentType"`
-	Size               int         `json:"size"`
-	ContentID          string      `json:"contentId,omitempty"`
-	ContentDisposition string      `json:"contentDisposition,omitempty"`
-	Content            Base64Bytes `json:"content,omitempty"`
-	Checksum           string      `json:"checksum,omitempty"`
+	// Filename is the attachment's filename.
+	Filename string `json:"filename"`
+	// ContentType is the MIME type (e.g., "application/pdf").
+	ContentType string `json:"contentType"`
+	// Size is the attachment size in bytes.
+	Size int `json:"size"`
+	// ContentID is the Content-ID for inline attachments (e.g., embedded images).
+	ContentID string `json:"contentId,omitempty"`
+	// ContentDisposition indicates "inline" or "attachment".
+	ContentDisposition string `json:"contentDisposition,omitempty"`
+	// Content is the raw attachment data (automatically base64-decoded).
+	Content Base64Bytes `json:"content,omitempty"`
+	// Checksum is the SHA-256 hash of the content for integrity verification.
+	Checksum string `json:"checksum,omitempty"`
 }
 
 // Base64Bytes handles JSON unmarshaling of base64-encoded content.
@@ -99,7 +133,15 @@ func (b *Base64Bytes) UnmarshalJSON(data []byte) error {
 }
 
 // Decrypt decrypts an encrypted payload using the provided keypair.
-// IMPORTANT: VerifySignature must be called before this function.
+//
+// The decryption process:
+//  1. ML-KEM-768 decapsulation to recover the shared secret
+//  2. HKDF-SHA-512 key derivation using the shared secret, AAD, and KEM ciphertext
+//  3. AES-256-GCM decryption of the ciphertext
+//
+// Security: This function does NOT verify signatures. Callers MUST call
+// [VerifySignature] before decryption to ensure authenticity and integrity.
+// Decrypting without verification may expose the system to chosen-ciphertext attacks.
 func Decrypt(payload *EncryptedPayload, keypair *Keypair) ([]byte, error) {
 	// Decode components
 	ctKem, err := FromBase64URL(payload.CtKem)
@@ -146,7 +188,14 @@ func Decrypt(payload *EncryptedPayload, keypair *Keypair) ([]byte, error) {
 	return plaintext, nil
 }
 
-// deriveKey performs HKDF-SHA-512 key derivation.
+// deriveKey performs HKDF-SHA-512 key derivation for the encryption scheme.
+//
+// The key derivation uses:
+//   - IKM (input key material): the KEM shared secret
+//   - Salt: SHA-256 hash of the KEM ciphertext
+//   - Info: context string || AAD length (4 bytes BE) || AAD
+//
+// This produces a 256-bit key suitable for AES-256-GCM.
 func deriveKey(sharedSecret, aad, ctKem []byte) ([]byte, error) {
 	// Salt is SHA-256 hash of KEM ciphertext
 	saltHash := sha256.Sum256(ctKem)
@@ -172,7 +221,15 @@ func deriveKey(sharedSecret, aad, ctKem []byte) ([]byte, error) {
 	return key, nil
 }
 
-// DeriveKey derives a key using HKDF-SHA-512 (backward compatibility).
+// DeriveKey derives a key using HKDF-SHA-512.
+//
+// Parameters:
+//   - secret: the input key material (e.g., shared secret from KEM)
+//   - salt: optional salt value; if empty, a zero-filled salt is used
+//   - info: context/application-specific info for domain separation
+//   - length: desired output key length in bytes
+//
+// This function is provided for backward compatibility with the legacy API.
 func DeriveKey(secret, salt, info []byte, length int) ([]byte, error) {
 	if len(salt) == 0 {
 		salt = make([]byte, sha512.Size)
@@ -188,17 +245,37 @@ func DeriveKey(secret, salt, info []byte, length int) ([]byte, error) {
 	return key, nil
 }
 
-// EncryptedEmail represents an encrypted email for decryption (backward compatibility).
+// EncryptedEmail represents an encrypted email for decryption in the legacy format.
+// This type is provided for backward compatibility with the original API.
 type EncryptedEmail struct {
-	ID              string
+	// ID is the unique email identifier.
+	ID string
+	// EncapsulatedKey is the ML-KEM-768 encapsulated key (raw bytes).
 	EncapsulatedKey []byte
-	Ciphertext      []byte
-	Signature       []byte
-	ReceivedAt      time.Time
-	IsRead          bool
+	// Ciphertext is the AES-256-GCM encrypted content (nonce || ciphertext || tag).
+	Ciphertext []byte
+	// Signature is the Ed25519 signature over (EncapsulatedKey || Ciphertext).
+	Signature []byte
+	// ReceivedAt is when the email was received.
+	ReceivedAt time.Time
+	// IsRead indicates whether the email has been marked as read.
+	IsRead bool
 }
 
-// DecryptEmail decrypts an encrypted email (backward compatibility).
+// DecryptEmail decrypts an encrypted email using the legacy format.
+//
+// The function performs these steps:
+//  1. Verifies the Ed25519 signature using serverSigPk
+//  2. Decapsulates the shared secret using the keypair
+//  3. Derives the AES key using HKDF-SHA-512
+//  4. Decrypts the ciphertext using AES-256-GCM
+//  5. Parses the JSON payload into [DecryptedEmail]
+//
+// Security: Signature verification is performed BEFORE decryption to prevent
+// chosen-ciphertext attacks. If verification fails, decryption is not attempted.
+//
+// This function is provided for backward compatibility; prefer using [Decrypt]
+// with the newer [EncryptedPayload] format for new code.
 func DecryptEmail(encrypted *EncryptedEmail, keypair *Keypair, serverSigPk []byte) (*DecryptedEmail, error) {
 	// Verify signature first
 	signedData := append(encrypted.EncapsulatedKey, encrypted.Ciphertext...)

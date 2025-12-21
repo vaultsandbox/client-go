@@ -6,7 +6,15 @@ import (
 	"fmt"
 )
 
-// decryptAESGCM decrypts data using AES-256-GCM.
+// decryptAESGCM decrypts data using AES-256-GCM with authenticated additional data.
+//
+// Parameters:
+//   - key: 256-bit (32-byte) AES key
+//   - nonce: 96-bit (12-byte) initialization vector (must be unique per key)
+//   - aad: additional authenticated data (integrity-protected but not encrypted)
+//   - ciphertext: encrypted data with appended 128-bit authentication tag
+//
+// Returns the decrypted plaintext or [ErrDecryptionFailed] if authentication fails.
 func decryptAESGCM(key, nonce, aad, ciphertext []byte) ([]byte, error) {
 	if len(key) != AESKeySize {
 		return nil, fmt.Errorf("%w: got %d, want %d", ErrInvalidKeySize, len(key), AESKeySize)
@@ -34,8 +42,16 @@ func decryptAESGCM(key, nonce, aad, ciphertext []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-// DecryptAES decrypts data using AES-256-GCM (backward compatibility).
-// The ciphertext format is: nonce (12 bytes) || ciphertext || tag (16 bytes)
+// DecryptAES decrypts data using AES-256-GCM without additional authenticated data.
+//
+// The ciphertext format is: nonce (12 bytes) || encrypted data || tag (16 bytes)
+//
+// Parameters:
+//   - key: 256-bit (32-byte) AES key
+//   - ciphertext: combined nonce, encrypted data, and authentication tag
+//
+// This function extracts the nonce from the ciphertext prefix and uses no AAD.
+// It is provided for backward compatibility with the legacy encryption format.
 func DecryptAES(key, ciphertext []byte) ([]byte, error) {
 	if len(key) != AESKeySize {
 		return nil, fmt.Errorf("%w: got %d, want %d", ErrInvalidKeySize, len(key), AESKeySize)
@@ -52,7 +68,19 @@ func DecryptAES(key, ciphertext []byte) ([]byte, error) {
 }
 
 // EncryptAES encrypts data using AES-256-GCM.
+//
 // Returns: nonce (12 bytes) || ciphertext || tag (16 bytes)
+//
+// Parameters:
+//   - key: 256-bit (32-byte) AES key
+//   - plaintext: data to encrypt
+//   - nonce: 96-bit (12-byte) initialization vector
+//
+// Security: The nonce MUST be unique for each encryption with the same key.
+// Nonce reuse completely breaks the security of AES-GCM, allowing attackers
+// to recover the authentication key and forge messages. Use crypto/rand to
+// generate random nonces, or use a deterministic counter if synchronization
+// is guaranteed.
 func EncryptAES(key, plaintext, nonce []byte) ([]byte, error) {
 	if len(key) != AESKeySize {
 		return nil, fmt.Errorf("%w: got %d, want %d", ErrInvalidKeySize, len(key), AESKeySize)
