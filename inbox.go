@@ -18,14 +18,32 @@ type Inbox struct {
 	client       *Client
 }
 
-// ExportedInbox contains the data needed to restore an inbox.
+// ExportedInbox contains all data needed to restore an inbox.
+// WARNING: Contains private key material - handle securely.
 type ExportedInbox struct {
-	EmailAddress string    `json:"email_address"`
-	ExpiresAt    time.Time `json:"expires_at"`
-	InboxHash    string    `json:"inbox_hash"`
-	ServerSigPk  []byte    `json:"server_sig_pk"`
-	PrivateKey   []byte    `json:"private_key"`
-	PublicKey    []byte    `json:"public_key"`
+	EmailAddress string    `json:"emailAddress"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+	InboxHash    string    `json:"inboxHash"`
+	ServerSigPk  string    `json:"serverSigPk"`
+	PublicKeyB64 string    `json:"publicKeyB64"`
+	SecretKeyB64 string    `json:"secretKeyB64"`
+	ExportedAt   time.Time `json:"exportedAt"`
+}
+
+// Validate checks that the exported data is valid.
+func (e *ExportedInbox) Validate() error {
+	if e.EmailAddress == "" {
+		return ErrInvalidImportData
+	}
+	if e.SecretKeyB64 == "" {
+		return ErrInvalidImportData
+	}
+	// Validate key sizes after decoding
+	secretKey, err := crypto.FromBase64URL(e.SecretKeyB64)
+	if err != nil || len(secretKey) != crypto.MLKEMSecretKeySize {
+		return ErrInvalidImportData
+	}
+	return nil
 }
 
 // EmailAddress returns the inbox email address.
@@ -36,6 +54,16 @@ func (i *Inbox) EmailAddress() string {
 // ExpiresAt returns when the inbox expires.
 func (i *Inbox) ExpiresAt() time.Time {
 	return i.expiresAt
+}
+
+// InboxHash returns the SHA-256 hash of the public key.
+func (i *Inbox) InboxHash() string {
+	return i.inboxHash
+}
+
+// IsExpired checks if the inbox has expired.
+func (i *Inbox) IsExpired() bool {
+	return time.Now().After(i.expiresAt)
 }
 
 // GetEmails fetches all emails in the inbox.
@@ -172,15 +200,16 @@ func (i *Inbox) Delete(ctx context.Context) error {
 	return i.client.DeleteInbox(ctx, i.emailAddress)
 }
 
-// Export exports the inbox for later restoration.
+// Export returns exportable inbox data including private key.
 func (i *Inbox) Export() *ExportedInbox {
 	return &ExportedInbox{
 		EmailAddress: i.emailAddress,
 		ExpiresAt:    i.expiresAt,
 		InboxHash:    i.inboxHash,
-		ServerSigPk:  i.serverSigPk,
-		PrivateKey:   i.keypair.SecretKey,
-		PublicKey:    i.keypair.PublicKey,
+		ServerSigPk:  crypto.ToBase64URL(i.serverSigPk),
+		PublicKeyB64: crypto.ToBase64URL(i.keypair.PublicKey),
+		SecretKeyB64: crypto.ToBase64URL(i.keypair.SecretKey),
+		ExportedAt:   time.Now(),
 	}
 }
 
@@ -196,7 +225,26 @@ func newInboxFromLegacyResponse(resp *api.LegacyCreateInboxResponse, c *Client) 
 }
 
 func newInboxFromExport(data *ExportedInbox, c *Client) (*Inbox, error) {
-	keypair, err := crypto.NewKeypairFromBytes(data.PrivateKey, data.PublicKey)
+	if err := data.Validate(); err != nil {
+		return nil, err
+	}
+
+	secretKey, err := crypto.FromBase64URL(data.SecretKeyB64)
+	if err != nil {
+		return nil, ErrInvalidImportData
+	}
+
+	publicKey, err := crypto.FromBase64URL(data.PublicKeyB64)
+	if err != nil {
+		return nil, ErrInvalidImportData
+	}
+
+	serverSigPk, err := crypto.FromBase64URL(data.ServerSigPk)
+	if err != nil {
+		return nil, ErrInvalidImportData
+	}
+
+	keypair, err := crypto.NewKeypairFromBytes(secretKey, publicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +253,7 @@ func newInboxFromExport(data *ExportedInbox, c *Client) (*Inbox, error) {
 		emailAddress: data.EmailAddress,
 		expiresAt:    data.ExpiresAt,
 		inboxHash:    data.InboxHash,
-		serverSigPk:  data.ServerSigPk,
+		serverSigPk:  serverSigPk,
 		keypair:      keypair,
 		client:       c,
 	}, nil

@@ -2,7 +2,7 @@ package authresults
 
 import (
 	"errors"
-	"fmt"
+	"strings"
 )
 
 var (
@@ -15,60 +15,62 @@ var (
 	// ErrDMARCFailed is returned when DMARC check failed.
 	ErrDMARCFailed = errors.New("DMARC check failed")
 
+	// ErrReverseDNSFailed is returned when reverse DNS check failed.
+	ErrReverseDNSFailed = errors.New("reverse DNS check failed")
+
 	// ErrNoAuthResults is returned when no auth results are available.
 	ErrNoAuthResults = errors.New("no authentication results available")
 )
 
-// ValidationError contains details about a validation failure.
+// ValidationError contains details about validation failures.
 type ValidationError struct {
-	SPF   error
-	DKIM  error
-	DMARC error
+	Errors []string
 }
 
 func (e *ValidationError) Error() string {
-	var msg string
-	if e.SPF != nil {
-		msg += fmt.Sprintf("SPF: %v; ", e.SPF)
-	}
-	if e.DKIM != nil {
-		msg += fmt.Sprintf("DKIM: %v; ", e.DKIM)
-	}
-	if e.DMARC != nil {
-		msg += fmt.Sprintf("DMARC: %v; ", e.DMARC)
-	}
-	if msg == "" {
+	if len(e.Errors) == 0 {
 		return "validation failed"
 	}
-	return msg[:len(msg)-2]
+	return strings.Join(e.Errors, "; ")
 }
 
-// Validate checks if authentication results are valid.
+// Validate checks that all authentication results pass.
 func Validate(results *AuthResults) error {
 	if results == nil {
 		return ErrNoAuthResults
 	}
 
-	var validationErr ValidationError
-	hasError := false
+	var errs []string
 
-	if results.SPF != nil && results.SPF.Result != "pass" {
-		validationErr.SPF = fmt.Errorf("%w: %s", ErrSPFFailed, results.SPF.Result)
-		hasError = true
+	// SPF must pass
+	if results.SPF == nil || results.SPF.Status != "pass" {
+		errs = append(errs, "SPF did not pass")
 	}
 
-	if results.DKIM != nil && results.DKIM.Result != "pass" {
-		validationErr.DKIM = fmt.Errorf("%w: %s", ErrDKIMFailed, results.DKIM.Result)
-		hasError = true
+	// At least one DKIM must pass
+	dkimPassed := false
+	for _, dkim := range results.DKIM {
+		if dkim.Status == "pass" {
+			dkimPassed = true
+			break
+		}
+	}
+	if !dkimPassed {
+		errs = append(errs, "no DKIM signature passed")
 	}
 
-	if results.DMARC != nil && results.DMARC.Result != "pass" {
-		validationErr.DMARC = fmt.Errorf("%w: %s", ErrDMARCFailed, results.DMARC.Result)
-		hasError = true
+	// DMARC must pass
+	if results.DMARC == nil || results.DMARC.Status != "pass" {
+		errs = append(errs, "DMARC did not pass")
 	}
 
-	if hasError {
-		return &validationErr
+	// ReverseDNS must pass if present
+	if results.ReverseDNS != nil && results.ReverseDNS.Status != "pass" {
+		errs = append(errs, "reverse DNS did not pass")
+	}
+
+	if len(errs) > 0 {
+		return &ValidationError{Errors: errs}
 	}
 
 	return nil
@@ -79,21 +81,24 @@ func ValidateSPF(results *AuthResults) error {
 	if results == nil || results.SPF == nil {
 		return ErrNoAuthResults
 	}
-	if results.SPF.Result != "pass" {
-		return fmt.Errorf("%w: %s", ErrSPFFailed, results.SPF.Result)
+	if results.SPF.Status != "pass" {
+		return ErrSPFFailed
 	}
 	return nil
 }
 
 // ValidateDKIM validates only DKIM results.
+// Returns nil if at least one DKIM signature passes.
 func ValidateDKIM(results *AuthResults) error {
-	if results == nil || results.DKIM == nil {
+	if results == nil || len(results.DKIM) == 0 {
 		return ErrNoAuthResults
 	}
-	if results.DKIM.Result != "pass" {
-		return fmt.Errorf("%w: %s", ErrDKIMFailed, results.DKIM.Result)
+	for _, dkim := range results.DKIM {
+		if dkim.Status == "pass" {
+			return nil
+		}
 	}
-	return nil
+	return ErrDKIMFailed
 }
 
 // ValidateDMARC validates only DMARC results.
@@ -101,8 +106,19 @@ func ValidateDMARC(results *AuthResults) error {
 	if results == nil || results.DMARC == nil {
 		return ErrNoAuthResults
 	}
-	if results.DMARC.Result != "pass" {
-		return fmt.Errorf("%w: %s", ErrDMARCFailed, results.DMARC.Result)
+	if results.DMARC.Status != "pass" {
+		return ErrDMARCFailed
+	}
+	return nil
+}
+
+// ValidateReverseDNS validates only reverse DNS results.
+func ValidateReverseDNS(results *AuthResults) error {
+	if results == nil || results.ReverseDNS == nil {
+		return ErrNoAuthResults
+	}
+	if results.ReverseDNS.Status != "pass" {
+		return ErrReverseDNSFailed
 	}
 	return nil
 }

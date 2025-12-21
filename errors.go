@@ -26,6 +26,9 @@ var ErrAPIKeyInvalid = errors.New("invalid API key")
 // ErrRateLimited is returned when the API rate limit is exceeded.
 var ErrRateLimited = errors.New("rate limit exceeded")
 
+// ErrInvalidImportData is returned when imported inbox data is invalid.
+var ErrInvalidImportData = errors.New("invalid import data")
+
 // APIError represents an error from the API.
 type APIError struct {
 	StatusCode int
