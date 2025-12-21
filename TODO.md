@@ -1,3 +1,3 @@
 [ ] Remove Node SDK comments
 [ ] Check why so many backward compatibility
-[ ] Docs
+[x] Docs
