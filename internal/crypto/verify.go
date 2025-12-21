@@ -99,6 +99,24 @@ func buildTranscript(version int, algs AlgorithmSuite, ctKem, nonce, aad, cipher
 	return transcript
 }
 
+// VerifySignatureSafe verifies the signature without returning an error.
+// Returns true if the signature is valid, false otherwise.
+func VerifySignatureSafe(payload *EncryptedPayload) bool {
+	err := VerifySignature(payload)
+	return err == nil
+}
+
+// ValidateServerPublicKey validates that a server public key has the correct format and size.
+// Takes a base64url-encoded server public key string.
+// Returns true if valid, false otherwise.
+func ValidateServerPublicKey(serverPublicKey string) bool {
+	publicKey, err := FromBase64URL(serverPublicKey)
+	if err != nil {
+		return false
+	}
+	return len(publicKey) == MLDSAPublicKeySize
+}
+
 // Verify verifies an ML-DSA-65 signature (low-level function).
 func Verify(publicKey, message, signature []byte) error {
 	pk := &mldsa65.PublicKey{}

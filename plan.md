@@ -6,19 +6,19 @@ This document outlines a phased approach to verify and align the Go SDK (`client
 
 ---
 
-## Phase 1: Core Cryptography Verification
+## Phase 1: Core Cryptography Verification ✅ COMPLETED
 
 Ensure cryptographic operations are identical between both SDKs.
 
 ### 1.1 Keypair Generation
-- [ ] Verify ML-KEM-768 key sizes match (public: 1184B, secret: 2400B)
-- [ ] Verify `GenerateKeypair()` produces valid keys
-- [ ] Implement `derivePublicKeyFromSecret()` if missing (Node has this)
-- [ ] Add `validateKeypair()` function
+- [x] Verify ML-KEM-768 key sizes match (public: 1184B, secret: 2400B)
+- [x] Verify `GenerateKeypair()` produces valid keys
+- [x] Implement `DerivePublicKeyFromSecret()` - Added to keypair.go
+- [x] Add `ValidateKeypair()` function - Added to keypair.go
 
 ### 1.2 Signature Verification
-- [ ] Verify ML-DSA-65 public key size (1952B)
-- [ ] Verify transcript building matches Node SDK:
+- [x] Verify ML-DSA-65 public key size (1952B)
+- [x] Verify transcript building matches Node SDK:
   - Version byte (1)
   - Algorithm ciphersuite string (`ML-KEM-768:ML-DSA-65:AES-256-GCM:HKDF-SHA-512`)
   - Context string (`vaultsandbox:email:v1`)
@@ -27,20 +27,22 @@ Ensure cryptographic operations are identical between both SDKs.
   - AAD
   - Ciphertext
   - Server public key
-- [ ] Add `verifySignatureSafe()` non-throwing variant
-- [ ] Add `validateServerPublicKey()` function
+- [x] Add `VerifySignatureSafe()` non-throwing variant - Added to verify.go
+- [x] Add `ValidateServerPublicKey()` function - Added to verify.go
 
 ### 1.3 Decryption Pipeline
-- [ ] Verify HKDF-SHA-512 key derivation matches:
+- [x] Verify HKDF-SHA-512 key derivation matches:
   - Salt = SHA-256(ctKem)
   - Info = context || aad_length (4 bytes BE) || aad
-- [ ] Verify AES-256-GCM parameters (12-byte nonce, 128-bit tag)
-- [ ] Ensure signature verification happens BEFORE decryption
+- [x] Verify AES-256-GCM parameters (12-byte nonce, 128-bit tag)
+- [x] Ensure signature verification happens BEFORE decryption
 
 ### 1.4 Base64 Encoding
-- [ ] Verify Base64URL encoding/decoding (no padding)
-- [ ] Verify standard Base64 encoding for attachment content
-- [ ] Add lenient decoding (handle with/without padding)
+- [x] Verify Base64URL encoding/decoding (no padding)
+- [x] Add standard Base64 encoding (`ToBase64`/`FromBase64`) for attachment content
+- [x] Lenient decoding already exists (`DecodeBase64` tries multiple formats)
+
+**Note:** The `DerivePublicKeyFromSecret` offset differs between Go (1152) and Node (1216) due to library-specific ML-KEM-768 secret key formats. This doesn't affect cross-SDK compatibility because export/import includes both public and secret keys explicitly.
 
 ---
 

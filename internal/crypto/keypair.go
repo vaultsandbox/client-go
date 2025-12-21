@@ -79,6 +79,58 @@ func NewKeypairFromBytes(privateKeyBytes, publicKeyBytes []byte) (*Keypair, erro
 	}, nil
 }
 
+// ValidateKeypair validates that a keypair has the correct structure and sizes.
+// Returns true if all validations pass, false otherwise.
+func ValidateKeypair(keypair *Keypair) bool {
+	if keypair == nil {
+		return false
+	}
+
+	if keypair.PublicKey == nil || keypair.SecretKey == nil || keypair.PublicKeyB64 == "" {
+		return false
+	}
+
+	if len(keypair.PublicKey) != MLKEMPublicKeySize {
+		return false
+	}
+
+	if len(keypair.SecretKey) != MLKEMSecretKeySize {
+		return false
+	}
+
+	// Verify base64url encoding matches public key bytes
+	decoded, err := FromBase64URL(keypair.PublicKeyB64)
+	if err != nil {
+		return false
+	}
+
+	if len(decoded) != len(keypair.PublicKey) {
+		return false
+	}
+
+	for i := range decoded {
+		if decoded[i] != keypair.PublicKey[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// DerivePublicKeyFromSecret extracts the public key from a secret key.
+// In ML-KEM-768, the public key is embedded in the secret key.
+// Returns an error if the secret key has an invalid size.
+func DerivePublicKeyFromSecret(secretKey []byte) ([]byte, error) {
+	if len(secretKey) != MLKEMSecretKeySize {
+		return nil, ErrInvalidSecretKeySize
+	}
+
+	// Public key is embedded at offset 1152 in circl's ML-KEM-768 secret key format
+	publicKey := make([]byte, MLKEMPublicKeySize)
+	copy(publicKey, secretKey[PublicKeyOffset:PublicKeyOffset+MLKEMPublicKeySize])
+	return publicKey, nil
+}
+
 // Decapsulate decapsulates a shared secret from the encapsulated key.
 func (k *Keypair) Decapsulate(encapsulatedKey []byte) ([]byte, error) {
 	if len(encapsulatedKey) != MLKEMCiphertextSize {

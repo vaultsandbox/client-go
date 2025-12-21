@@ -140,6 +140,121 @@ func TestDecodeBase64_URLSafeChars(t *testing.T) {
 	}
 }
 
+func TestToBase64_StandardEncoding(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     []byte
+		expected string
+	}{
+		{"empty", []byte{}, ""},
+		{"hello", []byte("hello"), "aGVsbG8="},
+		{"hello world", []byte("hello world"), "aGVsbG8gd29ybGQ="},
+		{"one byte", []byte("a"), "YQ=="},
+		{"two bytes", []byte("ab"), "YWI="},
+		{"three bytes", []byte("abc"), "YWJj"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := ToBase64(tt.data)
+			if encoded != tt.expected {
+				t.Errorf("ToBase64() = %s, want %s", encoded, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFromBase64_StandardDecoding(t *testing.T) {
+	tests := []struct {
+		name     string
+		encoded  string
+		expected []byte
+	}{
+		{"empty", "", []byte{}},
+		{"hello", "aGVsbG8=", []byte("hello")},
+		{"hello world", "aGVsbG8gd29ybGQ=", []byte("hello world")},
+		{"one byte", "YQ==", []byte("a")},
+		{"two bytes", "YWI=", []byte("ab")},
+		{"three bytes", "YWJj", []byte("abc")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decoded, err := FromBase64(tt.encoded)
+			if err != nil {
+				t.Fatalf("FromBase64() error = %v", err)
+			}
+			if !bytes.Equal(decoded, tt.expected) {
+				t.Errorf("FromBase64() = %v, want %v", decoded, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBase64StandardRoundTrip(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{"empty", []byte{}},
+		{"simple", []byte("hello")},
+		{"binary", []byte{0x00, 0xff, 0x7f, 0x80}},
+		{"large", make([]byte, 1000)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := ToBase64(tt.data)
+			decoded, err := FromBase64(encoded)
+			if err != nil {
+				t.Fatalf("FromBase64() error = %v", err)
+			}
+			if !bytes.Equal(decoded, tt.data) {
+				t.Errorf("round trip failed: got %v, want %v", decoded, tt.data)
+			}
+		})
+	}
+}
+
+func TestFromBase64_InvalidInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		encoded string
+	}{
+		{"invalid chars", "!!!invalid!!!"},
+		{"url-safe chars", "-_8"}, // URL-safe chars don't work with standard base64
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := FromBase64(tt.encoded)
+			if err == nil {
+				t.Error("expected error for invalid input")
+			}
+		})
+	}
+}
+
+func TestToBase64_WithPadding(t *testing.T) {
+	// Standard base64 SHOULD include padding
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{"one byte", []byte("a")},
+		{"two bytes", []byte("ab")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := ToBase64(tt.data)
+			if !strings.Contains(encoded, "=") {
+				t.Errorf("encoded string should contain padding: %s", encoded)
+			}
+		})
+	}
+}
+
 func BenchmarkToBase64URL(b *testing.B) {
 	data := make([]byte, 1000)
 	for i := range data {

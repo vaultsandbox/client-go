@@ -303,6 +303,134 @@ func TestVerifySignature_InvalidSignature(t *testing.T) {
 	}
 }
 
+func TestVerifySignatureSafe(t *testing.T) {
+	t.Run("returns false for invalid payload", func(t *testing.T) {
+		payload := &EncryptedPayload{
+			V:           1,
+			CtKem:       "!!!invalid!!!",
+			Nonce:       ToBase64URL([]byte("nonce")),
+			AAD:         ToBase64URL([]byte("aad")),
+			Ciphertext:  ToBase64URL([]byte("ct")),
+			ServerSigPk: ToBase64URL(make([]byte, MLDSAPublicKeySize)),
+			Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+		}
+		if VerifySignatureSafe(payload) {
+			t.Error("VerifySignatureSafe() returned true for invalid payload")
+		}
+	})
+
+	t.Run("returns false for invalid signature", func(t *testing.T) {
+		pub, _, err := mldsa65.GenerateKey(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pubBytes, _ := pub.MarshalBinary()
+
+		payload := &EncryptedPayload{
+			V: 1,
+			Algs: AlgorithmSuite{
+				KEM:  "ML-KEM-768",
+				Sig:  "ML-DSA-65",
+				AEAD: "AES-256-GCM",
+				KDF:  "HKDF-SHA-512",
+			},
+			CtKem:       ToBase64URL([]byte("kem")),
+			Nonce:       ToBase64URL([]byte("nonce")),
+			AAD:         ToBase64URL([]byte("aad")),
+			Ciphertext:  ToBase64URL([]byte("ct")),
+			ServerSigPk: ToBase64URL(pubBytes),
+			Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+		}
+		if VerifySignatureSafe(payload) {
+			t.Error("VerifySignatureSafe() returned true for invalid signature")
+		}
+	})
+
+	t.Run("returns true for valid signature", func(t *testing.T) {
+		// Generate keypair
+		pub, priv, err := mldsa65.GenerateKey(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pubBytes, _ := pub.MarshalBinary()
+
+		// Build payload
+		payload := &EncryptedPayload{
+			V: 1,
+			Algs: AlgorithmSuite{
+				KEM:  "ML-KEM-768",
+				Sig:  "ML-DSA-65",
+				AEAD: "AES-256-GCM",
+				KDF:  "HKDF-SHA-512",
+			},
+			CtKem:       ToBase64URL([]byte("kem")),
+			Nonce:       ToBase64URL([]byte("nonce")),
+			AAD:         ToBase64URL([]byte("aad")),
+			Ciphertext:  ToBase64URL([]byte("ct")),
+			ServerSigPk: ToBase64URL(pubBytes),
+		}
+
+		// Build transcript and sign it
+		transcript := buildTranscript(
+			payload.V,
+			payload.Algs,
+			[]byte("kem"),
+			[]byte("nonce"),
+			[]byte("aad"),
+			[]byte("ct"),
+			pubBytes,
+		)
+		sig := make([]byte, mldsa65.SignatureSize)
+		mldsa65.SignTo(priv, transcript, nil, false, sig)
+		payload.Sig = ToBase64URL(sig)
+
+		if !VerifySignatureSafe(payload) {
+			t.Error("VerifySignatureSafe() returned false for valid signature")
+		}
+	})
+}
+
+func TestValidateServerPublicKey(t *testing.T) {
+	t.Run("valid public key", func(t *testing.T) {
+		pub, _, err := mldsa65.GenerateKey(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pubBytes, _ := pub.MarshalBinary()
+		pubB64 := ToBase64URL(pubBytes)
+
+		if !ValidateServerPublicKey(pubB64) {
+			t.Error("ValidateServerPublicKey() returned false for valid public key")
+		}
+	})
+
+	t.Run("invalid base64", func(t *testing.T) {
+		if ValidateServerPublicKey("!!!invalid!!!") {
+			t.Error("ValidateServerPublicKey() returned true for invalid base64")
+		}
+	})
+
+	t.Run("wrong size", func(t *testing.T) {
+		wrongSize := ToBase64URL(make([]byte, 100))
+		if ValidateServerPublicKey(wrongSize) {
+			t.Error("ValidateServerPublicKey() returned true for wrong size")
+		}
+	})
+
+	t.Run("empty string", func(t *testing.T) {
+		if ValidateServerPublicKey("") {
+			t.Error("ValidateServerPublicKey() returned true for empty string")
+		}
+	})
+
+	t.Run("exact size", func(t *testing.T) {
+		exactSize := ToBase64URL(make([]byte, MLDSAPublicKeySize))
+		if !ValidateServerPublicKey(exactSize) {
+			t.Error("ValidateServerPublicKey() returned false for exact size")
+		}
+	})
+}
+
 func BenchmarkVerify(b *testing.B) {
 	pub, priv, _ := mldsa65.GenerateKey(nil)
 	pubBytes, _ := pub.MarshalBinary()

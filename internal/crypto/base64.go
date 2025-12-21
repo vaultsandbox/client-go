@@ -43,3 +43,14 @@ func DecodeBase64(s string) ([]byte, error) {
 	// Try standard base64 with padding
 	return base64.StdEncoding.DecodeString(s)
 }
+
+// ToBase64 encodes bytes to standard base64 with padding.
+// Use this for attachment content and non-URL contexts.
+func ToBase64(data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
+}
+
+// FromBase64 decodes standard base64 (with padding) to bytes.
+func FromBase64(s string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(s)
+}

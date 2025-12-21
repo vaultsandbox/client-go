@@ -174,6 +174,119 @@ func TestPublicKeyOffset(t *testing.T) {
 	}
 }
 
+func TestValidateKeypair(t *testing.T) {
+	t.Run("valid keypair", func(t *testing.T) {
+		kp, err := GenerateKeypair()
+		if err != nil {
+			t.Fatalf("GenerateKeypair() error = %v", err)
+		}
+		if !ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned false for valid keypair")
+		}
+	})
+
+	t.Run("nil keypair", func(t *testing.T) {
+		if ValidateKeypair(nil) {
+			t.Error("ValidateKeypair() returned true for nil keypair")
+		}
+	})
+
+	t.Run("nil public key", func(t *testing.T) {
+		kp := &Keypair{
+			SecretKey:    make([]byte, MLKEMSecretKeySize),
+			PublicKeyB64: "test",
+		}
+		if ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned true for nil public key")
+		}
+	})
+
+	t.Run("nil secret key", func(t *testing.T) {
+		kp := &Keypair{
+			PublicKey:    make([]byte, MLKEMPublicKeySize),
+			PublicKeyB64: "test",
+		}
+		if ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned true for nil secret key")
+		}
+	})
+
+	t.Run("empty public key b64", func(t *testing.T) {
+		kp := &Keypair{
+			PublicKey: make([]byte, MLKEMPublicKeySize),
+			SecretKey: make([]byte, MLKEMSecretKeySize),
+		}
+		if ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned true for empty PublicKeyB64")
+		}
+	})
+
+	t.Run("wrong public key size", func(t *testing.T) {
+		kp := &Keypair{
+			PublicKey:    make([]byte, 100),
+			SecretKey:    make([]byte, MLKEMSecretKeySize),
+			PublicKeyB64: "test",
+		}
+		if ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned true for wrong public key size")
+		}
+	})
+
+	t.Run("wrong secret key size", func(t *testing.T) {
+		kp := &Keypair{
+			PublicKey:    make([]byte, MLKEMPublicKeySize),
+			SecretKey:    make([]byte, 100),
+			PublicKeyB64: "test",
+		}
+		if ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned true for wrong secret key size")
+		}
+	})
+
+	t.Run("mismatched public key b64", func(t *testing.T) {
+		kp, err := GenerateKeypair()
+		if err != nil {
+			t.Fatalf("GenerateKeypair() error = %v", err)
+		}
+		kp.PublicKeyB64 = ToBase64URL(make([]byte, MLKEMPublicKeySize)) // Different key
+		if ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned true for mismatched PublicKeyB64")
+		}
+	})
+}
+
+func TestDerivePublicKeyFromSecret(t *testing.T) {
+	t.Run("valid secret key", func(t *testing.T) {
+		kp, err := GenerateKeypair()
+		if err != nil {
+			t.Fatalf("GenerateKeypair() error = %v", err)
+		}
+
+		derivedPK, err := DerivePublicKeyFromSecret(kp.SecretKey)
+		if err != nil {
+			t.Fatalf("DerivePublicKeyFromSecret() error = %v", err)
+		}
+
+		if !bytes.Equal(derivedPK, kp.PublicKey) {
+			t.Error("Derived public key does not match original")
+		}
+	})
+
+	t.Run("invalid secret key size", func(t *testing.T) {
+		_, err := DerivePublicKeyFromSecret([]byte("too short"))
+		if !errors.Is(err, ErrInvalidSecretKeySize) {
+			t.Errorf("expected ErrInvalidSecretKeySize, got %v", err)
+		}
+	})
+
+	t.Run("empty secret key", func(t *testing.T) {
+		_, err := DerivePublicKeyFromSecret([]byte{})
+		if !errors.Is(err, ErrInvalidSecretKeySize) {
+			t.Errorf("expected ErrInvalidSecretKeySize, got %v", err)
+		}
+	})
+}
+
 func BenchmarkGenerateKeypair(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, err := GenerateKeypair()
