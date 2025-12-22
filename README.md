@@ -685,7 +685,7 @@ The following sentinel errors may be returned:
 
 **Error Structs:**
 
-- **`APIError`** — HTTP API errors with `StatusCode`, `Message`, and `RequestID` fields
+- **`APIError`** — HTTP API errors with `StatusCode`, `Message`, `RequestID`, and `ResourceType` fields
 - **`NetworkError`** — Network-level failures with `Err`, `URL`, and `Attempt` fields
 - **`TimeoutError`** — Operation timeouts with `Operation` and `Timeout` fields
 - **`DecryptionError`** — Decryption failures with `Stage` and `Message` fields

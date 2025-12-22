@@ -33,6 +33,14 @@ var (
     ErrRateLimited        error
 )
 
+// Resource type for distinguishing 404 errors
+type ResourceType string
+const (
+    ResourceUnknown ResourceType
+    ResourceInbox   ResourceType
+    ResourceEmail   ResourceType
+)
+
 // Error types for errors.As() checks
 type APIError struct { ... }
 type NetworkError struct { ... }
@@ -321,15 +329,48 @@ if errors.Is(err, vaultsandbox.ErrRateLimited) {
 
 Error types provide detailed information about failures. Use `errors.As()` to extract them.
 
+### ResourceType
+
+Indicates which type of resource an error relates to. Used by `APIError` to distinguish between inbox and email errors for 404 responses.
+
+```go
+type ResourceType string
+
+const (
+    ResourceUnknown ResourceType = ""      // Resource type not specified
+    ResourceInbox   ResourceType = "inbox" // Error relates to an inbox
+    ResourceEmail   ResourceType = "email" // Error relates to an email
+)
+```
+
+This enables precise error matching with `errors.Is()`:
+
+```go
+_, err := inbox.GetEmail(ctx, "non-existent-id")
+
+var apiErr *vaultsandbox.APIError
+if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+    switch apiErr.ResourceType {
+    case vaultsandbox.ResourceEmail:
+        log.Println("Email not found")
+    case vaultsandbox.ResourceInbox:
+        log.Println("Inbox not found")
+    }
+}
+```
+
+---
+
 ### APIError
 
 Represents an HTTP error from the VaultSandbox API.
 
 ```go
 type APIError struct {
-    StatusCode int
-    Message    string
-    RequestID  string
+    StatusCode   int
+    Message      string
+    RequestID    string
+    ResourceType ResourceType
 }
 ```
 
@@ -338,6 +379,7 @@ type APIError struct {
 - `StatusCode`: HTTP status code from the API
 - `Message`: Error message from the server
 - `RequestID`: Request ID for debugging (if returned by server)
+- `ResourceType`: The type of resource the error relates to (`ResourceInbox`, `ResourceEmail`, or `ResourceUnknown`)
 
 #### Example
 
