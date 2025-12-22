@@ -127,6 +127,9 @@ func (c *Client) DeleteEmailNew(ctx context.Context, emailAddress, emailID strin
 // OpenEventStream opens a Server-Sent Events connection for real-time
 // email notifications. The caller is responsible for reading events from
 // the response body and closing it when done.
+//
+// This method uses a dedicated HTTP client without a timeout to support
+// long-lived SSE connections. Use the context for cancellation control.
 func (c *Client) OpenEventStream(ctx context.Context, inboxHashes []string) (*http.Response, error) {
 	path := fmt.Sprintf("/api/events?inboxes=%s", url.QueryEscape(strings.Join(inboxHashes, ",")))
 
@@ -139,7 +142,9 @@ func (c *Client) OpenEventStream(ctx context.Context, inboxHashes []string) (*ht
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
 
-	return c.httpClient.Do(req)
+	// Use a client without timeout for long-lived SSE connections
+	sseClient := &http.Client{Timeout: 0}
+	return sseClient.Do(req)
 }
 
 // CreateInboxParams contains parameters for creating an inbox.
