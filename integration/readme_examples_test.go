@@ -1269,10 +1269,7 @@ func TestREADME_ClientMethods(t *testing.T) {
 		t.Error("GetInbox() returned wrong inbox")
 	}
 
-	// README example: DeleteAllInboxes
-	count, err := client.DeleteAllInboxes(ctx)
-	if err != nil {
-		t.Errorf("DeleteAllInboxes() error = %v", err)
-	}
-	t.Logf("Deleted %d inboxes", count)
+	// Note: DeleteAllInboxes is not tested here because it would delete
+	// inboxes from other concurrent tests. The defers above clean up
+	// the inboxes created by this test.
 }

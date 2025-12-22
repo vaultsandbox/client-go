@@ -187,12 +187,13 @@ func TestIntegration_MultipleInboxes(t *testing.T) {
 		}
 	}
 
-	// Clean up - delete all at once
-	count, err := client.DeleteAllInboxes(ctx)
-	if err != nil {
-		t.Errorf("DeleteAllInboxes() error = %v", err)
+	// Clean up - delete only inboxes created by this test
+	for _, inbox := range inboxes {
+		if err := inbox.Delete(ctx); err != nil {
+			t.Errorf("Delete() error = %v", err)
+		}
 	}
-	t.Logf("Deleted %d inboxes", count)
+	t.Logf("Deleted %d inboxes", len(inboxes))
 }
 
 func TestIntegration_TTLValidation(t *testing.T) {
