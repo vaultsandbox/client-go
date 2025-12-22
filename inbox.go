@@ -322,7 +322,7 @@ func (i *Inbox) decryptEmailWithContext(ctx context.Context, raw *api.RawEmail) 
 	if raw.EncryptedParsed == nil {
 		fullEmail, err := i.client.apiClient.GetEmail(ctx, i.emailAddress, raw.ID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch full email: %w", err)
+			return nil, fmt.Errorf("fetch full email: %w", wrapError(err))
 		}
 		emailData = fullEmail
 	}

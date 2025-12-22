@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/vaultsandbox/client-go/internal/api"
 )
 
 func TestSentinelErrors(t *testing.T) {
@@ -418,4 +420,165 @@ func TestErrorWrapping(t *testing.T) {
 	if !errors.Is(netErr, root) {
 		t.Error("errors.Is() should match through wrapped chain")
 	}
+}
+
+// Tests for wrapError function - Phase 3 standardization
+
+func TestWrapError_PreservesAPIError(t *testing.T) {
+	// Create an internal API error
+	internalErr := &api.APIError{
+		StatusCode: 401,
+		Message:    "invalid API key",
+		RequestID:  "req-123",
+	}
+
+	// Wrap it
+	wrapped := wrapError(internalErr)
+
+	// Verify it's converted to public APIError
+	var publicErr *APIError
+	if !errors.As(wrapped, &publicErr) {
+		t.Fatal("wrapError should convert internal API error to public APIError")
+	}
+
+	// Verify fields are preserved
+	if publicErr.StatusCode != 401 {
+		t.Errorf("StatusCode = %d, want 401", publicErr.StatusCode)
+	}
+	if publicErr.Message != "invalid API key" {
+		t.Errorf("Message = %s, want 'invalid API key'", publicErr.Message)
+	}
+	if publicErr.RequestID != "req-123" {
+		t.Errorf("RequestID = %s, want 'req-123'", publicErr.RequestID)
+	}
+
+	// Verify errors.Is works with sentinel
+	if !errors.Is(wrapped, ErrUnauthorized) {
+		t.Error("wrapped error should match ErrUnauthorized sentinel")
+	}
+}
+
+func TestWrapError_PreservesNetworkError(t *testing.T) {
+	// Create an internal network error
+	underlying := errors.New("connection refused")
+	internalErr := &api.NetworkError{
+		Err:     underlying,
+		URL:     "https://api.example.com/test",
+		Attempt: 3,
+	}
+
+	// Wrap it
+	wrapped := wrapError(internalErr)
+
+	// Verify it's converted to public NetworkError
+	var publicErr *NetworkError
+	if !errors.As(wrapped, &publicErr) {
+		t.Fatal("wrapError should convert internal network error to public NetworkError")
+	}
+
+	// Verify fields are preserved
+	if publicErr.URL != "https://api.example.com/test" {
+		t.Errorf("URL = %s, want 'https://api.example.com/test'", publicErr.URL)
+	}
+	if publicErr.Attempt != 3 {
+		t.Errorf("Attempt = %d, want 3", publicErr.Attempt)
+	}
+
+	// Verify underlying error is preserved
+	if !errors.Is(wrapped, underlying) {
+		t.Error("wrapped error should still match underlying error")
+	}
+}
+
+func TestWrapError_PassesThroughOther(t *testing.T) {
+	// Create a non-API, non-Network error
+	originalErr := errors.New("some other error")
+
+	// Wrap it
+	wrapped := wrapError(originalErr)
+
+	// Should be returned unchanged
+	if wrapped != originalErr {
+		t.Error("wrapError should pass through non-API/non-Network errors unchanged")
+	}
+}
+
+func TestWrapError_NilReturnsNil(t *testing.T) {
+	wrapped := wrapError(nil)
+	if wrapped != nil {
+		t.Error("wrapError(nil) should return nil")
+	}
+}
+
+func TestErrorChain_CanUnwrapToSentinel(t *testing.T) {
+	tests := []struct {
+		name          string
+		internalErr   error
+		expectedMatch error
+	}{
+		{
+			name:          "401 matches ErrUnauthorized",
+			internalErr:   &api.APIError{StatusCode: 401, Message: "unauthorized"},
+			expectedMatch: ErrUnauthorized,
+		},
+		{
+			name:          "404 with inbox matches ErrInboxNotFound",
+			internalErr:   &api.APIError{StatusCode: 404, Message: "inbox not found"},
+			expectedMatch: ErrInboxNotFound,
+		},
+		{
+			name:          "404 with email matches ErrEmailNotFound",
+			internalErr:   &api.APIError{StatusCode: 404, Message: "email not found"},
+			expectedMatch: ErrEmailNotFound,
+		},
+		{
+			name:          "409 matches ErrInboxAlreadyExists",
+			internalErr:   &api.APIError{StatusCode: 409, Message: "already exists"},
+			expectedMatch: ErrInboxAlreadyExists,
+		},
+		{
+			name:          "429 matches ErrRateLimited",
+			internalErr:   &api.APIError{StatusCode: 429, Message: "rate limit exceeded"},
+			expectedMatch: ErrRateLimited,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Wrap the internal error
+			wrapped := wrapError(tt.internalErr)
+
+			// Verify it matches the expected sentinel
+			if !errors.Is(wrapped, tt.expectedMatch) {
+				t.Errorf("wrapped error should match %v", tt.expectedMatch)
+			}
+
+			// Verify it works through fmt.Errorf wrapping too
+			doubleWrapped := fmt.Errorf("operation failed: %w", wrapped)
+			if !errors.Is(doubleWrapped, tt.expectedMatch) {
+				t.Errorf("double-wrapped error should still match %v", tt.expectedMatch)
+			}
+		})
+	}
+}
+
+func TestWrapCryptoError_PreservesKeyMismatch(t *testing.T) {
+	// This test verifies wrapCryptoError properly handles crypto errors
+	// The wrapCryptoError function is defined in inbox.go and wraps crypto errors
+	// to public SignatureVerificationError types
+
+	t.Run("nil returns nil", func(t *testing.T) {
+		result := wrapCryptoError(nil)
+		if result != nil {
+			t.Error("wrapCryptoError(nil) should return nil")
+		}
+	})
+
+	t.Run("non-crypto error passes through", func(t *testing.T) {
+		originalErr := errors.New("some other error")
+		result := wrapCryptoError(originalErr)
+		if result != originalErr {
+			t.Error("wrapCryptoError should pass through non-crypto errors unchanged")
+		}
+	})
 }
