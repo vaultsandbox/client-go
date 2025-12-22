@@ -1,13 +1,17 @@
 package vaultsandbox
 
 import (
-	"context"
 	"time"
 
 	"github.com/vaultsandbox/client-go/authresults"
 )
 
 // Email represents a decrypted email.
+// Email is a pure data struct with no methods that require API calls.
+// Use Inbox methods to perform operations on emails:
+//   - inbox.GetRawEmail(ctx, emailID) — Gets raw email source
+//   - inbox.MarkEmailAsRead(ctx, emailID) — Marks email as read
+//   - inbox.DeleteEmail(ctx, emailID) — Deletes an email
 type Email struct {
 	ID          string
 	From        string
@@ -23,8 +27,6 @@ type Email struct {
 	Links       []string
 	AuthResults *authresults.AuthResults
 	IsRead      bool
-
-	inbox *Inbox
 }
 
 // Attachment represents an email attachment.
@@ -36,27 +38,4 @@ type Attachment struct {
 	ContentDisposition string
 	Content            []byte
 	Checksum           string
-}
-
-// GetRaw fetches the raw email content.
-func (e *Email) GetRaw(ctx context.Context) (string, error) {
-	raw, err := e.inbox.client.apiClient.GetEmailRaw(ctx, e.inbox.emailAddress, e.ID)
-	if err != nil {
-		return "", wrapError(err)
-	}
-	return raw, nil
-}
-
-// MarkAsRead marks the email as read.
-func (e *Email) MarkAsRead(ctx context.Context) error {
-	if err := e.inbox.client.apiClient.MarkEmailAsRead(ctx, e.inbox.emailAddress, e.ID); err != nil {
-		return wrapError(err)
-	}
-	e.IsRead = true
-	return nil
-}
-
-// Delete deletes the email.
-func (e *Email) Delete(ctx context.Context) error {
-	return wrapError(e.inbox.client.apiClient.DeleteEmail(ctx, e.inbox.emailAddress, e.ID))
 }

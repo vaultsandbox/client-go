@@ -45,7 +45,7 @@ subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
 	}
 
 	// Mark as processed
-	if err := email.MarkAsRead(ctx); err != nil {
+	if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
 		log.Println("Failed to mark as read:", err)
 	}
 })
@@ -270,7 +270,7 @@ func processEmailPipeline(ctx context.Context, inbox *vaultsandbox.Inbox) vaults
 		}
 
 		// Step 5: Cleanup
-		if err := email.Delete(ctx); err != nil {
+		if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
 			fmt.Println("Error deleting:", err)
 			return
 		}

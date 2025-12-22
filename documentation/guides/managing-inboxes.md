@@ -243,7 +243,7 @@ email, err := inbox.GetEmail(ctx, "email_abc123")
 if err != nil {
 	log.Fatal(err)
 }
-if err := email.Delete(ctx); err != nil {
+if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
 	log.Fatal(err)
 }
 ```
@@ -258,7 +258,7 @@ if err != nil {
 
 // Delete all emails sequentially
 for _, email := range emails {
-	if err := email.Delete(ctx); err != nil {
+	if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
 		log.Printf("Failed to delete email %s: %v", email.ID, err)
 	}
 }
@@ -270,7 +270,7 @@ g, ctx := errgroup.WithContext(ctx)
 for _, email := range emails {
 	email := email // capture loop variable
 	g.Go(func() error {
-		return email.Delete(ctx)
+		return inbox.DeleteEmail(ctx, email.ID)
 	})
 }
 if err := g.Wait(); err != nil {
@@ -290,7 +290,7 @@ if err != nil {
 cutoff := time.Now().Add(-24 * time.Hour)
 for _, email := range emails {
 	if email.ReceivedAt.Before(cutoff) {
-		if err := email.Delete(ctx); err != nil {
+		if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
 			log.Printf("Failed to delete email %s: %v", email.ID, err)
 		}
 	}
@@ -477,7 +477,7 @@ emails, err := inbox.WaitForEmailCount(ctx, 2,
 
 ```go
 // Fetch the original raw email content (RFC 5322 format)
-rawContent, err := email.GetRaw(ctx)
+rawContent, err := inbox.GetRawEmail(ctx, email.ID)
 if err != nil {
 	log.Fatal(err)
 }
@@ -487,10 +487,10 @@ fmt.Println("Raw email:", rawContent)
 ### Mark Email as Read
 
 ```go
-if err := email.MarkAsRead(ctx); err != nil {
+if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
 	log.Fatal(err)
 }
-fmt.Println("Email marked as read:", email.IsRead) // true
+fmt.Println("Email marked as read")
 ```
 
 ### Access Email Fields

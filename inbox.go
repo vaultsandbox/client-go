@@ -208,6 +208,25 @@ func (i *Inbox) Delete(ctx context.Context) error {
 	return i.client.DeleteInbox(ctx, i.emailAddress)
 }
 
+// GetRawEmail fetches the raw email content for a specific email.
+func (i *Inbox) GetRawEmail(ctx context.Context, emailID string) (string, error) {
+	raw, err := i.client.apiClient.GetEmailRaw(ctx, i.emailAddress, emailID)
+	if err != nil {
+		return "", wrapError(err)
+	}
+	return raw, nil
+}
+
+// MarkEmailAsRead marks a specific email as read.
+func (i *Inbox) MarkEmailAsRead(ctx context.Context, emailID string) error {
+	return wrapError(i.client.apiClient.MarkEmailAsRead(ctx, i.emailAddress, emailID))
+}
+
+// DeleteEmail deletes a specific email.
+func (i *Inbox) DeleteEmail(ctx context.Context, emailID string) error {
+	return wrapError(i.client.apiClient.DeleteEmail(ctx, i.emailAddress, emailID))
+}
+
 // Export returns exportable inbox data including private key.
 func (i *Inbox) Export() *ExportedInbox {
 	return &ExportedInbox{
@@ -399,7 +418,6 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 		Attachments: attachments,
 		Links:       d.Links,
 		IsRead:      d.IsRead,
-		inbox:       i,
 	}
 
 	// Unmarshal AuthResults if present

@@ -699,7 +699,7 @@ func completeInboxExample() error {
     fmt.Printf("Body: %s\n", email.Text)
 
     // Mark as read
-    err = email.MarkAsRead(ctx)
+    err = inbox.MarkEmailAsRead(ctx, email.ID)
     if err != nil {
         return err
     }

@@ -515,7 +515,7 @@ fmt.Printf("Received %d emails\n", len(emails))
 
 ```go
 // Get raw email (original MIME content)
-rawContent, err := email.GetRaw(ctx)
+rawContent, err := inbox.GetRawEmail(ctx, email.ID)
 if err != nil {
 	log.Fatal(err)
 }
@@ -525,11 +525,10 @@ fmt.Println(rawContent)
 ### Marking Emails as Read
 
 ```go
-err := email.MarkAsRead(ctx)
+err := inbox.MarkEmailAsRead(ctx, email.ID)
 if err != nil {
 	log.Fatal(err)
 }
-fmt.Printf("Email is read: %v\n", email.IsRead)
 ```
 
 ### Deleting Emails
@@ -540,7 +539,7 @@ email, err := inbox.GetEmail(ctx, "email-id-123")
 if err != nil {
 	log.Fatal(err)
 }
-err = email.Delete(ctx)
+err = inbox.DeleteEmail(ctx, email.ID)
 ```
 
 ### Deleting Inbox

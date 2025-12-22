@@ -149,11 +149,13 @@ Whether the email has been marked as read.
 ```go
 fmt.Println(email.IsRead) // false
 
-if err := email.MarkAsRead(ctx); err != nil {
+if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
     log.Fatal(err)
 }
 
-fmt.Println(email.IsRead) // true
+// Refetch to see updated status
+updated, _ := inbox.GetEmail(ctx, email.ID)
+fmt.Println(updated.IsRead) // true
 ```
 
 ### Links
@@ -261,34 +263,38 @@ messageID := email.Headers["message-id"]
 contentType := email.Headers["content-type"]
 ```
 
-## Email Methods
+## Email Operations
 
-### MarkAsRead
+`Email` is a pure data struct with no methods. Use `Inbox` methods to perform operations on emails:
 
-Mark the email as read.
+- `inbox.GetRawEmail(ctx, emailID)` — Gets raw email source (RFC 5322 format)
+- `inbox.MarkEmailAsRead(ctx, emailID)` — Marks email as read
+- `inbox.DeleteEmail(ctx, emailID)` — Deletes an email
+
+### MarkEmailAsRead
+
+Mark an email as read.
 
 ```go
-func (e *Email) MarkAsRead(ctx context.Context) error
+func (i *Inbox) MarkEmailAsRead(ctx context.Context, emailID string) error
 ```
 
 ```go
-if err := email.MarkAsRead(ctx); err != nil {
+if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
     log.Fatal(err)
 }
-
-fmt.Println(email.IsRead) // true
 ```
 
-### Delete
+### DeleteEmail
 
-Delete the email from the inbox.
+Delete an email from the inbox.
 
 ```go
-func (e *Email) Delete(ctx context.Context) error
+func (i *Inbox) DeleteEmail(ctx context.Context, emailID string) error
 ```
 
 ```go
-if err := email.Delete(ctx); err != nil {
+if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
     log.Fatal(err)
 }
 
@@ -299,16 +305,16 @@ if errors.Is(err, vaultsandbox.ErrEmailNotFound) {
 }
 ```
 
-### GetRaw
+### GetRawEmail
 
 Get the raw email source (decrypted MIME).
 
 ```go
-func (e *Email) GetRaw(ctx context.Context) (string, error)
+func (i *Inbox) GetRawEmail(ctx context.Context, emailID string) (string, error)
 ```
 
 ```go
-raw, err := email.GetRaw(ctx)
+raw, err := inbox.GetRawEmail(ctx, email.ID)
 if err != nil {
     log.Fatal(err)
 }
@@ -659,7 +665,7 @@ if email.Text == "" && email.HTML == "" {
     fmt.Println("Email has no content")
     fmt.Printf("Headers: %v\n", email.Headers)
 
-    raw, err := email.GetRaw(ctx)
+    raw, err := inbox.GetRawEmail(ctx, email.ID)
     if err == nil {
         fmt.Printf("Raw: %s\n", raw)
     }

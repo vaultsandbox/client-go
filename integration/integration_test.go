@@ -660,15 +660,15 @@ func TestIntegration_EmailOperations(t *testing.T) {
 		t.Error("email should not be read initially")
 	}
 
-	if err := email.MarkAsRead(ctx); err != nil {
-		t.Errorf("MarkAsRead() error = %v", err)
+	if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
+		t.Errorf("MarkEmailAsRead() error = %v", err)
 	}
 	t.Log("Marked email as read")
 
 	// Test get raw email
-	rawEmail, err := email.GetRaw(ctx)
+	rawEmail, err := inbox.GetRawEmail(ctx, email.ID)
 	if err != nil {
-		t.Errorf("GetRaw() error = %v", err)
+		t.Errorf("GetRawEmail() error = %v", err)
 	}
 	if rawEmail == "" {
 		t.Error("raw email is empty")
@@ -676,8 +676,8 @@ func TestIntegration_EmailOperations(t *testing.T) {
 	t.Logf("Got raw email: %d bytes", len(rawEmail))
 
 	// Test delete
-	if err := email.Delete(ctx); err != nil {
-		t.Errorf("Delete() error = %v", err)
+	if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
+		t.Errorf("DeleteEmail() error = %v", err)
 	}
 	t.Log("Deleted email")
 

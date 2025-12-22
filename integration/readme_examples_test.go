@@ -1138,16 +1138,16 @@ func TestREADME_EmailMethods(t *testing.T) {
 
 	// README example: Mark as read
 	// Note: This may fail if the email was already marked as read during fetch
-	if err := email.MarkAsRead(ctx); err != nil {
-		t.Logf("MarkAsRead() error (may be expected): %v", err)
+	if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
+		t.Logf("MarkEmailAsRead() error (may be expected): %v", err)
 	} else {
 		t.Log("Marked email as read")
 	}
 
 	// README example: Get raw email (RFC 5322 format)
-	rawEmail, err := email.GetRaw(ctx)
+	rawEmail, err := inbox.GetRawEmail(ctx, email.ID)
 	if err != nil {
-		t.Logf("GetRaw() error (may be expected): %v", err)
+		t.Logf("GetRawEmail() error (may be expected): %v", err)
 	} else if rawEmail == "" {
 		t.Log("raw email is empty")
 	} else {
@@ -1159,8 +1159,8 @@ func TestREADME_EmailMethods(t *testing.T) {
 	}
 
 	// README example: Delete email
-	if err := email.Delete(ctx); err != nil {
-		t.Logf("Delete() error (may be expected): %v", err)
+	if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
+		t.Logf("DeleteEmail() error (may be expected): %v", err)
 	} else {
 		t.Log("Deleted email")
 

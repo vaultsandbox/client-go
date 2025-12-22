@@ -744,38 +744,40 @@ defer subscription.Unsubscribe()
 
 **Returns**: A `Subscription` that can be used to unsubscribe.
 
-## Email Methods
+## Email Operations
 
-### GetRaw()
+`Email` is a pure data struct with no methods. Use `Inbox` methods to perform operations on emails.
+
+### GetRawEmail()
 
 Fetch the raw email content (RFC 5322 format):
 
 ```go
-raw, err := email.GetRaw(ctx)
+raw, err := inbox.GetRawEmail(ctx, email.ID)
 fmt.Println(raw)
 ```
 
-**Signature**: `GetRaw(ctx context.Context) (string, error)`
+**Signature**: `GetRawEmail(ctx context.Context, emailID string) (string, error)`
 
-### MarkAsRead()
+### MarkEmailAsRead()
 
-Mark the email as read:
-
-```go
-err := email.MarkAsRead(ctx)
-```
-
-**Signature**: `MarkAsRead(ctx context.Context) error`
-
-### Delete()
-
-Delete the email:
+Mark an email as read:
 
 ```go
-err := email.Delete(ctx)
+err := inbox.MarkEmailAsRead(ctx, email.ID)
 ```
 
-**Signature**: `Delete(ctx context.Context) error`
+**Signature**: `MarkEmailAsRead(ctx context.Context, emailID string) error`
+
+### DeleteEmail()
+
+Delete an email:
+
+```go
+err := inbox.DeleteEmail(ctx, email.ID)
+```
+
+**Signature**: `DeleteEmail(ctx context.Context, emailID string) error`
 
 ## Types
 

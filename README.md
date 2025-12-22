@@ -571,11 +571,11 @@ type Email struct {
 }
 ```
 
-#### Methods
+`Email` is a pure data struct with no methods. Use `Inbox` methods to perform operations on emails:
 
-- `MarkAsRead(ctx) error` — Marks this email as read
-- `Delete(ctx) error` — Deletes this email
-- `GetRaw(ctx) (string, error)` — Gets raw email source (RFC 5322 format)
+- `inbox.GetRawEmail(ctx, emailID)` — Gets raw email source
+- `inbox.MarkEmailAsRead(ctx, emailID)` — Marks email as read
+- `inbox.DeleteEmail(ctx, emailID)` — Deletes an email
 
 ### Attachment
 

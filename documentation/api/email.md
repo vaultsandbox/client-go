@@ -219,8 +219,8 @@ if err != nil {
 }
 fmt.Printf("Read status: %v\n", email.IsRead)
 
-// Mark as read
-if err := email.MarkAsRead(ctx); err != nil {
+// Mark as read using inbox method
+if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
     log.Fatal(err)
 }
 
@@ -445,17 +445,15 @@ See the [Authentication Guide](/client-go/guides/authentication) for more detail
 
 ---
 
-## Methods
+## Operations on Emails
 
-### MarkAsRead
+`Email` is a pure data struct with no methods. Use `Inbox` methods to perform operations on emails:
 
-Marks this email as read.
+- `inbox.GetRawEmail(ctx, emailID)` — Gets raw email source (RFC 5322 format)
+- `inbox.MarkEmailAsRead(ctx, emailID)` — Marks email as read
+- `inbox.DeleteEmail(ctx, emailID)` — Deletes an email
 
-```go
-func (e *Email) MarkAsRead(ctx context.Context) error
-```
-
-#### Example
+### Example
 
 ```go
 email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
@@ -463,95 +461,28 @@ if err != nil {
     log.Fatal(err)
 }
 
-fmt.Printf("Read status: %v\n", email.IsRead) // false
-
-if err := email.MarkAsRead(ctx); err != nil {
+// Mark as read
+if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
     log.Fatal(err)
 }
 fmt.Println("Marked as read")
 
-// Verify status changed
-updated, err := inbox.GetEmail(ctx, email.ID)
+// Get raw source
+raw, err := inbox.GetRawEmail(ctx, email.ID)
 if err != nil {
     log.Fatal(err)
 }
-if !updated.IsRead {
-    t.Error("expected email to be marked as read")
-}
-```
-
----
-
-### Delete
-
-Deletes this email from the inbox.
-
-```go
-func (e *Email) Delete(ctx context.Context) error
-```
-
-#### Example
-
-```go
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
-if err != nil {
-    log.Fatal(err)
-}
-
-// Delete the email
-if err := email.Delete(ctx); err != nil {
-    log.Fatal(err)
-}
-fmt.Println("Email deleted")
-
-// Verify deletion
-emails, err := inbox.GetEmails(ctx)
-if err != nil {
-    log.Fatal(err)
-}
-for _, e := range emails {
-    if e.ID == email.ID {
-        t.Error("email should have been deleted")
-    }
-}
-```
-
----
-
-### GetRaw
-
-Gets the raw MIME source of this email (decrypted).
-
-```go
-func (e *Email) GetRaw(ctx context.Context) (string, error)
-```
-
-#### Returns
-
-`(string, error)` - Raw email source in RFC 5322 format.
-
-#### Example
-
-```go
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
-if err != nil {
-    log.Fatal(err)
-}
-
-raw, err := email.GetRaw(ctx)
-if err != nil {
-    log.Fatal(err)
-}
-
 fmt.Println("Raw MIME source:")
 fmt.Println(raw)
 
-// Save to .eml file
-filename := fmt.Sprintf("email-%s.eml", email.ID)
-if err := os.WriteFile(filename, []byte(raw), 0644); err != nil {
+// Delete email
+if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
     log.Fatal(err)
 }
+fmt.Println("Email deleted")
 ```
+
+See [Inbox API Reference](/client-go/api/inbox) for full method documentation.
 
 ---
 
@@ -816,13 +747,13 @@ func main() {
     }
 
     // Mark as read
-    if err := email.MarkAsRead(ctx); err != nil {
+    if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
         log.Fatal(err)
     }
     fmt.Println("\nMarked as read")
 
     // Get raw source
-    raw, err := email.GetRaw(ctx)
+    raw, err := inbox.GetRawEmail(ctx, email.ID)
     if err != nil {
         log.Fatal(err)
     }
