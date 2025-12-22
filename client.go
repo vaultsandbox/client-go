@@ -422,7 +422,7 @@ func (c *Client) handleSSEEvent(event *api.SSEEvent) error {
 		return err
 	}
 
-	// Call all registered callbacks
+	// Low volume expected; spawning per-email is fine.
 	for _, cb := range callbacksCopy {
 		go cb(inbox, email)
 	}

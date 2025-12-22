@@ -125,9 +125,9 @@ func (m *InboxMonitor) emitEmail(inbox *Inbox, email *Email) {
 	copy(callbacks, m.callbacks)
 	m.mu.RUnlock()
 
+	// Low volume expected; spawning per-email is fine.
 	for _, callback := range callbacks {
 		if callback != nil {
-			// Call each callback in its own goroutine to prevent blocking
 			go callback(inbox, email)
 		}
 	}
