@@ -662,7 +662,7 @@ func TestMultiInboxMonitoring(t *testing.T) {
 | **Method** | `Inbox.OnNewEmail()` | `Client.MonitorInboxes()` |
 | **Callback Type** | `func(email *Email)` | `func(inbox *Inbox, email *Email)` |
 | **Inbox Info** | Implicit (from receiver) | Passed to callback |
-| **Strategy** | Polling (fixed 2s interval) | Uses client's strategy (SSE/polling/auto) |
+| **Strategy** | Uses client's strategy (SSE/polling/auto) | Uses client's strategy (SSE/polling/auto) |
 | **Multiple Callbacks** | Create separate subscriptions | Register via `OnEmail()` |
 | **Selective Unsubscribe** | N/A (one per inbox) | Yes, per-callback |
 | **Complexity** | Simple, lightweight | More powerful, flexible |

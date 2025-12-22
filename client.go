@@ -25,6 +25,9 @@ type ServerInfo struct {
 	DefaultTTL     time.Duration
 }
 
+// emailEventCallback is an internal callback for email events.
+type emailEventCallback func(inbox *Inbox, email *Email)
+
 // Client is the main VaultSandbox client for managing inboxes.
 type Client struct {
 	apiClient  *api.Client
@@ -33,6 +36,12 @@ type Client struct {
 	inboxes    map[string]*Inbox
 	mu         sync.RWMutex
 	closed     bool
+
+	// Event handling
+	eventCallbacks map[string][]emailEventCallback // inboxHash -> callbacks
+	callbacksMu    sync.RWMutex
+	strategyCtx    context.Context
+	strategyCancel context.CancelFunc
 }
 
 // New creates a new VaultSandbox client with the given API key.
@@ -100,11 +109,22 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		strategy = delivery.NewAutoStrategy(deliveryCfg)
 	}
 
+	strategyCtx, strategyCancel := context.WithCancel(context.Background())
+
 	c := &Client{
-		apiClient:  apiClient,
-		strategy:   strategy,
-		serverInfo: serverInfo,
-		inboxes:    make(map[string]*Inbox),
+		apiClient:      apiClient,
+		strategy:       strategy,
+		serverInfo:     serverInfo,
+		inboxes:        make(map[string]*Inbox),
+		eventCallbacks: make(map[string][]emailEventCallback),
+		strategyCtx:    strategyCtx,
+		strategyCancel: strategyCancel,
+	}
+
+	// Start the strategy with an event handler
+	if err := strategy.Start(strategyCtx, nil, c.handleSSEEvent); err != nil {
+		strategyCancel()
+		return nil, fmt.Errorf("start delivery strategy: %w", err)
 	}
 
 	return c, nil
@@ -342,6 +362,79 @@ func (c *Client) MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error) {
 	return newInboxMonitor(c, inboxes), nil
 }
 
+// handleSSEEvent processes incoming SSE events from the delivery strategy.
+func (c *Client) handleSSEEvent(event *api.SSEEvent) error {
+	if event == nil {
+		return nil
+	}
+
+	c.callbacksMu.RLock()
+	callbacks := c.eventCallbacks[event.InboxID]
+	c.callbacksMu.RUnlock()
+
+	if len(callbacks) == 0 {
+		return nil
+	}
+
+	// Find the inbox
+	c.mu.RLock()
+	var inbox *Inbox
+	for _, i := range c.inboxes {
+		if i.inboxHash == event.InboxID {
+			inbox = i
+			break
+		}
+	}
+	c.mu.RUnlock()
+
+	if inbox == nil {
+		return nil
+	}
+
+	// Fetch and decrypt the email
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	email, err := inbox.GetEmail(ctx, event.EmailID)
+	if err != nil {
+		return err
+	}
+
+	// Call all registered callbacks
+	c.callbacksMu.RLock()
+	callbacksCopy := make([]emailEventCallback, len(callbacks))
+	copy(callbacksCopy, callbacks)
+	c.callbacksMu.RUnlock()
+
+	for _, cb := range callbacksCopy {
+		if cb != nil {
+			go cb(inbox, email)
+		}
+	}
+
+	return nil
+}
+
+// registerEmailCallback registers a callback for email events on a specific inbox.
+// Returns an index that can be used to unregister the callback.
+func (c *Client) registerEmailCallback(inboxHash string, callback emailEventCallback) int {
+	c.callbacksMu.Lock()
+	defer c.callbacksMu.Unlock()
+
+	c.eventCallbacks[inboxHash] = append(c.eventCallbacks[inboxHash], callback)
+	return len(c.eventCallbacks[inboxHash]) - 1
+}
+
+// unregisterEmailCallback removes a callback by setting it to nil.
+func (c *Client) unregisterEmailCallback(inboxHash string, index int) {
+	c.callbacksMu.Lock()
+	defer c.callbacksMu.Unlock()
+
+	if callbacks, ok := c.eventCallbacks[inboxHash]; ok && index < len(callbacks) {
+		callbacks[index] = nil
+	}
+}
+
 // Close closes the client and releases resources.
 func (c *Client) Close() error {
 	c.mu.Lock()
@@ -353,6 +446,11 @@ func (c *Client) Close() error {
 
 	c.closed = true
 
+	// Cancel strategy context
+	if c.strategyCancel != nil {
+		c.strategyCancel()
+	}
+
 	// Stop delivery strategy
 	if c.strategy != nil {
 		if err := c.strategy.Close(); err != nil {
@@ -360,8 +458,11 @@ func (c *Client) Close() error {
 		}
 	}
 
-	// Clear inboxes (keys are not deleted from server)
+	// Clear inboxes and callbacks
 	c.inboxes = make(map[string]*Inbox)
+	c.callbacksMu.Lock()
+	c.eventCallbacks = make(map[string][]emailEventCallback)
+	c.callbacksMu.Unlock()
 
 	return nil
 }

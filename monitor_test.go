@@ -9,7 +9,8 @@ import (
 func TestInboxMonitor_OnEmail(t *testing.T) {
 	// Create a mock client with minimal setup
 	c := &Client{
-		inboxes: make(map[string]*Inbox),
+		inboxes:        make(map[string]*Inbox),
+		eventCallbacks: make(map[string][]emailEventCallback),
 	}
 
 	// Create a mock inbox
@@ -21,10 +22,10 @@ func TestInboxMonitor_OnEmail(t *testing.T) {
 
 	// Create monitor without starting it (we'll test callback registration only)
 	monitor := &InboxMonitor{
-		client:       c,
-		inboxes:      []*Inbox{inbox},
-		callbacks:    make([]EmailCallback, 0),
-		pollInterval: time.Second,
+		client:          c,
+		inboxes:         []*Inbox{inbox},
+		callbacks:       make([]EmailCallback, 0),
+		callbackIndices: make(map[string]int),
 	}
 
 	// Track callback invocations
@@ -50,7 +51,8 @@ func TestInboxMonitor_OnEmail(t *testing.T) {
 
 func TestInboxMonitor_MultipleCallbacks(t *testing.T) {
 	c := &Client{
-		inboxes: make(map[string]*Inbox),
+		inboxes:        make(map[string]*Inbox),
+		eventCallbacks: make(map[string][]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -61,10 +63,10 @@ func TestInboxMonitor_MultipleCallbacks(t *testing.T) {
 
 	// Create monitor without starting (to avoid API calls)
 	monitor := &InboxMonitor{
-		client:       c,
-		inboxes:      []*Inbox{inbox},
-		callbacks:    make([]EmailCallback, 0),
-		pollInterval: time.Second,
+		client:          c,
+		inboxes:         []*Inbox{inbox},
+		callbacks:       make([]EmailCallback, 0),
+		callbackIndices: make(map[string]int),
 	}
 
 	var count1, count2 int
@@ -103,7 +105,8 @@ func TestInboxMonitor_MultipleCallbacks(t *testing.T) {
 
 func TestInboxMonitor_Unsubscribe(t *testing.T) {
 	c := &Client{
-		inboxes: make(map[string]*Inbox),
+		inboxes:        make(map[string]*Inbox),
+		eventCallbacks: make(map[string][]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -114,10 +117,10 @@ func TestInboxMonitor_Unsubscribe(t *testing.T) {
 
 	// Create monitor without starting (to avoid API calls)
 	monitor := &InboxMonitor{
-		client:       c,
-		inboxes:      []*Inbox{inbox},
-		callbacks:    make([]EmailCallback, 0),
-		pollInterval: time.Second,
+		client:          c,
+		inboxes:         []*Inbox{inbox},
+		callbacks:       make([]EmailCallback, 0),
+		callbackIndices: make(map[string]int),
 	}
 
 	var called bool
@@ -151,7 +154,8 @@ func TestInboxMonitor_Unsubscribe(t *testing.T) {
 
 func TestInboxMonitor_SingleSubscriptionUnsubscribe(t *testing.T) {
 	c := &Client{
-		inboxes: make(map[string]*Inbox),
+		inboxes:        make(map[string]*Inbox),
+		eventCallbacks: make(map[string][]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -162,11 +166,11 @@ func TestInboxMonitor_SingleSubscriptionUnsubscribe(t *testing.T) {
 
 	// Create monitor without starting (to avoid API calls)
 	monitor := &InboxMonitor{
-		client:        c,
-		inboxes:       []*Inbox{inbox},
-		callbacks:     make([]EmailCallback, 0),
-		subscriptions: make([]Subscription, 0),
-		pollInterval:  time.Second,
+		client:          c,
+		inboxes:         []*Inbox{inbox},
+		callbacks:       make([]EmailCallback, 0),
+		subscriptions:   make([]Subscription, 0),
+		callbackIndices: make(map[string]int),
 	}
 
 	var count1, count2 int
@@ -253,7 +257,8 @@ func TestMonitorInboxes_ClosedClient(t *testing.T) {
 
 func TestInboxMonitor_MultipleInboxes(t *testing.T) {
 	c := &Client{
-		inboxes: make(map[string]*Inbox),
+		inboxes:        make(map[string]*Inbox),
+		eventCallbacks: make(map[string][]emailEventCallback),
 	}
 
 	// Create multiple inboxes
@@ -275,10 +280,10 @@ func TestInboxMonitor_MultipleInboxes(t *testing.T) {
 
 	// Create monitor without starting it
 	monitor := &InboxMonitor{
-		client:       c,
-		inboxes:      []*Inbox{inbox1, inbox2, inbox3},
-		callbacks:    make([]EmailCallback, 0),
-		pollInterval: time.Second,
+		client:          c,
+		inboxes:         []*Inbox{inbox1, inbox2, inbox3},
+		callbacks:       make([]EmailCallback, 0),
+		callbackIndices: make(map[string]int),
 	}
 
 	// Track callback invocations per inbox
@@ -326,7 +331,8 @@ func TestInboxMonitor_MultipleInboxes(t *testing.T) {
 
 func TestInboxMonitor_UnsubscribeAll(t *testing.T) {
 	c := &Client{
-		inboxes: make(map[string]*Inbox),
+		inboxes:        make(map[string]*Inbox),
+		eventCallbacks: make(map[string][]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -337,10 +343,10 @@ func TestInboxMonitor_UnsubscribeAll(t *testing.T) {
 
 	// Create monitor without starting (to avoid API calls)
 	monitor := &InboxMonitor{
-		client:       c,
-		inboxes:      []*Inbox{inbox},
-		callbacks:    make([]EmailCallback, 0),
-		pollInterval: time.Second,
+		client:          c,
+		inboxes:         []*Inbox{inbox},
+		callbacks:       make([]EmailCallback, 0),
+		callbackIndices: make(map[string]int),
 	}
 
 	var count1, count2, count3 int
@@ -396,7 +402,8 @@ func TestInboxMonitor_UnsubscribeAll(t *testing.T) {
 
 func TestInboxMonitor_Unsubscribe_Idempotent(t *testing.T) {
 	c := &Client{
-		inboxes: make(map[string]*Inbox),
+		inboxes:        make(map[string]*Inbox),
+		eventCallbacks: make(map[string][]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -407,10 +414,10 @@ func TestInboxMonitor_Unsubscribe_Idempotent(t *testing.T) {
 
 	// Create monitor without starting
 	monitor := &InboxMonitor{
-		client:       c,
-		inboxes:      []*Inbox{inbox},
-		callbacks:    make([]EmailCallback, 0),
-		pollInterval: time.Second,
+		client:          c,
+		inboxes:         []*Inbox{inbox},
+		callbacks:       make([]EmailCallback, 0),
+		callbackIndices: make(map[string]int),
 	}
 
 	// Unsubscribe multiple times should not panic

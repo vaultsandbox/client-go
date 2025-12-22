@@ -245,6 +245,10 @@ type InboxEmailCallback func(email *Email)
 // The callback is invoked whenever a new email arrives.
 // Returns a Subscription that can be used to unsubscribe.
 //
+// This method uses the client's delivery strategy (SSE, polling, or auto)
+// for real-time email notifications. With SSE enabled, emails are delivered
+// instantly as push notifications.
+//
 // Example:
 //
 //	subscription := inbox.OnNewEmail(func(email *Email) {
@@ -252,66 +256,26 @@ type InboxEmailCallback func(email *Email)
 //	})
 //	defer subscription.Unsubscribe()
 func (i *Inbox) OnNewEmail(callback InboxEmailCallback) Subscription {
-	ctx, cancel := context.WithCancel(context.Background())
+	// Register callback with the client's event system
+	index := i.client.registerEmailCallback(i.inboxHash, func(inbox *Inbox, email *Email) {
+		callback(email)
+	})
 
-	sub := &inboxEmailSubscription{
-		cancel:       cancel,
-		inbox:        i,
-		callback:     callback,
-		pollInterval: defaultPollInterval,
+	return &inboxEmailSubscription{
+		inbox:         i,
+		callbackIndex: index,
 	}
-
-	go sub.monitor(ctx)
-
-	return sub
 }
 
 // inboxEmailSubscription implements Subscription for single inbox monitoring.
 type inboxEmailSubscription struct {
-	cancel       context.CancelFunc
-	inbox        *Inbox
-	callback     InboxEmailCallback
-	pollInterval time.Duration
+	inbox         *Inbox
+	callbackIndex int
 }
 
 func (s *inboxEmailSubscription) Unsubscribe() {
-	if s.cancel != nil {
-		s.cancel()
-	}
-}
-
-func (s *inboxEmailSubscription) monitor(ctx context.Context) {
-	ticker := time.NewTicker(s.pollInterval)
-	defer ticker.Stop()
-
-	// Track seen email IDs to detect new emails
-	seenEmails := make(map[string]struct{})
-
-	// Initial fetch to populate seen emails
-	if emails, err := s.inbox.GetEmails(ctx); err == nil {
-		for _, email := range emails {
-			seenEmails[email.ID] = struct{}{}
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			emails, err := s.inbox.GetEmails(ctx)
-			if err != nil {
-				continue
-			}
-
-			for _, email := range emails {
-				if _, seen := seenEmails[email.ID]; !seen {
-					seenEmails[email.ID] = struct{}{}
-					// Call callback in a goroutine to prevent blocking
-					go s.callback(email)
-				}
-			}
-		}
+	if s.inbox != nil && s.inbox.client != nil {
+		s.inbox.client.unregisterEmailCallback(s.inbox.inboxHash, s.callbackIndex)
 	}
 }
 

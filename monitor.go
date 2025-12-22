@@ -1,9 +1,7 @@
 package vaultsandbox
 
 import (
-	"context"
 	"sync"
-	"time"
 )
 
 // Subscription represents an active subscription that can be unsubscribed.
@@ -17,16 +15,18 @@ type EmailCallback func(inbox *Inbox, email *Email)
 
 // InboxMonitor monitors multiple inboxes for new emails.
 // It provides an event-emitter like pattern for receiving email notifications.
+//
+// InboxMonitor uses the client's delivery strategy (SSE, polling, or auto)
+// for real-time email notifications. With SSE enabled, emails are delivered
+// instantly as push notifications.
 type InboxMonitor struct {
-	client        *Client
-	inboxes       []*Inbox
-	callbacks     []EmailCallback
-	subscriptions []Subscription
-	ctx           context.Context
-	cancel        context.CancelFunc
-	mu            sync.RWMutex
-	started       bool
-	pollInterval  time.Duration
+	client          *Client
+	inboxes         []*Inbox
+	callbacks       []EmailCallback
+	subscriptions   []Subscription
+	mu              sync.RWMutex
+	started         bool
+	callbackIndices map[string]int // inboxHash -> callback index in client's registry
 }
 
 // internalSubscription implements the Subscription interface.
@@ -42,14 +42,11 @@ func (s *internalSubscription) Unsubscribe() {
 
 // newInboxMonitor creates a new inbox monitor for the given inboxes.
 func newInboxMonitor(client *Client, inboxes []*Inbox) *InboxMonitor {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &InboxMonitor{
-		client:       client,
-		inboxes:      inboxes,
-		callbacks:    make([]EmailCallback, 0),
-		ctx:          ctx,
-		cancel:       cancel,
-		pollInterval: defaultPollInterval,
+		client:          client,
+		inboxes:         inboxes,
+		callbacks:       make([]EmailCallback, 0),
+		callbackIndices: make(map[string]int),
 	}
 }
 
@@ -87,14 +84,15 @@ func (m *InboxMonitor) Unsubscribe() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Cancel the context to stop all goroutines
-	if m.cancel != nil {
-		m.cancel()
+	// Unregister callbacks from client's event system
+	for inboxHash, index := range m.callbackIndices {
+		m.client.unregisterEmailCallback(inboxHash, index)
 	}
 
 	// Clear all callbacks and subscriptions
 	m.callbacks = nil
 	m.subscriptions = nil
+	m.callbackIndices = make(map[string]int)
 	m.started = false
 }
 
@@ -108,44 +106,15 @@ func (m *InboxMonitor) startMonitoring() {
 	m.started = true
 	m.mu.Unlock()
 
-	// Start a goroutine for each inbox to poll for new emails
+	// Register a callback with the client's event system for each inbox
 	for _, inbox := range m.inboxes {
-		go m.monitorInbox(inbox)
-	}
-}
-
-// monitorInbox polls a single inbox for new emails.
-func (m *InboxMonitor) monitorInbox(inbox *Inbox) {
-	ticker := time.NewTicker(m.pollInterval)
-	defer ticker.Stop()
-
-	// Track seen email IDs to detect new emails
-	seenEmails := make(map[string]struct{})
-
-	// Initial fetch to populate seen emails
-	if emails, err := inbox.GetEmails(m.ctx); err == nil {
-		for _, email := range emails {
-			seenEmails[email.ID] = struct{}{}
-		}
-	}
-
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case <-ticker.C:
-			emails, err := inbox.GetEmails(m.ctx)
-			if err != nil {
-				continue
-			}
-
-			for _, email := range emails {
-				if _, seen := seenEmails[email.ID]; !seen {
-					seenEmails[email.ID] = struct{}{}
-					m.emitEmail(inbox, email)
-				}
-			}
-		}
+		inboxRef := inbox // capture for closure
+		index := m.client.registerEmailCallback(inbox.inboxHash, func(inbox *Inbox, email *Email) {
+			m.emitEmail(inboxRef, email)
+		})
+		m.mu.Lock()
+		m.callbackIndices[inbox.inboxHash] = index
+		m.mu.Unlock()
 	}
 }
 
