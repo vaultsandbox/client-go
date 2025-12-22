@@ -244,8 +244,8 @@ func (c *Client) GetEmailRaw(ctx context.Context, emailAddress, emailID string) 
 
 // MarkEmailAsRead marks an email as read.
 func (c *Client) MarkEmailAsRead(ctx context.Context, emailAddress, emailID string) error {
-	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
-	return c.do(ctx, http.MethodPatch, path, map[string]bool{"isRead": true}, nil)
+	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/read", url.PathEscape(emailAddress), url.PathEscape(emailID))
+	return c.do(ctx, http.MethodPatch, path, nil, nil)
 }
 
 // DeleteEmail deletes the specified email from an inbox.
