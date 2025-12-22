@@ -60,6 +60,58 @@ inbox, err := client.CreateInbox(ctx,
 
 **Note**: Requesting a specific email address may fail if it's already in use. The server will return an error.
 
+## Client Options
+
+When creating a client with `vaultsandbox.New()`, you can configure various options:
+
+```go
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithBaseURL("https://custom-api.example.com"),
+	vaultsandbox.WithTimeout(30*time.Second),
+	vaultsandbox.WithRetries(3),
+)
+```
+
+### Available Client Options
+
+| Option | Description |
+|--------|-------------|
+| `WithBaseURL(url string)` | Set a custom API base URL (default: `https://api.vaultsandbox.com`) |
+| `WithHTTPClient(client *http.Client)` | Use a custom HTTP client for requests |
+| `WithDeliveryStrategy(strategy DeliveryStrategy)` | Set how new emails are delivered (see below) |
+| `WithTimeout(timeout time.Duration)` | Set default request timeout (default: 60s) |
+| `WithRetries(count int)` | Set number of retry attempts for failed requests |
+| `WithRetryOn(statusCodes []int)` | Set HTTP status codes that trigger retries (default: 408, 429, 500, 502, 503, 504) |
+
+### Delivery Strategies
+
+The `DeliveryStrategy` type controls how the client receives new email notifications:
+
+```go
+const (
+	// StrategyAuto tries SSE first, falls back to polling (default)
+	StrategyAuto DeliveryStrategy = "auto"
+
+	// StrategySSE uses Server-Sent Events for real-time push notifications
+	StrategySSE DeliveryStrategy = "sse"
+
+	// StrategyPolling uses periodic API calls with exponential backoff
+	StrategyPolling DeliveryStrategy = "polling"
+)
+```
+
+```go
+// Force polling for environments where SSE is blocked
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyPolling),
+)
+
+// Force SSE for lowest latency
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE),
+)
+```
+
 ## Inbox Properties
 
 ### EmailAddress()
@@ -197,6 +249,198 @@ if err != nil {
 fmt.Println(email.Subject)
 fmt.Println(email.Text)
 ```
+
+### Email Struct Fields
+
+The `Email` struct contains the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ID` | `string` | Unique email identifier |
+| `From` | `string` | Sender email address |
+| `To` | `[]string` | Recipient email addresses |
+| `Subject` | `string` | Email subject line |
+| `Text` | `string` | Plain text body |
+| `HTML` | `string` | HTML body |
+| `ReceivedAt` | `time.Time` | When the email was received |
+| `Headers` | `map[string]string` | Email headers |
+| `Attachments` | `[]Attachment` | File attachments |
+| `Links` | `[]string` | Links extracted from the email body |
+| `AuthResults` | `*authresults.AuthResults` | Email authentication results (SPF, DKIM, DMARC) |
+| `IsRead` | `bool` | Whether the email has been marked as read |
+
+### Attachment Struct
+
+The `Attachment` struct contains the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Filename` | `string` | Original filename of the attachment |
+| `ContentType` | `string` | MIME type (e.g., `application/pdf`, `image/png`) |
+| `Size` | `int` | Size in bytes |
+| `ContentID` | `string` | Content-ID for inline attachments |
+| `ContentDisposition` | `string` | Disposition type (`attachment` or `inline`) |
+| `Content` | `[]byte` | Raw attachment content |
+| `Checksum` | `string` | Checksum for integrity verification |
+
+```go
+// Working with attachments
+for _, att := range email.Attachments {
+	fmt.Printf("Filename: %s\n", att.Filename)
+	fmt.Printf("Type: %s\n", att.ContentType)
+	fmt.Printf("Size: %d bytes\n", att.Size)
+
+	// Save attachment to file
+	os.WriteFile(att.Filename, att.Content, 0644)
+}
+```
+
+### AuthResults Struct
+
+The `AuthResults` struct contains email authentication check results:
+
+```go
+type AuthResults struct {
+	SPF        *SPFResult        // SPF check result
+	DKIM       []DKIMResult      // DKIM signature results (may have multiple)
+	DMARC      *DMARCResult      // DMARC policy result
+	ReverseDNS *ReverseDNSResult // Reverse DNS check result
+}
+
+type SPFResult struct {
+	Status string // pass, fail, softfail, neutral, none, temperror, permerror
+	Domain string
+	IP     string
+	Info   string
+}
+
+type DKIMResult struct {
+	Status   string // pass, fail, none
+	Domain   string
+	Selector string
+	Info     string
+}
+
+type DMARCResult struct {
+	Status  string // pass, fail, none
+	Policy  string // none, quarantine, reject
+	Aligned bool
+	Domain  string
+	Info    string
+}
+
+type ReverseDNSResult struct {
+	Status   string // pass, fail, none
+	IP       string
+	Hostname string
+	Info     string
+}
+```
+
+**Validation Methods:**
+
+```go
+// Quick check if all primary auth checks passed
+if email.AuthResults.IsPassing() {
+	fmt.Println("Email authentication passed")
+}
+
+// Detailed validation with failure messages
+validation := email.AuthResults.Validate()
+fmt.Printf("Overall: %v\n", validation.Passed)
+fmt.Printf("SPF: %v\n", validation.SPFPassed)
+fmt.Printf("DKIM: %v\n", validation.DKIMPassed)
+fmt.Printf("DMARC: %v\n", validation.DMARCPassed)
+fmt.Printf("Reverse DNS: %v\n", validation.ReverseDNSPassed)
+
+if len(validation.Failures) > 0 {
+	fmt.Println("Failures:")
+	for _, f := range validation.Failures {
+		fmt.Printf("  - %s\n", f)
+	}
+}
+```
+
+```go
+// Accessing email fields
+fmt.Printf("From: %s\n", email.From)
+fmt.Printf("Subject: %s\n", email.Subject)
+fmt.Printf("Received: %s\n", email.ReceivedAt)
+fmt.Printf("Is Read: %v\n", email.IsRead)
+fmt.Printf("Attachments: %d\n", len(email.Attachments))
+
+// Check authentication results
+if email.AuthResults != nil {
+	if email.AuthResults.SPF != nil {
+		fmt.Printf("SPF: %s\n", email.AuthResults.SPF.Status)
+	}
+	for _, dkim := range email.AuthResults.DKIM {
+		fmt.Printf("DKIM: %s (domain: %s)\n", dkim.Status, dkim.Domain)
+	}
+	if email.AuthResults.DMARC != nil {
+		fmt.Printf("DMARC: %s\n", email.AuthResults.DMARC.Status)
+	}
+
+	// Use convenience method to check if all auth checks passed
+	if email.AuthResults.IsPassing() {
+		fmt.Println("All authentication checks passed")
+	}
+}
+```
+
+**Standalone Validation Functions:**
+
+The `authresults` package also provides standalone validation functions for granular control:
+
+```go
+import "github.com/vaultsandbox/client-go/authresults"
+
+// Validate all authentication results at once
+err := authresults.Validate(email.AuthResults)
+if err != nil {
+	var valErr *authresults.ValidationError
+	if errors.As(err, &valErr) {
+		fmt.Println("Validation failures:", valErr.Errors)
+	}
+}
+
+// Validate individual checks
+if err := authresults.ValidateSPF(email.AuthResults); err != nil {
+	fmt.Println("SPF failed:", err)
+}
+
+if err := authresults.ValidateDKIM(email.AuthResults); err != nil {
+	fmt.Println("DKIM failed:", err)
+}
+
+if err := authresults.ValidateDMARC(email.AuthResults); err != nil {
+	fmt.Println("DMARC failed:", err)
+}
+
+if err := authresults.ValidateReverseDNS(email.AuthResults); err != nil {
+	fmt.Println("Reverse DNS failed:", err)
+}
+```
+
+**Available Validation Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `Validate(results)` | Validates all authentication results, returns `ValidationError` with all failures |
+| `ValidateSPF(results)` | Validates only SPF, returns `ErrSPFFailed` on failure |
+| `ValidateDKIM(results)` | Validates DKIM (passes if at least one signature passes), returns `ErrDKIMFailed` on failure |
+| `ValidateDMARC(results)` | Validates only DMARC, returns `ErrDMARCFailed` on failure |
+| `ValidateReverseDNS(results)` | Validates only reverse DNS, returns `ErrReverseDNSFailed` on failure |
+
+**Sentinel Errors in authresults package:**
+
+| Error | Description |
+|-------|-------------|
+| `ErrSPFFailed` | SPF check failed |
+| `ErrDKIMFailed` | DKIM check failed |
+| `ErrDMARCFailed` | DMARC check failed |
+| `ErrReverseDNSFailed` | Reverse DNS check failed |
+| `ErrNoAuthResults` | No authentication results available |
 
 ### Waiting for Emails
 
@@ -627,6 +871,172 @@ func (p *InboxPool) Cleanup(ctx context.Context) {
 }
 ```
 
+## Error Handling
+
+### Sentinel Errors
+
+Use `errors.Is()` to check for specific error conditions:
+
+```go
+import "errors"
+
+emails, err := inbox.GetEmails(ctx)
+if err != nil {
+	switch {
+	case errors.Is(err, vaultsandbox.ErrInboxNotFound):
+		log.Println("Inbox not found or expired")
+	case errors.Is(err, vaultsandbox.ErrUnauthorized):
+		log.Println("Invalid API key")
+	case errors.Is(err, vaultsandbox.ErrRateLimited):
+		log.Println("Rate limit exceeded, retry later")
+	default:
+		log.Printf("Unexpected error: %v", err)
+	}
+}
+```
+
+### Available Sentinel Errors
+
+| Error | Description |
+|-------|-------------|
+| `ErrMissingAPIKey` | No API key was provided to `New()` |
+| `ErrClientClosed` | Operation attempted on a closed client |
+| `ErrUnauthorized` | API key is invalid or expired (HTTP 401) |
+| `ErrInboxNotFound` | Inbox does not exist or has expired (HTTP 404) |
+| `ErrEmailNotFound` | Email does not exist (HTTP 404) |
+| `ErrInboxAlreadyExists` | Inbox with requested address already exists (HTTP 409) |
+| `ErrInvalidImportData` | Imported inbox data is malformed or invalid |
+| `ErrDecryptionFailed` | Email decryption failed |
+| `ErrSignatureInvalid` | Signature verification failed (potential tampering) |
+| `ErrSSEConnection` | Server-Sent Events connection failed |
+| `ErrInvalidSecretKeySize` | Secret key has invalid size |
+| `ErrInboxExpired` | Inbox TTL has been exceeded |
+| `ErrRateLimited` | API rate limit exceeded (HTTP 429) |
+
+### Error Types
+
+The SDK provides structured error types for detailed error handling:
+
+```go
+// APIError - HTTP errors from the VaultSandbox API
+var apiErr *vaultsandbox.APIError
+if errors.As(err, &apiErr) {
+	fmt.Printf("Status: %d\n", apiErr.StatusCode)
+	fmt.Printf("Message: %s\n", apiErr.Message)
+	fmt.Printf("Request ID: %s\n", apiErr.RequestID)
+}
+
+// NetworkError - Network-level failures
+var netErr *vaultsandbox.NetworkError
+if errors.As(err, &netErr) {
+	fmt.Printf("URL: %s\n", netErr.URL)
+	fmt.Printf("Attempt: %d\n", netErr.Attempt)
+	fmt.Printf("Underlying: %v\n", netErr.Err)
+}
+
+// TimeoutError - Operation exceeded deadline
+var timeoutErr *vaultsandbox.TimeoutError
+if errors.As(err, &timeoutErr) {
+	fmt.Printf("Operation: %s\n", timeoutErr.Operation)
+	fmt.Printf("Timeout: %v\n", timeoutErr.Timeout)
+}
+
+// DecryptionError - Email decryption failure
+var decryptErr *vaultsandbox.DecryptionError
+if errors.As(err, &decryptErr) {
+	fmt.Printf("Stage: %s\n", decryptErr.Stage) // "kem", "hkdf", or "aes"
+	fmt.Printf("Message: %s\n", decryptErr.Message)
+}
+
+// SignatureVerificationError - Signature verification failure
+var sigErr *vaultsandbox.SignatureVerificationError
+if errors.As(err, &sigErr) {
+	fmt.Printf("Message: %s\n", sigErr.Message)
+}
+
+// SSEError - Server-Sent Events connection failure
+var sseErr *vaultsandbox.SSEError
+if errors.As(err, &sseErr) {
+	fmt.Printf("Attempts: %d\n", sseErr.Attempts)
+	fmt.Printf("Underlying: %v\n", sseErr.Err)
+}
+
+// ValidationError - Multiple validation failures
+var valErr *vaultsandbox.ValidationError
+if errors.As(err, &valErr) {
+	fmt.Printf("Errors: %v\n", valErr.Errors)
+}
+
+// StrategyError - Delivery strategy failure
+var stratErr *vaultsandbox.StrategyError
+if errors.As(err, &stratErr) {
+	fmt.Printf("Message: %s\n", stratErr.Message)
+	fmt.Printf("Underlying: %v\n", stratErr.Err)
+}
+```
+
+### Error Type Definitions
+
+```go
+type APIError struct {
+	StatusCode int
+	Message    string
+	RequestID  string
+}
+
+type NetworkError struct {
+	Err     error
+	URL     string
+	Attempt int
+}
+
+type TimeoutError struct {
+	Operation string
+	Timeout   time.Duration
+}
+
+type DecryptionError struct {
+	Stage   string // "kem", "hkdf", "aes"
+	Message string
+	Err     error
+}
+
+type SignatureVerificationError struct {
+	Message string
+}
+
+type SSEError struct {
+	Err      error
+	Attempts int
+}
+
+type ValidationError struct {
+	Errors []string
+}
+
+type StrategyError struct {
+	Message string
+	Err     error
+}
+```
+
+### VaultSandboxError Interface
+
+All SDK errors implement the `VaultSandboxError` interface:
+
+```go
+type VaultSandboxError interface {
+	error
+	VaultSandboxError() // marker method
+}
+
+// Check if error is from this SDK
+var sdkErr vaultsandbox.VaultSandboxError
+if errors.As(err, &sdkErr) {
+	fmt.Println("Error from VaultSandbox SDK")
+}
+```
+
 ## Troubleshooting
 
 ### Inbox Not Receiving Emails
@@ -711,6 +1121,15 @@ if !exists {
 }
 ```
 
+### Deleting a Specific Inbox
+
+```go
+err := client.DeleteInbox(ctx, "test@mail.example.com")
+if err != nil {
+	log.Fatal(err)
+}
+```
+
 ### Deleting All Inboxes
 
 ```go
@@ -719,6 +1138,35 @@ if err != nil {
 	log.Fatal(err)
 }
 fmt.Printf("Deleted %d inboxes\n", count)
+```
+
+### Validating API Key
+
+```go
+err := client.CheckKey(ctx)
+if err != nil {
+	log.Fatal("API key is invalid:", err)
+}
+fmt.Println("API key is valid")
+```
+
+### Getting Server Information
+
+```go
+info := client.ServerInfo()
+fmt.Printf("Allowed domains: %v\n", info.AllowedDomains)
+fmt.Printf("Max TTL: %v\n", info.MaxTTL)
+fmt.Printf("Default TTL: %v\n", info.DefaultTTL)
+```
+
+The `ServerInfo` struct contains:
+
+```go
+type ServerInfo struct {
+	AllowedDomains []string      // Email domains available for inbox creation
+	MaxTTL         time.Duration // Maximum allowed TTL for inboxes
+	DefaultTTL     time.Duration // Default TTL when not specified
+}
 ```
 
 ## Next Steps
