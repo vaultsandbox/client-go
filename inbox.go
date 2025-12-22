@@ -317,7 +317,7 @@ func (i *Inbox) decryptEmailWithContext(ctx context.Context, raw *api.RawEmail) 
 		return nil, fmt.Errorf("email has no encrypted metadata")
 	}
 
-	// If we don't have parsed content, fetch the full email first
+	// Fetch full email if we don't have parsed content
 	emailData := raw
 	if raw.EncryptedParsed == nil {
 		fullEmail, err := i.client.apiClient.GetEmail(ctx, i.emailAddress, raw.ID)
@@ -327,80 +327,50 @@ func (i *Inbox) decryptEmailWithContext(ctx context.Context, raw *api.RawEmail) 
 		emailData = fullEmail
 	}
 
-	// Verify signature BEFORE decryption (critical for security).
-	// We pass the pinned server key from inbox creation to ensure the payload
-	// was signed by the expected server, preventing key substitution attacks.
-	if err := crypto.VerifySignature(emailData.EncryptedMetadata, i.serverSigPk); err != nil {
-		return nil, wrapCryptoError(err)
-	}
-
-	// Decrypt the metadata
-	metadataPlaintext, err := crypto.Decrypt(emailData.EncryptedMetadata, i.keypair)
+	// Verify and decrypt metadata
+	metadataPlaintext, err := i.verifyAndDecrypt(emailData.EncryptedMetadata)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse the decrypted metadata
-	var metadata crypto.DecryptedMetadata
-	if err := json.Unmarshal(metadataPlaintext, &metadata); err != nil {
-		return nil, fmt.Errorf("failed to parse decrypted metadata: %w", err)
+	metadata, err := parseMetadata(metadataPlaintext)
+	if err != nil {
+		return nil, err
 	}
 
-	// Build the decrypted email from metadata
-	decrypted := &crypto.DecryptedEmail{
-		ID:      emailData.ID,
-		From:    metadata.From,
-		To:      []string{metadata.To},
-		Subject: metadata.Subject,
-		IsRead:  emailData.IsRead,
-	}
+	// Build decrypted email from metadata
+	decrypted := buildDecryptedEmail(emailData, metadata)
 
-	// Parse receivedAt
-	if metadata.ReceivedAt != "" {
-		if t, err := time.Parse(time.RFC3339, metadata.ReceivedAt); err == nil {
-			decrypted.ReceivedAt = t
-		}
-	}
-	if decrypted.ReceivedAt.IsZero() {
-		decrypted.ReceivedAt = emailData.ReceivedAt
-	}
-
-	// Decrypt parsed content if available
+	// Decrypt and apply parsed content if available
 	if emailData.EncryptedParsed != nil {
-		if err := crypto.VerifySignature(emailData.EncryptedParsed, i.serverSigPk); err != nil {
-			return nil, wrapCryptoError(err)
-		}
-
-		parsedPlaintext, err := crypto.Decrypt(emailData.EncryptedParsed, i.keypair)
-		if err != nil {
+		if err := i.applyParsedContent(emailData.EncryptedParsed, decrypted); err != nil {
 			return nil, err
-		}
-
-		var parsed crypto.DecryptedParsed
-		if err := json.Unmarshal(parsedPlaintext, &parsed); err != nil {
-			return nil, fmt.Errorf("failed to parse decrypted parsed content: %w", err)
-		}
-
-		decrypted.Text = parsed.Text
-		decrypted.HTML = parsed.HTML
-		decrypted.Attachments = parsed.Attachments
-		decrypted.Links = parsed.Links
-		decrypted.AuthResults = parsed.AuthResults
-
-		// Convert headers from interface{} to string map.
-		// The server may send headers with non-string values, but for type safety
-		// we only preserve string-typed values.
-		if len(parsed.Headers) > 0 {
-			decrypted.Headers = make(map[string]string)
-			for k, v := range parsed.Headers {
-				if s, ok := v.(string); ok {
-					decrypted.Headers[k] = s
-				}
-			}
 		}
 	}
 
 	return i.convertDecryptedEmail(decrypted), nil
+}
+
+// applyParsedContent decrypts parsed content and applies it to the decrypted email.
+func (i *Inbox) applyParsedContent(encrypted *crypto.EncryptedPayload, decrypted *crypto.DecryptedEmail) error {
+	parsedPlaintext, err := i.verifyAndDecrypt(encrypted)
+	if err != nil {
+		return err
+	}
+
+	parsed, headers, err := parseParsedContent(parsedPlaintext)
+	if err != nil {
+		return err
+	}
+
+	decrypted.Text = parsed.Text
+	decrypted.HTML = parsed.HTML
+	decrypted.Attachments = parsed.Attachments
+	decrypted.Links = parsed.Links
+	decrypted.AuthResults = parsed.AuthResults
+	decrypted.Headers = headers
+
+	return nil
 }
 
 func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
@@ -441,6 +411,72 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 	}
 
 	return email
+}
+
+// verifyAndDecrypt verifies the signature and decrypts an encrypted payload.
+// It returns the decrypted plaintext or an error if verification/decryption fails.
+func (i *Inbox) verifyAndDecrypt(payload *crypto.EncryptedPayload) ([]byte, error) {
+	if err := crypto.VerifySignature(payload, i.serverSigPk); err != nil {
+		return nil, wrapCryptoError(err)
+	}
+	return crypto.Decrypt(payload, i.keypair)
+}
+
+// parseMetadata unmarshals decrypted metadata JSON into a DecryptedMetadata struct.
+func parseMetadata(plaintext []byte) (*crypto.DecryptedMetadata, error) {
+	var metadata crypto.DecryptedMetadata
+	if err := json.Unmarshal(plaintext, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to parse decrypted metadata: %w", err)
+	}
+	return &metadata, nil
+}
+
+// parseParsedContent unmarshals decrypted parsed content JSON and converts headers.
+// Headers are converted from interface{} to string map, preserving only string values.
+func parseParsedContent(plaintext []byte) (*crypto.DecryptedParsed, map[string]string, error) {
+	var parsed crypto.DecryptedParsed
+	if err := json.Unmarshal(plaintext, &parsed); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse decrypted parsed content: %w", err)
+	}
+
+	// Convert headers from interface{} to string map.
+	// The server may send headers with non-string values, but for type safety
+	// we only preserve string-typed values.
+	var headers map[string]string
+	if len(parsed.Headers) > 0 {
+		headers = make(map[string]string)
+		for k, v := range parsed.Headers {
+			if s, ok := v.(string); ok {
+				headers[k] = s
+			}
+		}
+	}
+
+	return &parsed, headers, nil
+}
+
+// buildDecryptedEmail constructs a DecryptedEmail from raw email data and metadata.
+// It handles receivedAt fallback logic when metadata timestamp is missing or invalid.
+func buildDecryptedEmail(emailData *api.RawEmail, metadata *crypto.DecryptedMetadata) *crypto.DecryptedEmail {
+	decrypted := &crypto.DecryptedEmail{
+		ID:      emailData.ID,
+		From:    metadata.From,
+		To:      []string{metadata.To},
+		Subject: metadata.Subject,
+		IsRead:  emailData.IsRead,
+	}
+
+	// Parse receivedAt from metadata, fallback to API timestamp
+	if metadata.ReceivedAt != "" {
+		if t, err := time.Parse(time.RFC3339, metadata.ReceivedAt); err == nil {
+			decrypted.ReceivedAt = t
+		}
+	}
+	if decrypted.ReceivedAt.IsZero() {
+		decrypted.ReceivedAt = emailData.ReceivedAt
+	}
+
+	return decrypted
 }
 
 // wrapCryptoError converts internal crypto errors to public sentinel errors
