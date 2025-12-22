@@ -36,16 +36,6 @@ func (c *Client) GetServerInfo(ctx context.Context) (*ServerInfo, error) {
 	return &result, nil
 }
 
-// CreateInboxNew creates a new inbox using the new API format with
-// the provided client public key and optional TTL/email address.
-func (c *Client) CreateInboxNew(ctx context.Context, req CreateInboxRequest) (*CreateInboxResponse, error) {
-	var result CreateInboxResponse
-	if err := c.Do(ctx, "POST", "/api/inboxes", req, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
 // DeleteInboxByEmail deletes the inbox with the given email address.
 // Returns [ErrInboxNotFound] if the inbox does not exist.
 func (c *Client) DeleteInboxByEmail(ctx context.Context, emailAddress string) error {
@@ -74,54 +64,6 @@ func (c *Client) GetInboxSync(ctx context.Context, emailAddress string) (*SyncSt
 		return nil, err
 	}
 	return &result, nil
-}
-
-// GetEmailsNew returns all emails in an inbox with encrypted metadata.
-// The full email content requires fetching each email individually.
-func (c *Client) GetEmailsNew(ctx context.Context, emailAddress string) ([]RawEmail, error) {
-	path := fmt.Sprintf("/api/inboxes/%s/emails", url.PathEscape(emailAddress))
-	var result []RawEmail
-	if err := c.Do(ctx, "GET", path, nil, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// GetEmailNew retrieves a specific email with its full encrypted content
-// including the parsed body and attachments.
-func (c *Client) GetEmailNew(ctx context.Context, emailAddress, emailID string) (*RawEmail, error) {
-	path := fmt.Sprintf("/api/inboxes/%s/emails/%s",
-		url.PathEscape(emailAddress), url.PathEscape(emailID))
-	var result RawEmail
-	if err := c.Do(ctx, "GET", path, nil, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// GetEmailRawNew retrieves the raw RFC 5322 email source in encrypted form.
-func (c *Client) GetEmailRawNew(ctx context.Context, emailAddress, emailID string) (*RawEmailSource, error) {
-	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/raw",
-		url.PathEscape(emailAddress), url.PathEscape(emailID))
-	var result RawEmailSource
-	if err := c.Do(ctx, "GET", path, nil, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// MarkEmailAsReadNew marks an email as read.
-func (c *Client) MarkEmailAsReadNew(ctx context.Context, emailAddress, emailID string) error {
-	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/read",
-		url.PathEscape(emailAddress), url.PathEscape(emailID))
-	return c.Do(ctx, "PATCH", path, nil, nil)
-}
-
-// DeleteEmailNew deletes the specified email from an inbox.
-func (c *Client) DeleteEmailNew(ctx context.Context, emailAddress, emailID string) error {
-	path := fmt.Sprintf("/api/inboxes/%s/emails/%s",
-		url.PathEscape(emailAddress), url.PathEscape(emailID))
-	return c.Do(ctx, "DELETE", path, nil, nil)
 }
 
 // OpenEventStream opens a Server-Sent Events connection for real-time

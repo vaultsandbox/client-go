@@ -220,7 +220,7 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 	inbox.lastHash = sync.EmailsHash
 	inbox.interval = PollingInitialInterval // Reset backoff
 
-	emails, err := p.apiClient.GetEmailsNew(ctx, inbox.emailAddress)
+	resp, err := p.apiClient.GetEmails(ctx, inbox.emailAddress)
 	if err != nil {
 		return
 	}
@@ -230,7 +230,7 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 	p.mu.RUnlock()
 
 	// Find new emails
-	for _, email := range emails {
+	for _, email := range resp.Emails {
 		if _, seen := inbox.seenEmails[email.ID]; !seen {
 			inbox.seenEmails[email.ID] = struct{}{}
 
