@@ -103,34 +103,14 @@ type WaitOptions struct {
 	SyncFetcher SyncFetcher
 }
 
-// FullStrategy combines the event-driven Strategy interface with blocking
-// WaitForEmail methods. This interface is implemented by all concrete
-// strategies (PollingStrategy, SSEStrategy, AutoStrategy).
+// FullStrategy extends the Strategy interface with a Close method.
+// This interface is implemented by all concrete strategies
+// (PollingStrategy, SSEStrategy, AutoStrategy).
 //
-// The WaitForEmail methods provide a simpler API for waiting for specific
-// emails without managing event handlers. They block until a matching email
-// is found or the context is canceled.
+// Note: Email waiting is handled at the Inbox level using callbacks,
+// which leverages SSE for instant notifications when available.
 type FullStrategy interface {
 	Strategy
-
-	// WaitForEmail blocks until an email matching the criteria is found.
-	// The fetcher retrieves emails, and the matcher determines if each
-	// email matches. Returns the first matching email or an error if
-	// the context is canceled.
-	WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error)
-
-	// WaitForEmailWithSync is like WaitForEmail but uses sync-status-based
-	// change detection when opts.SyncFetcher is provided. This reduces API
-	// calls by checking for changes before fetching the full email list.
-	WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error)
-
-	// WaitForEmailCount blocks until at least count matching emails are found.
-	// Returns a slice of exactly count matching emails.
-	WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error)
-
-	// WaitForEmailCountWithSync is like WaitForEmailCount but uses
-	// sync-status-based change detection for efficiency.
-	WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error)
 
 	// Close releases resources and stops the strategy.
 	// It is equivalent to calling Stop.

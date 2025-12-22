@@ -362,7 +362,7 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 	})
 }
 
-func TestEmailMatcher_MatchesCorrectly(t *testing.T) {
+func TestWaitConfig_MatchesEmail(t *testing.T) {
 	tests := []struct {
 		name     string
 		email    *Email
@@ -439,55 +439,12 @@ func TestEmailMatcher_MatchesCorrectly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matcher := emailMatcher(tt.cfg)
-			result := matcher(tt.email)
+			result := tt.cfg.Matches(tt.email)
 			if result != tt.expected {
-				t.Errorf("emailMatcher() = %v, want %v", result, tt.expected)
+				t.Errorf("waitConfig.Matches() = %v, want %v", result, tt.expected)
 			}
 		})
 	}
-}
-
-func TestEmailMatcher_HandlesNonEmailType(t *testing.T) {
-	cfg := &waitConfig{}
-	matcher := emailMatcher(cfg)
-
-	tests := []struct {
-		name  string
-		input interface{}
-	}{
-		{"nil value", nil},
-		{"string type", "not an email"},
-		{"int type", 42},
-		{"struct type", struct{ foo string }{foo: "bar"}},
-		{"map type", map[string]string{"key": "value"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := matcher(tt.input)
-			if result {
-				t.Errorf("emailMatcher() with %s = true, want false", tt.name)
-			}
-		})
-	}
-}
-
-func TestEmailFetcher_ConvertsToInterface(t *testing.T) {
-	// This test verifies the conversion logic without requiring a full API setup.
-	// We test that the function signature and return type are correct.
-	// Full integration tests cover the actual fetching behavior.
-
-	inbox := &Inbox{}
-	fetcher := inbox.emailFetcher()
-
-	// Verify the function has the correct signature
-	if fetcher == nil {
-		t.Error("emailFetcher() should return a non-nil function")
-	}
-
-	// The actual fetching is tested via integration tests since it requires
-	// a real API client. Here we just verify the helper is properly constructed.
 }
 
 func TestParseMetadata_Valid(t *testing.T) {

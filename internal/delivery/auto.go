@@ -116,38 +116,6 @@ func (a *AutoStrategy) RemoveInbox(inboxHash string) error {
 	return nil
 }
 
-// WaitForEmail waits for an email matching the given criteria.
-// AutoStrategy delegates to PollingStrategy for WaitForEmail operations.
-func (a *AutoStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
-	return a.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, WaitOptions{
-		PollInterval: pollInterval,
-		SyncFetcher:  nil,
-	})
-}
-
-// WaitForEmailWithSync waits for an email using sync-status-based change detection.
-// AutoStrategy delegates to PollingStrategy for WaitForEmail operations.
-func (a *AutoStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error) {
-	polling := NewPollingStrategy(a.cfg)
-	return polling.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, opts)
-}
-
-// WaitForEmailCount waits until at least count emails match the criteria.
-// AutoStrategy delegates to PollingStrategy for WaitForEmail operations.
-func (a *AutoStrategy) WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
-	return a.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, WaitOptions{
-		PollInterval: pollInterval,
-		SyncFetcher:  nil,
-	})
-}
-
-// WaitForEmailCountWithSync waits for multiple emails using sync-status-based
-// change detection. AutoStrategy delegates to PollingStrategy.
-func (a *AutoStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error) {
-	polling := NewPollingStrategy(a.cfg)
-	return polling.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, opts)
-}
-
 // Close releases resources and stops the underlying strategy.
 // It is equivalent to calling Stop.
 func (a *AutoStrategy) Close() error {

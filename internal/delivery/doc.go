@@ -19,7 +19,7 @@
 // # Usage
 //
 // All strategies implement the [Strategy] interface for event-driven delivery
-// and the [FullStrategy] interface for polling-based waiting:
+// and the [FullStrategy] interface which adds Close():
 //
 //	cfg := delivery.Config{APIClient: apiClient}
 //	strategy := delivery.NewAutoStrategy(cfg)
@@ -30,6 +30,9 @@
 //	    return nil
 //	})
 //	defer strategy.Stop()
+//
+// Email waiting is handled at the Inbox level using callbacks, which leverages
+// SSE for instant notifications when available.
 //
 // # Backoff and Retry
 //

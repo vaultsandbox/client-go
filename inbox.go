@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/vaultsandbox/client-go/authresults"
@@ -121,33 +122,9 @@ func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
 	return i.decryptEmail(resp)
 }
 
-// emailFetcher returns a function that fetches emails as []interface{} for the wait strategy.
-func (i *Inbox) emailFetcher() func(ctx context.Context) ([]interface{}, error) {
-	return func(ctx context.Context) ([]interface{}, error) {
-		emails, err := i.GetEmails(ctx)
-		if err != nil {
-			return nil, err
-		}
-		result := make([]interface{}, len(emails))
-		for j, e := range emails {
-			result[j] = e
-		}
-		return result, nil
-	}
-}
-
-// emailMatcher returns a function that matches emails against a waitConfig.
-func emailMatcher(cfg *waitConfig) func(interface{}) bool {
-	return func(email interface{}) bool {
-		e, ok := email.(*Email)
-		if !ok {
-			return false
-		}
-		return cfg.Matches(e)
-	}
-}
-
 // WaitForEmail waits for an email matching the given criteria.
+// It uses the client's callback infrastructure to receive instant notifications
+// when SSE is active, or receives events when the polling handler fires.
 func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, error) {
 	cfg := &waitConfig{
 		timeout:      defaultWaitTimeout,
@@ -160,20 +137,42 @@ func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, e
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
 
-	result, err := i.client.strategy.WaitForEmail(ctx, i.inboxHash, i.emailFetcher(), emailMatcher(cfg), cfg.pollInterval)
+	resultCh := make(chan *Email, 1)
+
+	// 1. Subscribe FIRST to avoid race condition
+	sub := i.OnNewEmail(func(email *Email) {
+		if cfg.Matches(email) {
+			select {
+			case resultCh <- email:
+			default: // already found
+			}
+		}
+	})
+	defer sub.Unsubscribe()
+
+	// 2. Check existing emails (handles already-arrived case)
+	emails, err := i.GetEmails(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	email, ok := result.(*Email)
-	if !ok {
-		return nil, ErrEmailNotFound
+	for _, e := range emails {
+		if cfg.Matches(e) {
+			return e, nil
+		}
 	}
 
-	return email, nil
+	// 3. Wait for callback or timeout
+	select {
+	case email := <-resultCh:
+		return email, nil
+	case <-ctx.Done():
+		return nil, ErrEmailNotFound
+	}
 }
 
-// WaitForEmailCount waits until the inbox has at least count emails.
+// WaitForEmailCount waits until at least count matching emails are found.
+// It uses the client's callback infrastructure to receive instant notifications
+// when SSE is active, or receives events when the polling handler fires.
 func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOption) ([]*Email, error) {
 	cfg := &waitConfig{
 		timeout:      defaultWaitTimeout,
@@ -186,21 +185,67 @@ func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOp
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
 
-	results, err := i.client.strategy.WaitForEmailCount(ctx, i.inboxHash, i.emailFetcher(), emailMatcher(cfg), count, cfg.pollInterval)
+	// Use a mutex to protect concurrent access to the results slice
+	var mu sync.Mutex
+	var results []*Email
+	doneCh := make(chan struct{})
+
+	// 1. Subscribe FIRST to avoid race condition
+	sub := i.OnNewEmail(func(email *Email) {
+		if cfg.Matches(email) {
+			mu.Lock()
+			// Check if we already have this email (by ID)
+			for _, e := range results {
+				if e.ID == email.ID {
+					mu.Unlock()
+					return
+				}
+			}
+			results = append(results, email)
+			if len(results) >= count {
+				select {
+				case doneCh <- struct{}{}:
+				default:
+				}
+			}
+			mu.Unlock()
+		}
+	})
+	defer sub.Unsubscribe()
+
+	// 2. Check existing emails (handles already-arrived case)
+	emails, err := i.GetEmails(ctx)
 	if err != nil {
 		return nil, err
 	}
+	mu.Lock()
+	for _, e := range emails {
+		if cfg.Matches(e) {
+			results = append(results, e)
+		}
+	}
+	if len(results) >= count {
+		matched := results[:count]
+		mu.Unlock()
+		return matched, nil
+	}
+	mu.Unlock()
 
-	emails := make([]*Email, len(results))
-	for j, r := range results {
-		email, ok := r.(*Email)
-		if !ok {
+	// 3. Wait for callbacks or timeout
+	for {
+		select {
+		case <-doneCh:
+			mu.Lock()
+			if len(results) >= count {
+				matched := results[:count]
+				mu.Unlock()
+				return matched, nil
+			}
+			mu.Unlock()
+		case <-ctx.Done():
 			return nil, ErrEmailNotFound
 		}
-		emails[j] = email
 	}
-
-	return emails, nil
 }
 
 // Delete deletes the inbox.
