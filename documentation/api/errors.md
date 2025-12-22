@@ -90,7 +90,7 @@ import (
 )
 
 func main() {
-    client, err := vaultsandbox.NewClient(
+    client, err := vaultsandbox.New(
         os.Getenv("VAULTSANDBOX_API_KEY"),
         vaultsandbox.WithRetries(5),                                  // Default: 3
         vaultsandbox.WithRetryOn([]int{408, 429, 500, 502, 503, 504}), // Default status codes
@@ -132,7 +132,7 @@ Sentinel errors allow simple equality checks using `errors.Is()`.
 Returned when no API key is provided to the client.
 
 ```go
-client, err := vaultsandbox.NewClient("")
+client, err := vaultsandbox.New("")
 if errors.Is(err, vaultsandbox.ErrMissingAPIKey) {
     log.Fatal("API key is required")
 }
@@ -540,7 +540,7 @@ type SSEError struct {
 #### Example
 
 ```go
-client, _ := vaultsandbox.NewClient(
+client, _ := vaultsandbox.New(
     os.Getenv("VAULTSANDBOX_API_KEY"),
     vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE),
 )
@@ -557,7 +557,7 @@ if errors.As(err, &sseErr) {
     log.Println("Falling back to polling strategy")
 
     // Recreate client with polling
-    pollingClient, _ := vaultsandbox.NewClient(
+    pollingClient, _ := vaultsandbox.New(
         os.Getenv("VAULTSANDBOX_API_KEY"),
         vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyPolling),
     )
@@ -794,7 +794,7 @@ import (
 func main() {
     ctx := context.Background()
 
-    client, err := vaultsandbox.NewClient(os.Getenv("VAULTSANDBOX_API_KEY"))
+    client, err := vaultsandbox.New(os.Getenv("VAULTSANDBOX_API_KEY"))
     if err != nil {
         log.Fatalf("Failed to create client: %v", err)
     }
@@ -912,7 +912,7 @@ import (
 func TestEmailReceived(t *testing.T) {
     ctx := context.Background()
 
-    client, err := vaultsandbox.NewClient(testAPIKey)
+    client, err := vaultsandbox.New(testAPIKey)
     if err != nil {
         t.Fatalf("Failed to create client: %v", err)
     }
@@ -1046,7 +1046,7 @@ default:
 Always clean up, even when errors occur:
 
 ```go
-client, err := vaultsandbox.NewClient(apiKey)
+client, err := vaultsandbox.New(apiKey)
 if err != nil {
     return err
 }

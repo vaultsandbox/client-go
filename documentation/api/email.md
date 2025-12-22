@@ -729,9 +729,9 @@ import (
 func main() {
     ctx := context.Background()
 
-    client, err := vaultsandbox.NewClient(
-        os.Getenv("VAULTSANDBOX_URL"),
+    client, err := vaultsandbox.New(
         os.Getenv("VAULTSANDBOX_API_KEY"),
+        vaultsandbox.WithBaseURL(os.Getenv("VAULTSANDBOX_URL")),
     )
     if err != nil {
         log.Fatal(err)
