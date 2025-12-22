@@ -3,7 +3,6 @@ package vaultsandbox
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/vaultsandbox/client-go/internal/api"
@@ -61,11 +60,24 @@ type VaultSandboxError interface {
 	VaultSandboxError() // marker method
 }
 
+// ResourceType indicates which type of resource an error relates to.
+type ResourceType string
+
+const (
+	// ResourceUnknown indicates the resource type is not specified.
+	ResourceUnknown ResourceType = ""
+	// ResourceInbox indicates the error relates to an inbox.
+	ResourceInbox ResourceType = "inbox"
+	// ResourceEmail indicates the error relates to an email.
+	ResourceEmail ResourceType = "email"
+)
+
 // APIError represents an HTTP error from the VaultSandbox API.
 type APIError struct {
-	StatusCode int
-	Message    string
-	RequestID  string // if returned by server
+	StatusCode   int
+	Message      string
+	RequestID    string // if returned by server
+	ResourceType ResourceType
 }
 
 func (e *APIError) Error() string {
@@ -90,20 +102,16 @@ func (e *APIError) Is(target error) bool {
 	case 401:
 		return target == ErrUnauthorized
 	case 404:
-		// Check message content to distinguish inbox vs email errors
-		msgLower := strings.ToLower(e.Message)
-		hasInbox := strings.Contains(msgLower, "inbox")
-		hasEmail := strings.Contains(msgLower, "email")
-
-		if target == ErrInboxNotFound {
-			// Match if message contains "inbox" OR no specific keyword (fallback)
-			return hasInbox || (!hasInbox && !hasEmail)
+		// Use ResourceType for precise error matching
+		switch e.ResourceType {
+		case ResourceInbox:
+			return target == ErrInboxNotFound
+		case ResourceEmail:
+			return target == ErrEmailNotFound
+		default:
+			// Fallback: match both for unknown resource type
+			return target == ErrInboxNotFound || target == ErrEmailNotFound
 		}
-		if target == ErrEmailNotFound {
-			// Match if message contains "email" OR no specific keyword (fallback)
-			return hasEmail || (!hasInbox && !hasEmail)
-		}
-		return false
 	case 409:
 		return target == ErrInboxAlreadyExists
 	case 429:
@@ -261,9 +269,10 @@ func wrapError(err error) error {
 	var apiErr *api.APIError
 	if errors.As(err, &apiErr) {
 		return &APIError{
-			StatusCode: apiErr.StatusCode,
-			Message:    apiErr.Message,
-			RequestID:  apiErr.RequestID,
+			StatusCode:   apiErr.StatusCode,
+			Message:      apiErr.Message,
+			RequestID:    apiErr.RequestID,
+			ResourceType: ResourceType(apiErr.ResourceType),
 		}
 	}
 

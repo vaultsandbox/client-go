@@ -109,38 +109,30 @@ func TestAPIError_Is(t *testing.T) {
 
 func TestAPIError_Is_404Differentiation(t *testing.T) {
 	tests := []struct {
-		name     string
-		message  string
-		target   error
-		expected bool
+		name         string
+		resourceType ResourceType
+		target       error
+		expected     bool
 	}{
-		// Message contains "inbox" - only matches ErrInboxNotFound
-		{"inbox message matches ErrInboxNotFound", "inbox not found", ErrInboxNotFound, true},
-		{"inbox message does not match ErrEmailNotFound", "inbox not found", ErrEmailNotFound, false},
+		// ResourceInbox - only matches ErrInboxNotFound
+		{"inbox resource matches ErrInboxNotFound", ResourceInbox, ErrInboxNotFound, true},
+		{"inbox resource does not match ErrEmailNotFound", ResourceInbox, ErrEmailNotFound, false},
 
-		// Message contains "email" - only matches ErrEmailNotFound
-		{"email message matches ErrEmailNotFound", "email not found", ErrEmailNotFound, true},
-		{"email message does not match ErrInboxNotFound", "email not found", ErrInboxNotFound, false},
+		// ResourceEmail - only matches ErrEmailNotFound
+		{"email resource matches ErrEmailNotFound", ResourceEmail, ErrEmailNotFound, true},
+		{"email resource does not match ErrInboxNotFound", ResourceEmail, ErrInboxNotFound, false},
 
-		// Message contains both - matches both (first keyword wins)
-		{"both keywords matches ErrInboxNotFound", "inbox email not found", ErrInboxNotFound, true},
-		{"both keywords matches ErrEmailNotFound", "inbox email not found", ErrEmailNotFound, true},
-
-		// Empty message - matches both (fallback behavior)
-		{"empty message matches ErrInboxNotFound", "", ErrInboxNotFound, true},
-		{"empty message matches ErrEmailNotFound", "", ErrEmailNotFound, true},
-
-		// Case insensitive
-		{"INBOX uppercase matches ErrInboxNotFound", "INBOX NOT FOUND", ErrInboxNotFound, true},
-		{"EMAIL uppercase matches ErrEmailNotFound", "EMAIL NOT FOUND", ErrEmailNotFound, true},
+		// ResourceUnknown - matches both (fallback behavior)
+		{"unknown resource matches ErrInboxNotFound", ResourceUnknown, ErrInboxNotFound, true},
+		{"unknown resource matches ErrEmailNotFound", ResourceUnknown, ErrEmailNotFound, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := &APIError{StatusCode: 404, Message: tt.message}
+			err := &APIError{StatusCode: 404, ResourceType: tt.resourceType}
 			result := errors.Is(err, tt.target)
 			if result != tt.expected {
-				t.Errorf("errors.Is() = %v, want %v for message %q", result, tt.expected, tt.message)
+				t.Errorf("errors.Is() = %v, want %v for resource type %q", result, tt.expected, tt.resourceType)
 			}
 		})
 	}
@@ -522,13 +514,13 @@ func TestErrorChain_CanUnwrapToSentinel(t *testing.T) {
 			expectedMatch: ErrUnauthorized,
 		},
 		{
-			name:          "404 with inbox matches ErrInboxNotFound",
-			internalErr:   &api.APIError{StatusCode: 404, Message: "inbox not found"},
+			name:          "404 with inbox resource matches ErrInboxNotFound",
+			internalErr:   &api.APIError{StatusCode: 404, Message: "not found", ResourceType: api.ResourceInbox},
 			expectedMatch: ErrInboxNotFound,
 		},
 		{
-			name:          "404 with email matches ErrEmailNotFound",
-			internalErr:   &api.APIError{StatusCode: 404, Message: "email not found"},
+			name:          "404 with email resource matches ErrEmailNotFound",
+			internalErr:   &api.APIError{StatusCode: 404, Message: "not found", ResourceType: api.ResourceEmail},
 			expectedMatch: ErrEmailNotFound,
 		},
 		{

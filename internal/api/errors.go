@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"strings"
 )
 
 // Common API errors that can be checked with errors.Is.
@@ -22,11 +21,24 @@ var (
 	ErrRateLimited = errors.New("rate limit exceeded")
 )
 
+// ResourceType indicates which type of resource an error relates to.
+type ResourceType string
+
+const (
+	// ResourceUnknown indicates the resource type is not specified.
+	ResourceUnknown ResourceType = ""
+	// ResourceInbox indicates the error relates to an inbox.
+	ResourceInbox ResourceType = "inbox"
+	// ResourceEmail indicates the error relates to an email.
+	ResourceEmail ResourceType = "email"
+)
+
 // APIError represents an HTTP error from the VaultSandbox API.
 type APIError struct {
-	StatusCode int
-	Message    string
-	RequestID  string
+	StatusCode   int
+	Message      string
+	RequestID    string
+	ResourceType ResourceType
 }
 
 func (e *APIError) Error() string {
@@ -51,26 +63,40 @@ func (e *APIError) Is(target error) bool {
 	case 401:
 		return target == ErrUnauthorized || target == ErrInvalidAPIKey
 	case 404:
-		// Check message content to distinguish inbox vs email errors
-		msgLower := strings.ToLower(e.Message)
-		hasInbox := strings.Contains(msgLower, "inbox")
-		hasEmail := strings.Contains(msgLower, "email")
-
-		if target == ErrInboxNotFound {
-			// Match if message contains "inbox" OR no specific keyword (fallback)
-			return hasInbox || (!hasInbox && !hasEmail)
+		// Use ResourceType for precise error matching
+		switch e.ResourceType {
+		case ResourceInbox:
+			return target == ErrInboxNotFound
+		case ResourceEmail:
+			return target == ErrEmailNotFound
+		default:
+			// Fallback: match both for unknown resource type
+			return target == ErrInboxNotFound || target == ErrEmailNotFound
 		}
-		if target == ErrEmailNotFound {
-			// Match if message contains "email" OR no specific keyword (fallback)
-			return hasEmail || (!hasInbox && !hasEmail)
-		}
-		return false
 	case 409:
 		return target == ErrInboxAlreadyExists
 	case 429:
 		return target == ErrRateLimited
 	}
 	return false
+}
+
+// WithResourceType returns a copy of the error with the resource type set.
+// If the error is not an *APIError, it is returned unchanged.
+func WithResourceType(err error, rt ResourceType) error {
+	if err == nil {
+		return nil
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return &APIError{
+			StatusCode:   apiErr.StatusCode,
+			Message:      apiErr.Message,
+			RequestID:    apiErr.RequestID,
+			ResourceType: rt,
+		}
+	}
+	return err
 }
 
 // NetworkError represents a network-level failure.

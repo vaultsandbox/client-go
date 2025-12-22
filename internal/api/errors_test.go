@@ -46,25 +46,30 @@ func TestAPIError_Error(t *testing.T) {
 
 func TestAPIError_Is(t *testing.T) {
 	tests := []struct {
-		name       string
-		statusCode int
-		target     error
-		expected   bool
+		name         string
+		statusCode   int
+		resourceType ResourceType
+		target       error
+		expected     bool
 	}{
-		{"401 matches ErrUnauthorized", 401, ErrUnauthorized, true},
-		{"401 matches ErrInvalidAPIKey", 401, ErrInvalidAPIKey, true},
-		{"404 matches ErrInboxNotFound", 404, ErrInboxNotFound, true},
-		{"404 matches ErrEmailNotFound", 404, ErrEmailNotFound, true},
-		{"409 matches ErrInboxAlreadyExists", 409, ErrInboxAlreadyExists, true},
-		{"429 matches ErrRateLimited", 429, ErrRateLimited, true},
-		{"500 does not match ErrUnauthorized", 500, ErrUnauthorized, false},
-		{"401 does not match ErrInboxNotFound", 401, ErrInboxNotFound, false},
-		{"200 does not match anything", 200, ErrUnauthorized, false},
+		{"401 matches ErrUnauthorized", 401, ResourceUnknown, ErrUnauthorized, true},
+		{"401 matches ErrInvalidAPIKey", 401, ResourceUnknown, ErrInvalidAPIKey, true},
+		{"404 with unknown resource matches ErrInboxNotFound", 404, ResourceUnknown, ErrInboxNotFound, true},
+		{"404 with unknown resource matches ErrEmailNotFound", 404, ResourceUnknown, ErrEmailNotFound, true},
+		{"404 with inbox resource matches ErrInboxNotFound", 404, ResourceInbox, ErrInboxNotFound, true},
+		{"404 with inbox resource does not match ErrEmailNotFound", 404, ResourceInbox, ErrEmailNotFound, false},
+		{"404 with email resource matches ErrEmailNotFound", 404, ResourceEmail, ErrEmailNotFound, true},
+		{"404 with email resource does not match ErrInboxNotFound", 404, ResourceEmail, ErrInboxNotFound, false},
+		{"409 matches ErrInboxAlreadyExists", 409, ResourceUnknown, ErrInboxAlreadyExists, true},
+		{"429 matches ErrRateLimited", 429, ResourceUnknown, ErrRateLimited, true},
+		{"500 does not match ErrUnauthorized", 500, ResourceUnknown, ErrUnauthorized, false},
+		{"401 does not match ErrInboxNotFound", 401, ResourceUnknown, ErrInboxNotFound, false},
+		{"200 does not match anything", 200, ResourceUnknown, ErrUnauthorized, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := &APIError{StatusCode: tt.statusCode}
+			err := &APIError{StatusCode: tt.statusCode, ResourceType: tt.resourceType}
 			result := errors.Is(err, tt.target)
 			if result != tt.expected {
 				t.Errorf("errors.Is() = %v, want %v", result, tt.expected)
