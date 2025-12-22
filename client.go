@@ -45,23 +45,8 @@ type Client struct {
 	strategyCancel context.CancelFunc
 }
 
-// New creates a new VaultSandbox client with the given API key.
-func New(apiKey string, opts ...Option) (*Client, error) {
-	if apiKey == "" {
-		return nil, ErrMissingAPIKey
-	}
-
-	cfg := &clientConfig{
-		baseURL:          defaultBaseURL,
-		deliveryStrategy: StrategyAuto,
-		timeout:          defaultWaitTimeout,
-	}
-
-	for _, opt := range opts {
-		opt(cfg)
-	}
-
-	// Build API client options
+// buildAPIClient creates and configures an API client from the given config.
+func buildAPIClient(apiKey string, cfg *clientConfig) (*api.Client, error) {
 	apiOpts := []api.Option{
 		api.WithBaseURL(cfg.baseURL),
 	}
@@ -84,6 +69,43 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		apiClient.SetHTTPClient(cfg.httpClient)
 	}
 
+	return apiClient, nil
+}
+
+// createDeliveryStrategy creates a delivery strategy based on the config.
+func createDeliveryStrategy(cfg *clientConfig, apiClient *api.Client) delivery.FullStrategy {
+	deliveryCfg := delivery.Config{APIClient: apiClient}
+	switch cfg.deliveryStrategy {
+	case StrategySSE:
+		return delivery.NewSSEStrategy(deliveryCfg)
+	case StrategyPolling:
+		return delivery.NewPollingStrategy(deliveryCfg)
+	default:
+		return delivery.NewAutoStrategy(deliveryCfg)
+	}
+}
+
+// New creates a new VaultSandbox client with the given API key.
+func New(apiKey string, opts ...Option) (*Client, error) {
+	if apiKey == "" {
+		return nil, ErrMissingAPIKey
+	}
+
+	cfg := &clientConfig{
+		baseURL:          defaultBaseURL,
+		deliveryStrategy: StrategyAuto,
+		timeout:          defaultWaitTimeout,
+	}
+
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	apiClient, err := buildAPIClient(apiKey, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// Validate API key
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
 	defer cancel()
@@ -98,17 +120,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("fetch server info: %w", wrapError(err))
 	}
 
-	// Create delivery strategy based on configuration
-	deliveryCfg := delivery.Config{APIClient: apiClient}
-	var strategy delivery.FullStrategy
-	switch cfg.deliveryStrategy {
-	case StrategySSE:
-		strategy = delivery.NewSSEStrategy(deliveryCfg)
-	case StrategyPolling:
-		strategy = delivery.NewPollingStrategy(deliveryCfg)
-	default:
-		strategy = delivery.NewAutoStrategy(deliveryCfg)
-	}
+	strategy := createDeliveryStrategy(cfg, apiClient)
 
 	strategyCtx, strategyCancel := context.WithCancel(context.Background())
 

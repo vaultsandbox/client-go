@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -440,6 +441,110 @@ func TestExportedInbox_JSONFieldNames(t *testing.T) {
 		if !strings.Contains(jsonStr, `"`+field+`"`) {
 			t.Errorf("JSON should contain field %q", field)
 		}
+	}
+}
+
+// Tests for buildAPIClient helper
+func TestBuildAPIClient_DefaultConfig(t *testing.T) {
+	cfg := &clientConfig{
+		baseURL: "https://test.example.com",
+		timeout: 30 * time.Second,
+	}
+
+	client, err := buildAPIClient("test-api-key", cfg)
+	if err != nil {
+		t.Fatalf("buildAPIClient() error = %v", err)
+	}
+	if client == nil {
+		t.Fatal("buildAPIClient() returned nil client")
+	}
+}
+
+func TestBuildAPIClient_WithAllOptions(t *testing.T) {
+	cfg := &clientConfig{
+		baseURL:    "https://test.example.com",
+		timeout:    45 * time.Second,
+		retries:    3,
+		retryOn:    []int{500, 502, 503},
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+	}
+
+	client, err := buildAPIClient("test-api-key", cfg)
+	if err != nil {
+		t.Fatalf("buildAPIClient() error = %v", err)
+	}
+	if client == nil {
+		t.Fatal("buildAPIClient() returned nil client")
+	}
+}
+
+func TestBuildAPIClient_EmptyAPIKey(t *testing.T) {
+	cfg := &clientConfig{
+		baseURL: "https://test.example.com",
+	}
+
+	_, err := buildAPIClient("", cfg)
+	if err == nil {
+		t.Error("buildAPIClient() should return error for empty API key")
+	}
+}
+
+// Tests for createDeliveryStrategy helper
+func TestCreateDeliveryStrategy_SSE(t *testing.T) {
+	cfg := &clientConfig{
+		deliveryStrategy: StrategySSE,
+	}
+
+	// We need an API client for the delivery strategy
+	apiCfg := &clientConfig{baseURL: "https://test.example.com"}
+	apiClient, _ := buildAPIClient("test-key", apiCfg)
+
+	strategy := createDeliveryStrategy(cfg, apiClient)
+	if strategy == nil {
+		t.Fatal("createDeliveryStrategy() returned nil")
+	}
+}
+
+func TestCreateDeliveryStrategy_Polling(t *testing.T) {
+	cfg := &clientConfig{
+		deliveryStrategy: StrategyPolling,
+	}
+
+	apiCfg := &clientConfig{baseURL: "https://test.example.com"}
+	apiClient, _ := buildAPIClient("test-key", apiCfg)
+
+	strategy := createDeliveryStrategy(cfg, apiClient)
+	if strategy == nil {
+		t.Fatal("createDeliveryStrategy() returned nil")
+	}
+}
+
+func TestCreateDeliveryStrategy_Auto(t *testing.T) {
+	cfg := &clientConfig{
+		deliveryStrategy: StrategyAuto,
+	}
+
+	apiCfg := &clientConfig{baseURL: "https://test.example.com"}
+	apiClient, _ := buildAPIClient("test-key", apiCfg)
+
+	strategy := createDeliveryStrategy(cfg, apiClient)
+	if strategy == nil {
+		t.Fatal("createDeliveryStrategy() returned nil")
+	}
+}
+
+func TestCreateDeliveryStrategy_Default(t *testing.T) {
+	// Empty/unknown strategy should default to auto
+	cfg := &clientConfig{
+		deliveryStrategy: DeliveryStrategy("unknown"),
+	}
+
+	apiCfg := &clientConfig{baseURL: "https://test.example.com"}
+	apiClient, _ := buildAPIClient("test-key", apiCfg)
+
+	strategy := createDeliveryStrategy(cfg, apiClient)
+	if strategy == nil {
+		t.Fatal("createDeliveryStrategy() returned nil for unknown strategy")
 	}
 }
 
