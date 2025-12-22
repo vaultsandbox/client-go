@@ -1,0 +1,4 @@
+Findings
+- High: Signature verification trusts the per-payload `server_sig_pk` instead of the pinned server key stored on the inbox, so an attacker can inject emails signed with their own key and bypass authenticity checks. Fix by pinning the server key (and expected algs/context) captured at inbox creation/import and rejecting payloads whose `ServerSigPk` differs.
+- Medium: `DeleteInbox` and `DeleteAllInboxes` drop local inbox state and unsubscribe from delivery before the API call succeeds. On failure the client silently stops monitoring while the server inbox remains, leading to missed notifications and resource leaks. Only remove local state after a successful delete.
+- Low: SSE `AddInbox` does not reconnect the stream, so inboxes added after connection start receive no events until a reconnect occurs. Consider triggering a reconnect or documenting this limitation.
