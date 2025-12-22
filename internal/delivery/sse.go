@@ -218,6 +218,8 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 	})
 
 	scanner := bufio.NewScanner(resp.Body)
+	// Allow lines up to 1MB (default is 64KB)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 

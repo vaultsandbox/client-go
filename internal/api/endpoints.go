@@ -142,8 +142,11 @@ func (c *Client) OpenEventStream(ctx context.Context, inboxHashes []string) (*ht
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
 
-	// Use a client without timeout for long-lived SSE connections
-	sseClient := &http.Client{Timeout: 0}
+	// Clone transport from existing client, but disable timeout for SSE
+	sseClient := &http.Client{
+		Transport: c.httpClient.Transport,
+		Timeout:   0,
+	}
 	return sseClient.Do(req)
 }
 

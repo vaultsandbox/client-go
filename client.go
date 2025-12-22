@@ -30,12 +30,13 @@ type emailEventCallback func(inbox *Inbox, email *Email)
 
 // Client is the main VaultSandbox client for managing inboxes.
 type Client struct {
-	apiClient  *api.Client
-	strategy   delivery.FullStrategy
-	serverInfo *api.ServerInfo
-	inboxes    map[string]*Inbox
-	mu         sync.RWMutex
-	closed     bool
+	apiClient      *api.Client
+	strategy       delivery.FullStrategy
+	serverInfo     *api.ServerInfo
+	inboxes        map[string]*Inbox // keyed by email address
+	inboxesByHash  map[string]*Inbox // keyed by inbox hash for O(1) lookup
+	mu             sync.RWMutex
+	closed         bool
 
 	// Event handling
 	eventCallbacks map[string][]emailEventCallback // inboxHash -> callbacks
@@ -116,6 +117,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		strategy:       strategy,
 		serverInfo:     serverInfo,
 		inboxes:        make(map[string]*Inbox),
+		inboxesByHash:  make(map[string]*Inbox),
 		eventCallbacks: make(map[string][]emailEventCallback),
 		strategyCtx:    strategyCtx,
 		strategyCancel: strategyCancel,
@@ -171,6 +173,7 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 
 	c.mu.Lock()
 	c.inboxes[inbox.emailAddress] = inbox
+	c.inboxesByHash[inbox.inboxHash] = inbox
 	c.mu.Unlock()
 
 	// Add to delivery strategy
@@ -184,6 +187,10 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 
 // ImportInbox imports a previously exported inbox.
 func (c *Client) ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, error) {
+	if data == nil {
+		return nil, fmt.Errorf("exported inbox data cannot be nil")
+	}
+
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -210,6 +217,7 @@ func (c *Client) ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, 
 
 	c.mu.Lock()
 	c.inboxes[inbox.emailAddress] = inbox
+	c.inboxesByHash[inbox.inboxHash] = inbox
 	c.mu.Unlock()
 
 	// Add to delivery strategy
@@ -227,6 +235,7 @@ func (c *Client) DeleteInbox(ctx context.Context, emailAddress string) error {
 	inbox, exists := c.inboxes[emailAddress]
 	if exists {
 		delete(c.inboxes, emailAddress)
+		delete(c.inboxesByHash, inbox.inboxHash)
 		c.strategy.RemoveInbox(inbox.inboxHash)
 	}
 	c.mu.Unlock()
@@ -240,6 +249,7 @@ func (c *Client) DeleteAllInboxes(ctx context.Context) (int, error) {
 	for email, inbox := range c.inboxes {
 		c.strategy.RemoveInbox(inbox.inboxHash)
 		delete(c.inboxes, email)
+		delete(c.inboxesByHash, inbox.inboxHash)
 	}
 	c.mu.Unlock()
 
@@ -376,15 +386,9 @@ func (c *Client) handleSSEEvent(event *api.SSEEvent) error {
 		return nil
 	}
 
-	// Find the inbox
+	// Find the inbox using O(1) lookup
 	c.mu.RLock()
-	var inbox *Inbox
-	for _, i := range c.inboxes {
-		if i.inboxHash == event.InboxID {
-			inbox = i
-			break
-		}
-	}
+	inbox := c.inboxesByHash[event.InboxID]
 	c.mu.RUnlock()
 
 	if inbox == nil {
@@ -460,6 +464,7 @@ func (c *Client) Close() error {
 
 	// Clear inboxes and callbacks
 	c.inboxes = make(map[string]*Inbox)
+	c.inboxesByHash = make(map[string]*Inbox)
 	c.callbacksMu.Lock()
 	c.eventCallbacks = make(map[string][]emailEventCallback)
 	c.callbacksMu.Unlock()
