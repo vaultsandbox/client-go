@@ -191,6 +191,32 @@ func main() {
 - Some cloud environments may close long-lived connections
 - Requires server-side SSE support
 
+### Adding Inboxes After Connection
+
+When using SSE, the connection is established with a fixed set of inboxes. If you add inboxes after the SSE connection is already active (e.g., by calling `client.CreateInbox` or `client.ImportInbox`), the new inboxes will only receive events after the next reconnection.
+
+For tests that create all inboxes upfront before subscribing, this is not an issue. If you need to add inboxes dynamically and receive events immediately, stop and restart the client:
+
+```go
+// Create initial inbox and start listening
+inbox1, _ := client.CreateInbox(ctx)
+subscription := inbox1.OnNewEmail(handler)
+
+// Later, need to add another inbox with immediate event delivery
+subscription.Unsubscribe()
+client.Close()
+
+// Recreate client and inboxes
+client, _ = vaultsandbox.New(apiKey)
+inbox1, _ = client.ImportInbox(ctx, inbox1Key) // re-import
+inbox2, _ := client.CreateInbox(ctx)           // new inbox
+
+// Now both inboxes will receive events
+monitor, _ := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
+```
+
+For most testing scenarios, create all required inboxes before subscribing to events.
+
 ## Polling Strategy
 
 Polling periodically checks for new emails with adaptive backoff and jitter.
