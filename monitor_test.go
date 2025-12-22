@@ -25,7 +25,7 @@ func TestInboxMonitor_OnEmail(t *testing.T) {
 		client:          c,
 		inboxes:         []*Inbox{inbox},
 		callbacks:       make([]EmailCallback, 0),
-		callbackIndices: make(map[string]int),
+		unsubscribers: make(map[string]func()),
 	}
 
 	// Track callback invocations
@@ -66,7 +66,7 @@ func TestInboxMonitor_MultipleCallbacks(t *testing.T) {
 		client:          c,
 		inboxes:         []*Inbox{inbox},
 		callbacks:       make([]EmailCallback, 0),
-		callbackIndices: make(map[string]int),
+		unsubscribers: make(map[string]func()),
 	}
 
 	var count1, count2 int
@@ -120,7 +120,7 @@ func TestInboxMonitor_Unsubscribe(t *testing.T) {
 		client:          c,
 		inboxes:         []*Inbox{inbox},
 		callbacks:       make([]EmailCallback, 0),
-		callbackIndices: make(map[string]int),
+		unsubscribers: make(map[string]func()),
 	}
 
 	var called bool
@@ -170,7 +170,7 @@ func TestInboxMonitor_SingleSubscriptionUnsubscribe(t *testing.T) {
 		inboxes:         []*Inbox{inbox},
 		callbacks:       make([]EmailCallback, 0),
 		subscriptions:   make([]Subscription, 0),
-		callbackIndices: make(map[string]int),
+		unsubscribers: make(map[string]func()),
 	}
 
 	var count1, count2 int
@@ -283,7 +283,7 @@ func TestInboxMonitor_MultipleInboxes(t *testing.T) {
 		client:          c,
 		inboxes:         []*Inbox{inbox1, inbox2, inbox3},
 		callbacks:       make([]EmailCallback, 0),
-		callbackIndices: make(map[string]int),
+		unsubscribers: make(map[string]func()),
 	}
 
 	// Track callback invocations per inbox
@@ -346,7 +346,7 @@ func TestInboxMonitor_UnsubscribeAll(t *testing.T) {
 		client:          c,
 		inboxes:         []*Inbox{inbox},
 		callbacks:       make([]EmailCallback, 0),
-		callbackIndices: make(map[string]int),
+		unsubscribers: make(map[string]func()),
 	}
 
 	var count1, count2, count3 int
@@ -417,7 +417,7 @@ func TestInboxMonitor_Unsubscribe_Idempotent(t *testing.T) {
 		client:          c,
 		inboxes:         []*Inbox{inbox},
 		callbacks:       make([]EmailCallback, 0),
-		callbackIndices: make(map[string]int),
+		unsubscribers: make(map[string]func()),
 	}
 
 	// Unsubscribe multiple times should not panic

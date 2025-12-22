@@ -431,8 +431,8 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 }
 
 // registerEmailCallback registers a callback for email events on a specific inbox.
-// Returns an ID that can be used to unregister the callback.
-func (c *Client) registerEmailCallback(inboxHash string, callback emailEventCallback) int {
+// Returns a function that unregisters the callback when called.
+func (c *Client) registerEmailCallback(inboxHash string, callback emailEventCallback) func() {
 	c.callbacksMu.Lock()
 	defer c.callbacksMu.Unlock()
 
@@ -443,7 +443,10 @@ func (c *Client) registerEmailCallback(inboxHash string, callback emailEventCall
 	id := c.nextCallbackID
 	c.nextCallbackID++
 	c.eventCallbacks[inboxHash][id] = callback
-	return id
+
+	return func() {
+		c.unregisterEmailCallback(inboxHash, id)
+	}
 }
 
 // unregisterEmailCallback removes a callback by its ID.

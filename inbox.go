@@ -303,27 +303,21 @@ type InboxEmailCallback func(email *Email)
 //	})
 //	defer subscription.Unsubscribe()
 func (i *Inbox) OnNewEmail(callback InboxEmailCallback) Subscription {
-	// Register callback with the client's event system
-	index := i.client.registerEmailCallback(i.inboxHash, func(inbox *Inbox, email *Email) {
+	unsub := i.client.registerEmailCallback(i.inboxHash, func(inbox *Inbox, email *Email) {
 		callback(email)
 	})
 
-	return &inboxEmailSubscription{
-		inbox:         i,
-		callbackIndex: index,
-	}
+	return &inboxEmailSubscription{unsubscribe: unsub}
 }
 
 // inboxEmailSubscription implements Subscription for single inbox monitoring.
 type inboxEmailSubscription struct {
-	inbox         *Inbox
-	callbackIndex int
+	unsubscribe func()
+	once        sync.Once
 }
 
 func (s *inboxEmailSubscription) Unsubscribe() {
-	if s.inbox != nil && s.inbox.client != nil {
-		s.inbox.client.unregisterEmailCallback(s.inbox.inboxHash, s.callbackIndex)
-	}
+	s.once.Do(s.unsubscribe)
 }
 
 func newInboxFromResult(resp *api.CreateInboxResult, c *Client) *Inbox {

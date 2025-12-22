@@ -20,13 +20,13 @@ type EmailCallback func(inbox *Inbox, email *Email)
 // for real-time email notifications. With SSE enabled, emails are delivered
 // instantly as push notifications.
 type InboxMonitor struct {
-	client          *Client
-	inboxes         []*Inbox
-	callbacks       []EmailCallback
-	subscriptions   []Subscription
-	mu              sync.RWMutex
-	started         bool
-	callbackIndices map[string]int // inboxHash -> callback index in client's registry
+	client        *Client
+	inboxes       []*Inbox
+	callbacks     []EmailCallback
+	subscriptions []Subscription
+	mu            sync.RWMutex
+	started       bool
+	unsubscribers map[string]func() // inboxHash -> unsubscribe function
 }
 
 // internalSubscription implements the Subscription interface.
@@ -43,10 +43,10 @@ func (s *internalSubscription) Unsubscribe() {
 // newInboxMonitor creates a new inbox monitor for the given inboxes.
 func newInboxMonitor(client *Client, inboxes []*Inbox) *InboxMonitor {
 	return &InboxMonitor{
-		client:          client,
-		inboxes:         inboxes,
-		callbacks:       make([]EmailCallback, 0),
-		callbackIndices: make(map[string]int),
+		client:        client,
+		inboxes:       inboxes,
+		callbacks:     make([]EmailCallback, 0),
+		unsubscribers: make(map[string]func()),
 	}
 }
 
@@ -85,14 +85,14 @@ func (m *InboxMonitor) Unsubscribe() {
 	defer m.mu.Unlock()
 
 	// Unregister callbacks from client's event system
-	for inboxHash, index := range m.callbackIndices {
-		m.client.unregisterEmailCallback(inboxHash, index)
+	for _, unsub := range m.unsubscribers {
+		unsub()
 	}
 
 	// Clear all callbacks and subscriptions
 	m.callbacks = nil
 	m.subscriptions = nil
-	m.callbackIndices = make(map[string]int)
+	m.unsubscribers = make(map[string]func())
 	m.started = false
 }
 
@@ -109,11 +109,11 @@ func (m *InboxMonitor) startMonitoring() {
 	// Register a callback with the client's event system for each inbox
 	for _, inbox := range m.inboxes {
 		inboxRef := inbox // capture for closure
-		index := m.client.registerEmailCallback(inbox.inboxHash, func(inbox *Inbox, email *Email) {
+		unsub := m.client.registerEmailCallback(inbox.inboxHash, func(inbox *Inbox, email *Email) {
 			m.emitEmail(inboxRef, email)
 		})
 		m.mu.Lock()
-		m.callbackIndices[inbox.inboxHash] = index
+		m.unsubscribers[inbox.inboxHash] = unsub
 		m.mu.Unlock()
 	}
 }
