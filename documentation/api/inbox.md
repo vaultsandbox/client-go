@@ -225,7 +225,7 @@ email, err := inbox.WaitForEmail(ctx,
 
 #### Errors
 
-- `TimeoutError` - No matching email received within timeout period
+- `context.DeadlineExceeded` - No matching email received within timeout period
 
 ---
 
@@ -246,10 +246,16 @@ func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOp
 | Option | Description |
 | ------ | ----------- |
 | `WithWaitTimeout(d time.Duration)` | Maximum time to wait (default: 60s) |
+| `WithPollInterval(d time.Duration)` | Polling interval (default: 2s) |
+| `WithSubject(s string)` | Filter by exact subject match |
+| `WithSubjectRegex(r *regexp.Regexp)` | Filter by subject pattern |
+| `WithFrom(s string)` | Filter by exact sender address |
+| `WithFromRegex(r *regexp.Regexp)` | Filter by sender pattern |
+| `WithPredicate(fn func(*Email) bool)` | Custom filter function |
 
 #### Returns
 
-`[]*Email` - All emails in the inbox once count is reached
+`[]*Email` - All matching emails in the inbox once count is reached
 
 #### Example
 
@@ -276,7 +282,7 @@ if len(emails) != 3 {
 
 #### Errors
 
-- `TimeoutError` - Required count not reached within timeout
+- `context.DeadlineExceeded` - Required count not reached within timeout
 
 ---
 
@@ -452,14 +458,24 @@ func (i *Inbox) Export() *ExportedInbox
 ```go
 type ExportedInbox struct {
     EmailAddress string    `json:"emailAddress"`
-    InboxHash    string    `json:"inboxHash"`
     ExpiresAt    time.Time `json:"expiresAt"`
+    InboxHash    string    `json:"inboxHash"`
     ServerSigPk  string    `json:"serverSigPk"`
     PublicKeyB64 string    `json:"publicKeyB64"`
     SecretKeyB64 string    `json:"secretKeyB64"`
     ExportedAt   time.Time `json:"exportedAt"`
 }
 ```
+
+#### Validate
+
+Validates that the exported data is valid before import.
+
+```go
+func (e *ExportedInbox) Validate() error
+```
+
+Returns `ErrInvalidImportData` if the email address is empty or the secret key is missing/invalid.
 
 #### Example
 
@@ -564,15 +580,15 @@ import (
     "os"
     "time"
 
-    "github.com/anthropics/vaultsandbox-go"
+    "github.com/vaultsandbox/client-go"
 )
 
 func monitorMultipleInboxes() error {
     ctx := context.Background()
 
-    client, err := vaultsandbox.NewClient(
-        vaultsandbox.WithURL(os.Getenv("VAULTSANDBOX_URL")),
-        vaultsandbox.WithAPIKey(os.Getenv("VAULTSANDBOX_API_KEY")),
+    client, err := vaultsandbox.New(
+        os.Getenv("VAULTSANDBOX_API_KEY"),
+        vaultsandbox.WithBaseURL(os.Getenv("VAULTSANDBOX_URL")),
     )
     if err != nil {
         return err
@@ -636,15 +652,15 @@ import (
     "regexp"
     "time"
 
-    "github.com/anthropics/vaultsandbox-go"
+    "github.com/vaultsandbox/client-go"
 )
 
 func completeInboxExample() error {
     ctx := context.Background()
 
-    client, err := vaultsandbox.NewClient(
-        vaultsandbox.WithURL(os.Getenv("VAULTSANDBOX_URL")),
-        vaultsandbox.WithAPIKey(os.Getenv("VAULTSANDBOX_API_KEY")),
+    client, err := vaultsandbox.New(
+        os.Getenv("VAULTSANDBOX_API_KEY"),
+        vaultsandbox.WithBaseURL(os.Getenv("VAULTSANDBOX_URL")),
     )
     if err != nil {
         return err

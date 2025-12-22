@@ -115,6 +115,31 @@ if inbox.IsExpired() {
 }
 ```
 
+### GetSyncStatus()
+
+**Returns**: `(*SyncStatus, error)`
+
+Retrieves the synchronization status of the inbox, including the email count and a hash for efficient change detection.
+
+```go
+status, err := inbox.GetSyncStatus(ctx)
+if err != nil {
+	log.Fatal(err)
+}
+
+fmt.Printf("Email count: %d\n", status.EmailCount)
+fmt.Printf("Emails hash: %s\n", status.EmailsHash)
+```
+
+The `SyncStatus` struct contains:
+
+```go
+type SyncStatus struct {
+	EmailCount int    // Number of emails in the inbox
+	EmailsHash string // Hash of the email list for change detection
+}
+```
+
 ## Inbox Lifecycle
 
 ```
@@ -189,6 +214,45 @@ email, err := inbox.WaitForEmail(ctx,
 )
 ```
 
+**Available Wait Options:**
+
+| Option | Description |
+|--------|-------------|
+| `WithWaitTimeout(duration)` | Maximum time to wait for an email |
+| `WithSubject(string)` | Filter by exact subject match |
+| `WithSubjectRegex(regexp)` | Filter by subject regex pattern |
+| `WithFrom(string)` | Filter by exact sender match |
+| `WithFromRegex(regexp)` | Filter by sender regex pattern |
+| `WithPredicate(func(*Email) bool)` | Filter by custom predicate function |
+| `WithPollInterval(duration)` | Set the polling interval (default: 2s) |
+
+```go
+// Using exact subject match
+email, err := inbox.WaitForEmail(ctx,
+	vaultsandbox.WithSubject("Welcome to Our Service"),
+)
+
+// Using sender regex
+email, err := inbox.WaitForEmail(ctx,
+	vaultsandbox.WithFromRegex(regexp.MustCompile(`.*@example\.com`)),
+)
+
+// Using custom predicate
+email, err := inbox.WaitForEmail(ctx,
+	vaultsandbox.WithPredicate(func(e *vaultsandbox.Email) bool {
+		return len(e.Attachments) > 0
+	}),
+)
+
+// Combining multiple filters
+email, err := inbox.WaitForEmail(ctx,
+	vaultsandbox.WithWaitTimeout(60*time.Second),
+	vaultsandbox.WithFrom("notifications@example.com"),
+	vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Order #\d+`)),
+	vaultsandbox.WithPollInterval(1*time.Second),
+)
+```
+
 ### Waiting for Multiple Emails
 
 ```go
@@ -201,6 +265,27 @@ if err != nil {
 }
 
 fmt.Printf("Received %d emails\n", len(emails))
+```
+
+### Getting Raw Email Content
+
+```go
+// Get raw email (original MIME content)
+rawContent, err := email.GetRaw(ctx)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(rawContent)
+```
+
+### Marking Emails as Read
+
+```go
+err := email.MarkAsRead(ctx)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Printf("Email is read: %v\n", email.IsRead)
 ```
 
 ### Deleting Emails

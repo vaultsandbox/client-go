@@ -43,6 +43,24 @@ type StrategyError struct { ... }
 type ValidationError struct { ... }
 ```
 
+The `authresults` package also provides errors for email authentication validation:
+
+```go
+import "github.com/vaultsandbox/client-go/authresults"
+
+// Sentinel errors for authentication validation
+var (
+    authresults.ErrSPFFailed        error
+    authresults.ErrDKIMFailed       error
+    authresults.ErrDMARCFailed      error
+    authresults.ErrReverseDNSFailed error
+    authresults.ErrNoAuthResults    error
+)
+
+// Error type for multiple validation failures
+type authresults.ValidationError struct { ... }
+```
+
 ## Automatic Retries
 
 The SDK automatically retries failed HTTP requests for transient errors. This helps mitigate temporary network issues or server-side problems.
@@ -155,7 +173,7 @@ if errors.Is(err, vaultsandbox.ErrUnauthorized) {
 Returned when an inbox does not exist or has expired.
 
 ```go
-emails, err := inbox.ListEmails(ctx)
+emails, err := inbox.GetEmails(ctx)
 if errors.Is(err, vaultsandbox.ErrInboxNotFound) {
     log.Println("Inbox no longer exists - it may have expired or been deleted")
 }
@@ -207,7 +225,7 @@ if errors.Is(err, vaultsandbox.ErrInvalidImportData) {
 Returned when email decryption fails.
 
 ```go
-emails, err := inbox.ListEmails(ctx)
+emails, err := inbox.GetEmails(ctx)
 if errors.Is(err, vaultsandbox.ErrDecryptionFailed) {
     log.Println("Failed to decrypt email - this is a critical error")
 }
@@ -233,7 +251,7 @@ if errors.Is(err, vaultsandbox.ErrSignatureInvalid) {
 Returned when the SSE connection fails.
 
 ```go
-err := inbox.Subscribe(ctx, handler)
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
 if errors.Is(err, vaultsandbox.ErrSSEConnection) {
     log.Println("SSE connection failed - consider using polling strategy")
 }
@@ -259,7 +277,7 @@ if errors.Is(err, vaultsandbox.ErrInvalidSecretKeySize) {
 Returned when an inbox has exceeded its TTL.
 
 ```go
-emails, err := inbox.ListEmails(ctx)
+emails, err := inbox.GetEmails(ctx)
 if errors.Is(err, vaultsandbox.ErrInboxExpired) {
     log.Println("Inbox has expired")
 }
@@ -406,7 +424,7 @@ if err != nil {
         log.Printf("Timed out after %v waiting for email", timeoutErr.Timeout)
 
         // Check what emails did arrive
-        emails, _ := inbox.ListEmails(ctx)
+        emails, _ := inbox.GetEmails(ctx)
         log.Printf("Found %d emails:", len(emails))
         for _, e := range emails {
             log.Printf("  - %s", e.Subject)
@@ -438,7 +456,7 @@ type DecryptionError struct {
 #### Example
 
 ```go
-emails, err := inbox.ListEmails(ctx)
+emails, err := inbox.GetEmails(ctx)
 if err != nil {
     var decErr *vaultsandbox.DecryptionError
     if errors.As(err, &decErr) {
@@ -484,7 +502,7 @@ if err != nil {
         log.Println("This may indicate a MITM attack")
 
         // Alert security team
-        alertSecurityTeam(sigErr.Message, client.BaseURL())
+        alertSecurityTeam(sigErr.Message)
 
         // Do not continue
         os.Exit(1)
@@ -526,12 +544,12 @@ client, _ := vaultsandbox.NewClient(
     os.Getenv("VAULTSANDBOX_API_KEY"),
     vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE),
 )
+defer client.Close()
 
 inbox, _ := client.CreateInbox(ctx)
 
-err := inbox.Subscribe(ctx, func(email *vaultsandbox.Email) {
-    log.Printf("New email: %s", email.Subject)
-})
+// WaitForEmail may return SSEError if SSE connection fails
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(30*time.Second))
 
 var sseErr *vaultsandbox.SSEError
 if errors.As(err, &sseErr) {
@@ -568,7 +586,7 @@ type StrategyError struct {
 #### Example
 
 ```go
-err := inbox.Subscribe(ctx, handler)
+monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox})
 
 var stratErr *vaultsandbox.StrategyError
 if errors.As(err, &stratErr) {
@@ -602,6 +620,157 @@ if errors.As(err, &valErr) {
     for _, e := range valErr.Errors {
         log.Printf("  - %s", e)
     }
+}
+```
+
+## Authentication Results Errors
+
+The `authresults` package provides errors for email authentication validation (SPF, DKIM, DMARC, Reverse DNS).
+
+### Sentinel Errors
+
+```go
+import "github.com/vaultsandbox/client-go/authresults"
+
+var (
+    authresults.ErrSPFFailed        // SPF check failed
+    authresults.ErrDKIMFailed       // DKIM check failed
+    authresults.ErrDMARCFailed      // DMARC check failed
+    authresults.ErrReverseDNSFailed // Reverse DNS check failed
+    authresults.ErrNoAuthResults    // No authentication results available
+)
+```
+
+### ErrSPFFailed
+
+Returned when the SPF (Sender Policy Framework) check did not pass.
+
+```go
+err := authresults.ValidateSPF(email.AuthResults)
+if errors.Is(err, authresults.ErrSPFFailed) {
+    log.Println("SPF check failed - sender may not be authorized")
+}
+```
+
+---
+
+### ErrDKIMFailed
+
+Returned when no DKIM (DomainKeys Identified Mail) signature passed verification.
+
+```go
+err := authresults.ValidateDKIM(email.AuthResults)
+if errors.Is(err, authresults.ErrDKIMFailed) {
+    log.Println("DKIM verification failed - email may have been modified")
+}
+```
+
+---
+
+### ErrDMARCFailed
+
+Returned when the DMARC (Domain-based Message Authentication) check did not pass.
+
+```go
+err := authresults.ValidateDMARC(email.AuthResults)
+if errors.Is(err, authresults.ErrDMARCFailed) {
+    log.Println("DMARC check failed - email may not be from claimed domain")
+}
+```
+
+---
+
+### ErrReverseDNSFailed
+
+Returned when the reverse DNS check did not pass.
+
+```go
+err := authresults.ValidateReverseDNS(email.AuthResults)
+if errors.Is(err, authresults.ErrReverseDNSFailed) {
+    log.Println("Reverse DNS check failed")
+}
+```
+
+---
+
+### ErrNoAuthResults
+
+Returned when no authentication results are available for validation.
+
+```go
+err := authresults.ValidateSPF(email.AuthResults)
+if errors.Is(err, authresults.ErrNoAuthResults) {
+    log.Println("No authentication results available")
+}
+```
+
+---
+
+### ValidationError (authresults)
+
+Contains multiple authentication validation failures. This is distinct from the main package's `ValidationError`.
+
+```go
+type ValidationError struct {
+    Errors []string
+}
+```
+
+#### Example
+
+```go
+err := authresults.Validate(email.AuthResults)
+
+var valErr *authresults.ValidationError
+if errors.As(err, &valErr) {
+    log.Println("Authentication validation failed:")
+    for _, e := range valErr.Errors {
+        log.Printf("  - %s", e)
+    }
+}
+```
+
+### Full Validation Example
+
+```go
+import (
+    "errors"
+    "log"
+
+    vaultsandbox "github.com/vaultsandbox/client-go"
+    "github.com/vaultsandbox/client-go/authresults"
+)
+
+func validateEmailAuthenticity(email *vaultsandbox.Email) error {
+    // Quick check using the convenience method
+    if email.AuthResults.IsPassing() {
+        log.Println("All authentication checks passed")
+        return nil
+    }
+
+    // Detailed validation
+    validation := email.AuthResults.Validate()
+    if !validation.Passed {
+        log.Println("Authentication failed:")
+        for _, failure := range validation.Failures {
+            log.Printf("  - %s", failure)
+        }
+    }
+
+    // Or use individual validators for specific checks
+    if err := authresults.ValidateSPF(email.AuthResults); err != nil {
+        return fmt.Errorf("SPF validation failed: %w", err)
+    }
+
+    if err := authresults.ValidateDKIM(email.AuthResults); err != nil {
+        return fmt.Errorf("DKIM validation failed: %w", err)
+    }
+
+    if err := authresults.ValidateDMARC(email.AuthResults); err != nil {
+        return fmt.Errorf("DMARC validation failed: %w", err)
+    }
+
+    return nil
 }
 ```
 
@@ -720,7 +889,7 @@ func getEmailsWithFallback(ctx context.Context, inbox *vaultsandbox.Inbox) ([]*v
     if errors.As(err, &timeoutErr) {
         log.Println("No new emails, checking existing...")
         // Fall back to listing existing emails
-        return inbox.ListEmails(ctx)
+        return inbox.GetEmails(ctx)
     }
 
     return nil, err
@@ -795,7 +964,7 @@ if err != nil {
     var timeoutErr *vaultsandbox.TimeoutError
     if errors.As(err, &timeoutErr) {
         // List what emails did arrive
-        emails, _ := inbox.ListEmails(ctx)
+        emails, _ := inbox.GetEmails(ctx)
         log.Printf("Expected email not found. Received %d emails:", len(emails))
         for _, e := range emails {
             log.Printf("  - %q from %s", e.Subject, e.From)
@@ -817,7 +986,6 @@ if err != nil {
         logger.Critical(map[string]any{
             "error":     err.Error(),
             "timestamp": time.Now().Format(time.RFC3339),
-            "serverURL": client.BaseURL(),
         })
 
         // Alert operations team
@@ -916,5 +1084,6 @@ if err != nil {
 
 ## Next Steps
 
+- [Authentication Results](#authentication-results-errors) - Email authentication validation
 - [CI/CD Integration](/client-go/testing/cicd) - Error handling in CI
 - [Client API](/client-go/api/client) - Client configuration

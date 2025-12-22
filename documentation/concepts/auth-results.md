@@ -409,7 +409,7 @@ var (
 )
 ```
 
-Use `errors.Is` to check for specific failures:
+Use `errors.Is` to check for specific failures with individual validation functions:
 
 ```go
 if err := authresults.ValidateSPF(email.AuthResults); err != nil {
@@ -420,6 +420,33 @@ if err := authresults.ValidateSPF(email.AuthResults); err != nil {
     }
 }
 ```
+
+### ValidationError Type
+
+The package-level `Validate()` function returns a `*ValidationError` when validation fails, which contains all individual error messages:
+
+```go
+type ValidationError struct {
+    Errors []string
+}
+
+func (e *ValidationError) Error() string // Returns errors joined with "; "
+```
+
+This allows you to access individual failure messages:
+
+```go
+if err := authresults.Validate(email.AuthResults); err != nil {
+    // Type assert to access individual errors
+    if ve, ok := err.(*authresults.ValidationError); ok {
+        for _, msg := range ve.Errors {
+            fmt.Printf("- %s\n", msg)
+        }
+    }
+}
+```
+
+**Note**: The package-level `Validate()` function returns `*ValidationError` or `ErrNoAuthResults`, while the individual functions (`ValidateSPF`, `ValidateDKIM`, etc.) return their respective sentinel errors.
 
 ## Testing Patterns
 
