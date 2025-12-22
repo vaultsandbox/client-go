@@ -242,7 +242,7 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 			s.mu.RUnlock()
 
 			if handler != nil {
-				handler(&event)
+				handler(ctx, &event)
 			}
 		}
 	}

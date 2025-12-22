@@ -386,7 +386,7 @@ func (c *Client) MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error) {
 }
 
 // handleSSEEvent processes incoming SSE events from the delivery strategy.
-func (c *Client) handleSSEEvent(event *api.SSEEvent) error {
+func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error {
 	if event == nil {
 		return nil
 	}
@@ -413,8 +413,8 @@ func (c *Client) handleSSEEvent(event *api.SSEEvent) error {
 		return nil
 	}
 
-	// Fetch and decrypt the email
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Fetch and decrypt the email using the provided context
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	email, err := inbox.GetEmail(ctx, event.EmailID)

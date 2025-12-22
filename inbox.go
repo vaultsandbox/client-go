@@ -102,7 +102,7 @@ func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
 
 	emails := make([]*Email, 0, len(resp.Emails))
 	for _, e := range resp.Emails {
-		email, err := i.decryptEmail(e)
+		email, err := i.decryptEmail(ctx, e)
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +119,7 @@ func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
 		return nil, wrapError(err)
 	}
 
-	return i.decryptEmail(resp)
+	return i.decryptEmail(ctx, resp)
 }
 
 // WaitForEmail waits for an email matching the given criteria.
@@ -372,11 +372,7 @@ func newInboxFromExport(data *ExportedInbox, c *Client) (*Inbox, error) {
 	}, nil
 }
 
-func (i *Inbox) decryptEmail(raw *api.RawEmail) (*Email, error) {
-	return i.decryptEmailWithContext(context.Background(), raw)
-}
-
-func (i *Inbox) decryptEmailWithContext(ctx context.Context, raw *api.RawEmail) (*Email, error) {
+func (i *Inbox) decryptEmail(ctx context.Context, raw *api.RawEmail) (*Email, error) {
 	if raw.EncryptedMetadata == nil {
 		return nil, fmt.Errorf("email has no encrypted metadata")
 	}

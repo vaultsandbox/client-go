@@ -78,7 +78,7 @@ func TestAutoStrategy_Start_FallbackToPolling(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := func(event *api.SSEEvent) error {
+	handler := func(ctx context.Context, event *api.SSEEvent) error {
 		return nil
 	}
 

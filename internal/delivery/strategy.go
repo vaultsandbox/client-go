@@ -19,10 +19,10 @@ type InboxInfo struct {
 }
 
 // EventHandler is a callback function invoked when a new email arrives.
-// The handler receives an SSE event containing the inbox ID, email ID,
-// and encrypted metadata. Return an error to signal processing failure
-// (currently errors are not propagated, but this may change).
-type EventHandler func(event *api.SSEEvent) error
+// The handler receives the connection context and an SSE event containing
+// the inbox ID, email ID, and encrypted metadata. Return an error to signal
+// processing failure (currently errors are not propagated, but this may change).
+type EventHandler func(ctx context.Context, event *api.SSEEvent) error
 
 // Strategy defines the interface for email delivery mechanisms.
 // Implementations include PollingStrategy, SSEStrategy, and AutoStrategy.

@@ -286,7 +286,7 @@ func TestPollingStrategy_Start(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	handler := func(event *api.SSEEvent) error {
+	handler := func(ctx context.Context, event *api.SSEEvent) error {
 		return nil
 	}
 

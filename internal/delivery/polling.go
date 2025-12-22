@@ -235,7 +235,7 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 			inbox.seenEmails[email.ID] = struct{}{}
 
 			if handler != nil {
-				handler(&api.SSEEvent{
+				handler(ctx, &api.SSEEvent{
 					InboxID:           inbox.hash,
 					EmailID:           email.ID,
 					EncryptedMetadata: email.EncryptedMetadata,

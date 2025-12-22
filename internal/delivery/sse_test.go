@@ -258,7 +258,7 @@ func TestSSEStrategy_Start(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	handler := func(event *api.SSEEvent) error {
+	handler := func(ctx context.Context, event *api.SSEEvent) error {
 		return nil
 	}
 
@@ -450,7 +450,7 @@ func TestSSEStrategy_AddInbox_AfterClose(t *testing.T) {
 
 	// Start the strategy first
 	ctx, cancel := context.WithCancel(context.Background())
-	handler := func(event *api.SSEEvent) error {
+	handler := func(ctx context.Context, event *api.SSEEvent) error {
 		return nil
 	}
 
