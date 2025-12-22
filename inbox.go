@@ -121,6 +121,32 @@ func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
 	return i.decryptEmail(resp)
 }
 
+// emailFetcher returns a function that fetches emails as []interface{} for the wait strategy.
+func (i *Inbox) emailFetcher() func(ctx context.Context) ([]interface{}, error) {
+	return func(ctx context.Context) ([]interface{}, error) {
+		emails, err := i.GetEmails(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result := make([]interface{}, len(emails))
+		for j, e := range emails {
+			result[j] = e
+		}
+		return result, nil
+	}
+}
+
+// emailMatcher returns a function that matches emails against a waitConfig.
+func emailMatcher(cfg *waitConfig) func(interface{}) bool {
+	return func(email interface{}) bool {
+		e, ok := email.(*Email)
+		if !ok {
+			return false
+		}
+		return cfg.Matches(e)
+	}
+}
+
 // WaitForEmail waits for an email matching the given criteria.
 func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, error) {
 	cfg := &waitConfig{
@@ -134,29 +160,7 @@ func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, e
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
 
-	// Create fetcher that returns emails as interface{}
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		emails, err := i.GetEmails(ctx)
-		if err != nil {
-			return nil, err
-		}
-		result := make([]interface{}, len(emails))
-		for j, e := range emails {
-			result[j] = e
-		}
-		return result, nil
-	}
-
-	// Create matcher that handles interface{} and delegates to waitConfig
-	matcher := func(email interface{}) bool {
-		e, ok := email.(*Email)
-		if !ok {
-			return false
-		}
-		return cfg.Matches(e)
-	}
-
-	result, err := i.client.strategy.WaitForEmail(ctx, i.inboxHash, fetcher, matcher, cfg.pollInterval)
+	result, err := i.client.strategy.WaitForEmail(ctx, i.inboxHash, i.emailFetcher(), emailMatcher(cfg), cfg.pollInterval)
 	if err != nil {
 		return nil, err
 	}
@@ -182,29 +186,7 @@ func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOp
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
 
-	// Create fetcher that returns emails as interface{}
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		emails, err := i.GetEmails(ctx)
-		if err != nil {
-			return nil, err
-		}
-		result := make([]interface{}, len(emails))
-		for j, e := range emails {
-			result[j] = e
-		}
-		return result, nil
-	}
-
-	// Create matcher that handles interface{} and delegates to waitConfig
-	matcher := func(email interface{}) bool {
-		e, ok := email.(*Email)
-		if !ok {
-			return false
-		}
-		return cfg.Matches(e)
-	}
-
-	results, err := i.client.strategy.WaitForEmailCount(ctx, i.inboxHash, fetcher, matcher, count, cfg.pollInterval)
+	results, err := i.client.strategy.WaitForEmailCount(ctx, i.inboxHash, i.emailFetcher(), emailMatcher(cfg), count, cfg.pollInterval)
 	if err != nil {
 		return nil, err
 	}

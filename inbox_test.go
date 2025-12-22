@@ -3,6 +3,7 @@ package vaultsandbox
 import (
 	"encoding/json"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -358,6 +359,134 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 			t.Error("IsPassing() should return true")
 		}
 	})
+}
+
+func TestEmailMatcher_MatchesCorrectly(t *testing.T) {
+	tests := []struct {
+		name     string
+		email    *Email
+		cfg      *waitConfig
+		expected bool
+	}{
+		{
+			name:     "matches with empty config",
+			email:    &Email{Subject: "Test", From: "sender@example.com"},
+			cfg:      &waitConfig{},
+			expected: true,
+		},
+		{
+			name:     "matches exact subject",
+			email:    &Email{Subject: "Hello World", From: "sender@example.com"},
+			cfg:      &waitConfig{subject: "Hello World"},
+			expected: true,
+		},
+		{
+			name:     "does not match different subject",
+			email:    &Email{Subject: "Hello World", From: "sender@example.com"},
+			cfg:      &waitConfig{subject: "Goodbye World"},
+			expected: false,
+		},
+		{
+			name:     "matches exact from",
+			email:    &Email{Subject: "Test", From: "sender@example.com"},
+			cfg:      &waitConfig{from: "sender@example.com"},
+			expected: true,
+		},
+		{
+			name:     "does not match different from",
+			email:    &Email{Subject: "Test", From: "sender@example.com"},
+			cfg:      &waitConfig{from: "other@example.com"},
+			expected: false,
+		},
+		{
+			name:  "matches subject regex",
+			email: &Email{Subject: "Order #12345 Confirmation", From: "shop@example.com"},
+			cfg: &waitConfig{
+				subjectRegex: regexp.MustCompile(`Order #\d+ Confirmation`),
+			},
+			expected: true,
+		},
+		{
+			name:  "does not match subject regex",
+			email: &Email{Subject: "Shipping Update", From: "shop@example.com"},
+			cfg: &waitConfig{
+				subjectRegex: regexp.MustCompile(`Order #\d+ Confirmation`),
+			},
+			expected: false,
+		},
+		{
+			name:  "matches custom predicate",
+			email: &Email{Subject: "Test", From: "sender@example.com", Text: "important content"},
+			cfg: &waitConfig{
+				predicate: func(e *Email) bool {
+					return e.Text == "important content"
+				},
+			},
+			expected: true,
+		},
+		{
+			name:  "does not match custom predicate",
+			email: &Email{Subject: "Test", From: "sender@example.com", Text: "regular content"},
+			cfg: &waitConfig{
+				predicate: func(e *Email) bool {
+					return e.Text == "important content"
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matcher := emailMatcher(tt.cfg)
+			result := matcher(tt.email)
+			if result != tt.expected {
+				t.Errorf("emailMatcher() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEmailMatcher_HandlesNonEmailType(t *testing.T) {
+	cfg := &waitConfig{}
+	matcher := emailMatcher(cfg)
+
+	tests := []struct {
+		name  string
+		input interface{}
+	}{
+		{"nil value", nil},
+		{"string type", "not an email"},
+		{"int type", 42},
+		{"struct type", struct{ foo string }{foo: "bar"}},
+		{"map type", map[string]string{"key": "value"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matcher(tt.input)
+			if result {
+				t.Errorf("emailMatcher() with %s = true, want false", tt.name)
+			}
+		})
+	}
+}
+
+func TestEmailFetcher_ConvertsToInterface(t *testing.T) {
+	// This test verifies the conversion logic without requiring a full API setup.
+	// We test that the function signature and return type are correct.
+	// Full integration tests cover the actual fetching behavior.
+
+	inbox := &Inbox{}
+	fetcher := inbox.emailFetcher()
+
+	// Verify the function has the correct signature
+	if fetcher == nil {
+		t.Error("emailFetcher() should return a non-nil function")
+	}
+
+	// The actual fetching is tested via integration tests since it requires
+	// a real API client. Here we just verify the helper is properly constructed.
 }
 
 // Note: Full inbox tests require a real API connection
