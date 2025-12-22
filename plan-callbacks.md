@@ -167,11 +167,43 @@ for email := range inbox.Events(ctx) {
 
 ---
 
+## Option X: Internal Channel Backbone (No Public API Change)
+**Behavior:** Internally route events through a private channel, but keep callbacks as the public API.
+**Pros:** Keeps current UX; makes a future `Events(ctx)` trivial to add.
+**Cons:** Small internal refactor now; no direct user-facing benefit yet.
+
+**Example change (internal):**
+```go
+// internal event bus
+events := make(chan *Email, 10)
+
+// producer writes to events
+events <- email
+
+// dispatcher consumes and calls callbacks
+go func() {
+    for email := range events {
+        for _, cb := range callbacks {
+            go cb(email)
+        }
+    }
+}()
+```
+
+**How to use:** No change for consumers.
+
+**Evaluation:**
+- Verify existing callback tests pass.
+- Confirm no behavioral changes for single email delivery.
+
+---
+
 ## Recommendation for Your Use Case
 - If you want minimal change: **Option A** with `WithCallbackConcurrency(4)`.
 - If you want absolute simplicity: **Option B** (serial delivery).
 - If you want bounded concurrency + buffering: **Option C**.
 - If you want idiomatic Go patterns: **Option E**.
+- If you want to keep callbacks now but prepare for channels later: **Option X**.
 
 ---
 
@@ -181,6 +213,7 @@ for email := range inbox.Events(ctx) {
 - **Most control:** Option C
 - **Hard safety cap:** Option D
 - **Most idiomatic Go:** Option E
+- **Future-proofing with no API change:** Option X
 
 ---
 
