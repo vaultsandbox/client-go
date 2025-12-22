@@ -40,12 +40,12 @@ type Attachment struct {
 
 // GetRaw fetches the raw email content.
 func (e *Email) GetRaw(ctx context.Context) (string, error) {
-	return e.inbox.client.apiClient.GetEmailRaw(ctx, e.inbox.inboxHash, e.ID)
+	return e.inbox.client.apiClient.GetEmailRaw(ctx, e.inbox.emailAddress, e.ID)
 }
 
 // MarkAsRead marks the email as read.
 func (e *Email) MarkAsRead(ctx context.Context) error {
-	if err := e.inbox.client.apiClient.MarkEmailAsRead(ctx, e.inbox.inboxHash, e.ID); err != nil {
+	if err := e.inbox.client.apiClient.MarkEmailAsRead(ctx, e.inbox.emailAddress, e.ID); err != nil {
 		return err
 	}
 	e.IsRead = true
@@ -54,5 +54,5 @@ func (e *Email) MarkAsRead(ctx context.Context) error {
 
 // Delete deletes the email.
 func (e *Email) Delete(ctx context.Context) error {
-	return e.inbox.client.apiClient.DeleteEmail(ctx, e.inbox.inboxHash, e.ID)
+	return e.inbox.client.apiClient.DeleteEmail(ctx, e.inbox.emailAddress, e.ID)
 }
