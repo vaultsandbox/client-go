@@ -15,6 +15,10 @@ var (
 	// ErrSignatureVerificationFailed is returned when signature verification fails.
 	ErrSignatureVerificationFailed = errors.New("signature verification failed")
 
+	// ErrServerKeyMismatch is returned when the payload's server public key
+	// does not match the pinned server key from inbox creation.
+	ErrServerKeyMismatch = errors.New("server public key mismatch: payload key differs from pinned key")
+
 	// ErrDecryptionFailed is returned when decryption fails.
 	ErrDecryptionFailed = errors.New("decryption failed")
 

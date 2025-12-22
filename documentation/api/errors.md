@@ -26,6 +26,7 @@ var (
     ErrInvalidImportData  error
     ErrDecryptionFailed   error
     ErrSignatureInvalid     error
+    ErrServerKeyMismatch    error
     ErrSSEConnection        error
     ErrInvalidSecretKeySize error
     ErrInboxExpired         error
@@ -243,6 +244,26 @@ if errors.Is(err, vaultsandbox.ErrSignatureInvalid) {
     log.Fatal("CRITICAL: Signature verification failed - possible MITM attack")
 }
 ```
+
+---
+
+### ErrServerKeyMismatch
+
+Returned when the server public key in a payload doesn't match the key pinned at inbox creation. This is a **critical security error** that indicates a potential key substitution attack.
+
+```go
+emails, err := inbox.GetEmails(ctx)
+if errors.Is(err, vaultsandbox.ErrServerKeyMismatch) {
+    log.Fatal("CRITICAL: Server key mismatch - payload signed with unexpected key")
+}
+```
+
+This error occurs when:
+- An attacker attempts to inject payloads signed with their own key
+- The server's signing key has changed unexpectedly
+- The inbox was imported with incorrect key data
+
+**Always treat this error as a potential security incident.**
 
 ---
 
@@ -483,23 +504,34 @@ Decryption errors should **always** be logged and investigated as they may indic
 
 ### SignatureVerificationError
 
-Indicates potential tampering. This is a **critical security error** that may indicate a man-in-the-middle (MITM) attack.
+Indicates potential tampering. This is a **critical security error** that may indicate a man-in-the-middle (MITM) attack or a key substitution attack.
 
 ```go
 type SignatureVerificationError struct {
-    Message string
+    Message       string
+    IsKeyMismatch bool // true if caused by server key mismatch
 }
 ```
+
+#### Fields
+
+- `Message`: Description of the signature verification failure
+- `IsKeyMismatch`: `true` if the error was caused by a server key mismatch (matches `ErrServerKeyMismatch`), `false` for other signature failures (matches `ErrSignatureInvalid`)
 
 #### Example
 
 ```go
-inbox, err := client.CreateInbox(ctx)
+emails, err := inbox.GetEmails(ctx)
 if err != nil {
     var sigErr *vaultsandbox.SignatureVerificationError
     if errors.As(err, &sigErr) {
         log.Printf("CRITICAL: Signature verification failed: %s", sigErr.Message)
-        log.Println("This may indicate a MITM attack")
+
+        if sigErr.IsKeyMismatch {
+            log.Println("Server key mismatch - potential key substitution attack")
+        } else {
+            log.Println("Invalid signature - potential MITM attack or data tampering")
+        }
 
         // Alert security team
         alertSecurityTeam(sigErr.Message)
@@ -981,7 +1013,9 @@ Always log signature verification and decryption errors:
 ```go
 inbox, err := client.CreateInbox(ctx)
 if err != nil {
-    if errors.Is(err, vaultsandbox.ErrSignatureInvalid) || errors.Is(err, vaultsandbox.ErrDecryptionFailed) {
+    if errors.Is(err, vaultsandbox.ErrSignatureInvalid) ||
+       errors.Is(err, vaultsandbox.ErrServerKeyMismatch) ||
+       errors.Is(err, vaultsandbox.ErrDecryptionFailed) {
         // Critical security/integrity error
         logger.Critical(map[string]any{
             "error":     err.Error(),

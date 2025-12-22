@@ -32,9 +32,10 @@
 //
 // Signature verification MUST be performed BEFORE decryption. Decrypting
 // unauthenticated ciphertext may expose the system to chosen-ciphertext attacks.
-// Always use [VerifySignature] before [Decrypt]:
+// Always use [VerifySignature] before [Decrypt], passing the server's public key
+// that was pinned at inbox creation time:
 //
-//	if err := crypto.VerifySignature(payload); err != nil {
+//	if err := crypto.VerifySignature(payload, inbox.serverSigPk); err != nil {
 //	    return nil, fmt.Errorf("signature verification failed: %w", err)
 //	}
 //	plaintext, err := crypto.Decrypt(payload, keypair)

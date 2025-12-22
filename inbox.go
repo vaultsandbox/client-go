@@ -3,6 +3,7 @@ package vaultsandbox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -344,9 +345,11 @@ func (i *Inbox) decryptEmailWithContext(ctx context.Context, raw *api.RawEmail) 
 		emailData = fullEmail
 	}
 
-	// Verify signature BEFORE decryption (critical for security)
-	if err := crypto.VerifySignature(emailData.EncryptedMetadata); err != nil {
-		return nil, err
+	// Verify signature BEFORE decryption (critical for security).
+	// We pass the pinned server key from inbox creation to ensure the payload
+	// was signed by the expected server, preventing key substitution attacks.
+	if err := crypto.VerifySignature(emailData.EncryptedMetadata, i.serverSigPk); err != nil {
+		return nil, wrapCryptoError(err)
 	}
 
 	// Decrypt the metadata
@@ -382,8 +385,8 @@ func (i *Inbox) decryptEmailWithContext(ctx context.Context, raw *api.RawEmail) 
 
 	// Decrypt parsed content if available
 	if emailData.EncryptedParsed != nil {
-		if err := crypto.VerifySignature(emailData.EncryptedParsed); err != nil {
-			return nil, err
+		if err := crypto.VerifySignature(emailData.EncryptedParsed, i.serverSigPk); err != nil {
+			return nil, wrapCryptoError(err)
 		}
 
 		parsedPlaintext, err := crypto.Decrypt(emailData.EncryptedParsed, i.keypair)
@@ -456,4 +459,22 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 	}
 
 	return email
+}
+
+// wrapCryptoError converts internal crypto errors to public sentinel errors
+// so that errors.Is() checks work correctly.
+func wrapCryptoError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Map internal crypto errors to public sentinel errors
+	if errors.Is(err, crypto.ErrServerKeyMismatch) {
+		return &SignatureVerificationError{Message: err.Error(), IsKeyMismatch: true}
+	}
+	if errors.Is(err, crypto.ErrSignatureVerificationFailed) {
+		return &SignatureVerificationError{Message: err.Error(), IsKeyMismatch: false}
+	}
+
+	return err
 }

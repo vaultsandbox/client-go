@@ -908,6 +908,7 @@ if err != nil {
 | `ErrInvalidImportData` | Imported inbox data is malformed or invalid |
 | `ErrDecryptionFailed` | Email decryption failed |
 | `ErrSignatureInvalid` | Signature verification failed (potential tampering) |
+| `ErrServerKeyMismatch` | Server public key mismatch (potential key substitution attack) |
 | `ErrSSEConnection` | Server-Sent Events connection failed |
 | `ErrInvalidSecretKeySize` | Secret key has invalid size |
 | `ErrInboxExpired` | Inbox TTL has been exceeded |
@@ -952,6 +953,9 @@ if errors.As(err, &decryptErr) {
 var sigErr *vaultsandbox.SignatureVerificationError
 if errors.As(err, &sigErr) {
 	fmt.Printf("Message: %s\n", sigErr.Message)
+	if sigErr.IsKeyMismatch {
+		fmt.Println("Server key mismatch - potential key substitution attack")
+	}
 }
 
 // SSEError - Server-Sent Events connection failure
@@ -1002,7 +1006,8 @@ type DecryptionError struct {
 }
 
 type SignatureVerificationError struct {
-	Message string
+	Message       string
+	IsKeyMismatch bool // true if caused by server key mismatch
 }
 
 type SSEError struct {

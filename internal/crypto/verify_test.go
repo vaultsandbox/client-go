@@ -244,7 +244,9 @@ func TestVerifySignature_InvalidBase64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := VerifySignature(tt.payload)
+			// Use a pinned key that matches the payload's ServerSigPk for these tests
+			pinnedKey := make([]byte, MLDSAPublicKeySize)
+			err := VerifySignature(tt.payload, pinnedKey)
 			if err == nil {
 				t.Error("expected error for invalid base64")
 			}
@@ -253,19 +255,59 @@ func TestVerifySignature_InvalidBase64(t *testing.T) {
 }
 
 func TestVerifySignature_InvalidPublicKey(t *testing.T) {
+	invalidPk := []byte("invalid public key")
 	payload := &EncryptedPayload{
 		V:           1,
 		CtKem:       ToBase64URL([]byte("kem")),
 		Nonce:       ToBase64URL([]byte("nonce")),
 		AAD:         ToBase64URL([]byte("aad")),
 		Ciphertext:  ToBase64URL([]byte("ct")),
-		ServerSigPk: ToBase64URL([]byte("invalid public key")), // Not a valid ML-DSA key
+		ServerSigPk: ToBase64URL(invalidPk), // Not a valid ML-DSA key
 		Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
 	}
 
-	err := VerifySignature(payload)
+	// Pass the same invalid key as pinned to test that unmarshal fails
+	err := VerifySignature(payload, invalidPk)
 	if err == nil {
 		t.Error("expected error for invalid public key")
+	}
+}
+
+func TestVerifySignature_ServerKeyMismatch(t *testing.T) {
+	// Generate two different keypairs
+	pub1, _, err := mldsa65.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubBytes1, _ := pub1.MarshalBinary()
+
+	pub2, _, err := mldsa65.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubBytes2, _ := pub2.MarshalBinary()
+
+	// Create payload with pub1's key
+	payload := &EncryptedPayload{
+		V: 1,
+		Algs: AlgorithmSuite{
+			KEM:  "ML-KEM-768",
+			Sig:  "ML-DSA-65",
+			AEAD: "AES-256-GCM",
+			KDF:  "HKDF-SHA-512",
+		},
+		CtKem:       ToBase64URL([]byte("kem")),
+		Nonce:       ToBase64URL([]byte("nonce")),
+		AAD:         ToBase64URL([]byte("aad")),
+		Ciphertext:  ToBase64URL([]byte("ct")),
+		ServerSigPk: ToBase64URL(pubBytes1), // Payload contains pub1
+		Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+	}
+
+	// But pass pub2 as the pinned key - should fail with key mismatch
+	err = VerifySignature(payload, pubBytes2)
+	if !errors.Is(err, ErrServerKeyMismatch) {
+		t.Errorf("expected ErrServerKeyMismatch, got %v", err)
 	}
 }
 
@@ -297,7 +339,8 @@ func TestVerifySignature_InvalidSignature(t *testing.T) {
 		Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)), // Invalid signature (all zeros)
 	}
 
-	err = VerifySignature(payload)
+	// Pass the correct pinned key to ensure we get past key validation
+	err = VerifySignature(payload, pubBytes)
 	if !errors.Is(err, ErrSignatureVerificationFailed) {
 		t.Errorf("expected ErrSignatureVerificationFailed, got %v", err)
 	}
@@ -305,16 +348,17 @@ func TestVerifySignature_InvalidSignature(t *testing.T) {
 
 func TestVerifySignatureSafe(t *testing.T) {
 	t.Run("returns false for invalid payload", func(t *testing.T) {
+		pinnedKey := make([]byte, MLDSAPublicKeySize)
 		payload := &EncryptedPayload{
 			V:           1,
 			CtKem:       "!!!invalid!!!",
 			Nonce:       ToBase64URL([]byte("nonce")),
 			AAD:         ToBase64URL([]byte("aad")),
 			Ciphertext:  ToBase64URL([]byte("ct")),
-			ServerSigPk: ToBase64URL(make([]byte, MLDSAPublicKeySize)),
+			ServerSigPk: ToBase64URL(pinnedKey),
 			Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
 		}
-		if VerifySignatureSafe(payload) {
+		if VerifySignatureSafe(payload, pinnedKey) {
 			t.Error("VerifySignatureSafe() returned true for invalid payload")
 		}
 	})
@@ -341,7 +385,7 @@ func TestVerifySignatureSafe(t *testing.T) {
 			ServerSigPk: ToBase64URL(pubBytes),
 			Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
 		}
-		if VerifySignatureSafe(payload) {
+		if VerifySignatureSafe(payload, pubBytes) {
 			t.Error("VerifySignatureSafe() returned true for invalid signature")
 		}
 	})
@@ -384,7 +428,7 @@ func TestVerifySignatureSafe(t *testing.T) {
 		mldsa65.SignTo(priv, transcript, nil, false, sig)
 		payload.Sig = ToBase64URL(sig)
 
-		if !VerifySignatureSafe(payload) {
+		if !VerifySignatureSafe(payload, pubBytes) {
 			t.Error("VerifySignatureSafe() returned false for valid signature")
 		}
 	})

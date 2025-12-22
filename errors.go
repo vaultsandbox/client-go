@@ -38,6 +38,10 @@ var (
 	// ErrSignatureInvalid is returned when signature verification fails.
 	ErrSignatureInvalid = errors.New("signature verification failed")
 
+	// ErrServerKeyMismatch is returned when the payload's server public key
+	// doesn't match the pinned key from inbox creation.
+	ErrServerKeyMismatch = errors.New("server public key mismatch")
+
 	// ErrSSEConnection is returned when SSE connection fails.
 	ErrSSEConnection = errors.New("SSE connection error")
 
@@ -169,15 +173,22 @@ func (e *DecryptionError) VaultSandboxError() {}
 
 // SignatureVerificationError indicates potential tampering.
 type SignatureVerificationError struct {
-	Message string
+	Message      string
+	IsKeyMismatch bool // true if caused by server key mismatch
 }
 
 func (e *SignatureVerificationError) Error() string {
+	if e.IsKeyMismatch {
+		return fmt.Sprintf("server key mismatch: %s", e.Message)
+	}
 	return fmt.Sprintf("signature verification failed: %s", e.Message)
 }
 
 // Is implements errors.Is for sentinel error matching.
 func (e *SignatureVerificationError) Is(target error) bool {
+	if e.IsKeyMismatch {
+		return target == ErrServerKeyMismatch
+	}
 	return target == ErrSignatureInvalid
 }
 

@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
@@ -40,7 +41,12 @@ type AlgorithmSuite struct {
 
 // VerifySignature verifies the ML-DSA-65 signature on the encrypted payload.
 // CRITICAL: This MUST be called BEFORE any decryption attempt.
-func VerifySignature(payload *EncryptedPayload) error {
+//
+// The pinnedServerPk parameter is the server's public key that was captured
+// at inbox creation or import time. The payload's embedded server key must
+// match this pinned key exactly, or ErrServerKeyMismatch is returned.
+// This prevents attackers from injecting payloads signed with their own keys.
+func VerifySignature(payload *EncryptedPayload, pinnedServerPk []byte) error {
 	// Decode all components
 	ctKem, err := FromBase64URL(payload.CtKem)
 	if err != nil {
@@ -65,6 +71,13 @@ func VerifySignature(payload *EncryptedPayload) error {
 	serverSigPk, err := FromBase64URL(payload.ServerSigPk)
 	if err != nil {
 		return fmt.Errorf("decode server_sig_pk: %w", err)
+	}
+
+	// Verify the payload's server key matches the pinned key from inbox creation.
+	// This is critical: without this check, an attacker could inject payloads
+	// signed with their own key and bypass authenticity verification.
+	if !bytes.Equal(serverSigPk, pinnedServerPk) {
+		return ErrServerKeyMismatch
 	}
 
 	sig, err := FromBase64URL(payload.Sig)
@@ -112,9 +125,9 @@ func buildTranscript(version int, algs AlgorithmSuite, ctKem, nonce, aad, cipher
 }
 
 // VerifySignatureSafe verifies the signature without returning an error.
-// Returns true if the signature is valid, false otherwise.
-func VerifySignatureSafe(payload *EncryptedPayload) bool {
-	err := VerifySignature(payload)
+// Returns true if the signature is valid and the server key matches, false otherwise.
+func VerifySignatureSafe(payload *EncryptedPayload, pinnedServerPk []byte) bool {
+	err := VerifySignature(payload, pinnedServerPk)
 	return err == nil
 }
 

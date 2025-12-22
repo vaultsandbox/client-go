@@ -21,6 +21,7 @@ func TestSentinelErrors(t *testing.T) {
 		{"ErrInvalidImportData", ErrInvalidImportData},
 		{"ErrDecryptionFailed", ErrDecryptionFailed},
 		{"ErrSignatureInvalid", ErrSignatureInvalid},
+		{"ErrServerKeyMismatch", ErrServerKeyMismatch},
 		{"ErrSSEConnection", ErrSSEConnection},
 		{"ErrInvalidSecretKeySize", ErrInvalidSecretKeySize},
 		{"ErrInboxExpired", ErrInboxExpired},
@@ -253,20 +254,43 @@ func TestDecryptionError_VaultSandboxError(t *testing.T) {
 }
 
 func TestSignatureVerificationError_Error(t *testing.T) {
-	err := &SignatureVerificationError{Message: "tampered data"}
+	t.Run("signature failure", func(t *testing.T) {
+		err := &SignatureVerificationError{Message: "tampered data", IsKeyMismatch: false}
+		expected := "signature verification failed: tampered data"
+		if err.Error() != expected {
+			t.Errorf("Error() = %s, want %s", err.Error(), expected)
+		}
+	})
 
-	expected := "signature verification failed: tampered data"
-	if err.Error() != expected {
-		t.Errorf("Error() = %s, want %s", err.Error(), expected)
-	}
+	t.Run("key mismatch", func(t *testing.T) {
+		err := &SignatureVerificationError{Message: "payload key differs", IsKeyMismatch: true}
+		expected := "server key mismatch: payload key differs"
+		if err.Error() != expected {
+			t.Errorf("Error() = %s, want %s", err.Error(), expected)
+		}
+	})
 }
 
 func TestSignatureVerificationError_Is(t *testing.T) {
-	err := &SignatureVerificationError{}
+	t.Run("matches ErrSignatureInvalid when not key mismatch", func(t *testing.T) {
+		err := &SignatureVerificationError{IsKeyMismatch: false}
+		if !errors.Is(err, ErrSignatureInvalid) {
+			t.Error("errors.Is() should match ErrSignatureInvalid")
+		}
+		if errors.Is(err, ErrServerKeyMismatch) {
+			t.Error("errors.Is() should not match ErrServerKeyMismatch")
+		}
+	})
 
-	if !errors.Is(err, ErrSignatureInvalid) {
-		t.Error("errors.Is() should match ErrSignatureInvalid")
-	}
+	t.Run("matches ErrServerKeyMismatch when key mismatch", func(t *testing.T) {
+		err := &SignatureVerificationError{IsKeyMismatch: true}
+		if !errors.Is(err, ErrServerKeyMismatch) {
+			t.Error("errors.Is() should match ErrServerKeyMismatch")
+		}
+		if errors.Is(err, ErrSignatureInvalid) {
+			t.Error("errors.Is() should not match ErrSignatureInvalid")
+		}
+	})
 }
 
 func TestSignatureVerificationError_VaultSandboxError(t *testing.T) {
