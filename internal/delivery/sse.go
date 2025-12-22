@@ -250,38 +250,32 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 	return scanner.Err()
 }
 
-// WaitForEmail waits for an email matching the given criteria.
-// SSE strategy delegates to PollingStrategy for WaitForEmail operations.
-func (s *SSEStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
-	return s.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, WaitOptions{
-		PollInterval: pollInterval,
-		SyncFetcher:  nil,
-	})
+// SSEWaitForEmail waits for an email matching the given criteria.
+// SSE strategy delegates to the generic WaitForEmail function.
+// The type parameter T represents the email type being waited for.
+func SSEWaitForEmail[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], pollInterval time.Duration) (T, error) {
+	return WaitForEmail(ctx, fetcher, matcher, pollInterval)
 }
 
-// WaitForEmailWithSync waits for an email using sync-status-based change detection.
-// SSE strategy delegates to PollingStrategy for WaitForEmail operations.
-func (s *SSEStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error) {
-	// SSE strategy uses polling for WaitForEmail operations
-	polling := &PollingStrategy{apiClient: s.apiClient}
-	return polling.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, opts)
+// SSEWaitForEmailWithSync waits for an email using sync-status-based change detection.
+// SSE strategy delegates to the generic WaitForEmailWithSync function.
+// The type parameter T represents the email type being waited for.
+func SSEWaitForEmailWithSync[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], opts WaitOptions) (T, error) {
+	return WaitForEmailWithSync(ctx, fetcher, matcher, opts)
 }
 
-// WaitForEmailCount waits until at least count emails match the criteria.
-// SSE strategy delegates to PollingStrategy for WaitForEmail operations.
-func (s *SSEStrategy) WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
-	return s.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, WaitOptions{
-		PollInterval: pollInterval,
-		SyncFetcher:  nil,
-	})
+// SSEWaitForEmailCount waits until at least count emails match the criteria.
+// SSE strategy delegates to the generic WaitForEmailCount function.
+// The type parameter T represents the email type being waited for.
+func SSEWaitForEmailCount[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, pollInterval time.Duration) ([]T, error) {
+	return WaitForEmailCount(ctx, fetcher, matcher, count, pollInterval)
 }
 
-// WaitForEmailCountWithSync waits for multiple emails using sync-status-based
-// change detection. SSE strategy delegates to PollingStrategy.
-func (s *SSEStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error) {
-	// SSE strategy uses polling for WaitForEmailCount operations
-	polling := &PollingStrategy{apiClient: s.apiClient}
-	return polling.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, opts)
+// SSEWaitForEmailCountWithSync waits for multiple emails using sync-status-based
+// change detection. SSE strategy delegates to the generic WaitForEmailCountWithSync function.
+// The type parameter T represents the email type being waited for.
+func SSEWaitForEmailCountWithSync[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, opts WaitOptions) ([]T, error) {
+	return WaitForEmailCountWithSync(ctx, fetcher, matcher, count, opts)
 }
 
 // Close releases resources and stops the SSE strategy.

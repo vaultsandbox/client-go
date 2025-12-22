@@ -255,8 +255,9 @@ func (p *PollingStrategy) getWaitDuration(inbox *polledInbox) time.Duration {
 
 // WaitForEmail waits for an email matching the given criteria using simple polling.
 // It blocks until a matching email is found or the context is canceled.
-func (p *PollingStrategy) WaitForEmail(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
-	return p.WaitForEmailWithSync(ctx, inboxHash, fetcher, matcher, WaitOptions{
+// The type parameter T represents the email type being waited for.
+func WaitForEmail[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], pollInterval time.Duration) (T, error) {
+	return WaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
 		PollInterval: pollInterval,
 		SyncFetcher:  nil, // No sync fetcher, use simple polling
 	})
@@ -266,7 +267,9 @@ func (p *PollingStrategy) WaitForEmail(ctx context.Context, inboxHash string, fe
 // If opts.SyncFetcher is provided, it uses smart polling that only fetches emails
 // when the sync status hash changes, reducing API calls. If SyncFetcher is nil,
 // it falls back to simple interval-based polling.
-func (p *PollingStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, opts WaitOptions) (interface{}, error) {
+// The type parameter T represents the email type being waited for.
+func WaitForEmailWithSync[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], opts WaitOptions) (T, error) {
+	var zero T
 	pollInterval := opts.PollInterval
 	if pollInterval == 0 {
 		pollInterval = PollingInitialInterval
@@ -284,7 +287,7 @@ func (p *PollingStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash st
 
 	// If no sync fetcher, use simple polling
 	if opts.SyncFetcher == nil {
-		return p.waitForEmailSimple(ctx, fetcher, matcher, pollInterval)
+		return waitForEmailSimple(ctx, fetcher, matcher, pollInterval)
 	}
 
 	// Use sync-status-based smart polling with adaptive backoff
@@ -294,7 +297,7 @@ func (p *PollingStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash st
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return zero, ctx.Err()
 		default:
 		}
 
@@ -304,7 +307,7 @@ func (p *PollingStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash st
 			// On error, wait and retry
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return zero, ctx.Err()
 			case <-time.After(currentBackoff):
 			}
 			continue
@@ -341,21 +344,23 @@ func (p *PollingStrategy) WaitForEmailWithSync(ctx context.Context, inboxHash st
 
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return zero, ctx.Err()
 		case <-time.After(waitTime):
 		}
 	}
 }
 
 // waitForEmailSimple polls at a fixed interval without sync-status optimization.
-func (p *PollingStrategy) waitForEmailSimple(ctx context.Context, fetcher EmailFetcher, matcher EmailMatcher, pollInterval time.Duration) (interface{}, error) {
+// The type parameter T represents the email type being waited for.
+func waitForEmailSimple[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], pollInterval time.Duration) (T, error) {
+	var zero T
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return zero, ctx.Err()
 		case <-ticker.C:
 			emails, err := fetcher(ctx)
 			if err != nil {
@@ -373,8 +378,9 @@ func (p *PollingStrategy) waitForEmailSimple(ctx context.Context, fetcher EmailF
 
 // WaitForEmailCount waits until at least count emails match the criteria.
 // It blocks until enough matching emails are found or the context is canceled.
-func (p *PollingStrategy) WaitForEmailCount(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
-	return p.WaitForEmailCountWithSync(ctx, inboxHash, fetcher, matcher, count, WaitOptions{
+// The type parameter T represents the email type being waited for.
+func WaitForEmailCount[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, pollInterval time.Duration) ([]T, error) {
+	return WaitForEmailCountWithSync(ctx, fetcher, matcher, count, WaitOptions{
 		PollInterval: pollInterval,
 		SyncFetcher:  nil,
 	})
@@ -383,7 +389,8 @@ func (p *PollingStrategy) WaitForEmailCount(ctx context.Context, inboxHash strin
 // WaitForEmailCountWithSync waits for multiple emails using sync-status-based
 // change detection. Like WaitForEmailWithSync, it uses smart polling when a
 // SyncFetcher is provided.
-func (p *PollingStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHash string, fetcher EmailFetcher, matcher EmailMatcher, count int, opts WaitOptions) ([]interface{}, error) {
+// The type parameter T represents the email type being waited for.
+func WaitForEmailCountWithSync[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, opts WaitOptions) ([]T, error) {
 	pollInterval := opts.PollInterval
 	if pollInterval == 0 {
 		pollInterval = PollingInitialInterval
@@ -392,7 +399,7 @@ func (p *PollingStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHa
 	// Check immediately first
 	emails, err := fetcher(ctx)
 	if err == nil {
-		var matching []interface{}
+		var matching []T
 		for _, email := range emails {
 			if matcher(email) {
 				matching = append(matching, email)
@@ -405,7 +412,7 @@ func (p *PollingStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHa
 
 	// If no sync fetcher, use simple polling
 	if opts.SyncFetcher == nil {
-		return p.waitForEmailCountSimple(ctx, fetcher, matcher, count, pollInterval)
+		return waitForEmailCountSimple(ctx, fetcher, matcher, count, pollInterval)
 	}
 
 	// Use sync-status-based smart polling with adaptive backoff
@@ -439,7 +446,7 @@ func (p *PollingStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHa
 				// Changes detected - fetch and check emails
 				emails, err := fetcher(ctx)
 				if err == nil {
-					var matching []interface{}
+					var matching []T
 					for _, email := range emails {
 						if matcher(email) {
 							matching = append(matching, email)
@@ -473,7 +480,8 @@ func (p *PollingStrategy) WaitForEmailCountWithSync(ctx context.Context, inboxHa
 }
 
 // waitForEmailCountSimple polls at a fixed interval without sync-status optimization.
-func (p *PollingStrategy) waitForEmailCountSimple(ctx context.Context, fetcher EmailFetcher, matcher EmailMatcher, count int, pollInterval time.Duration) ([]interface{}, error) {
+// The type parameter T represents the email type being waited for.
+func waitForEmailCountSimple[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, pollInterval time.Duration) ([]T, error) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
@@ -487,7 +495,7 @@ func (p *PollingStrategy) waitForEmailCountSimple(ctx context.Context, fetcher E
 				continue
 			}
 
-			var matching []interface{}
+			var matching []T
 			for _, email := range emails {
 				if matcher(email) {
 					matching = append(matching, email)

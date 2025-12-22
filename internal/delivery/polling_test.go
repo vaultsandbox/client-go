@@ -76,49 +76,43 @@ func TestPollingStrategy_Close(t *testing.T) {
 }
 
 func TestPollingStrategy_WaitForEmail(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
 	var callCount int32
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		count := atomic.AddInt32(&callCount, 1)
 		if count >= 3 {
-			return []interface{}{
-				&testEmail{ID: "email1", Subject: "Hello"},
+			return []*testEmail{
+				{ID: "email1", Subject: "Hello"},
 			}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
-		e := email.(*testEmail)
-		return e.Subject == "Hello"
+	matcher := func(email *testEmail) bool {
+		return email.Subject == "Hello"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := p.WaitForEmail(ctx, "hash123", fetcher, matcher, 10*time.Millisecond)
+	result, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
 
-	email := result.(*testEmail)
-	if email.ID != "email1" {
-		t.Errorf("email.ID = %s, want email1", email.ID)
+	if result.ID != "email1" {
+		t.Errorf("email.ID = %s, want email1", result.ID)
 	}
 }
 
 func TestPollingStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		return []interface{}{
-			&testEmail{ID: "email1", Subject: "Hello"},
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
+		return []*testEmail{
+			{ID: "email1", Subject: "Hello"},
 		}, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
@@ -126,7 +120,7 @@ func TestPollingStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	result, err := p.WaitForEmail(ctx, "hash123", fetcher, matcher, time.Second)
+	result, err := WaitForEmail(ctx, fetcher, matcher, time.Second)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -144,50 +138,46 @@ func TestPollingStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
 }
 
 func TestPollingStrategy_WaitForEmail_Timeout(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		return nil, nil // Never returns emails
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := p.WaitForEmail(ctx, "hash123", fetcher, matcher, 10*time.Millisecond)
+	_, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmail() error = %v, want context.DeadlineExceeded", err)
 	}
 }
 
 func TestPollingStrategy_WaitForEmailCount(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
 	var callCount int32
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		count := atomic.AddInt32(&callCount, 1)
 		if count >= 2 {
-			return []interface{}{
-				&testEmail{ID: "email1", Subject: "Hello"},
-				&testEmail{ID: "email2", Subject: "Hello"},
-				&testEmail{ID: "email3", Subject: "Hello"},
+			return []*testEmail{
+				{ID: "email1", Subject: "Hello"},
+				{ID: "email2", Subject: "Hello"},
+				{ID: "email3", Subject: "Hello"},
 			}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := p.WaitForEmailCount(ctx, "hash123", fetcher, matcher, 2, 10*time.Millisecond)
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("WaitForEmailCount() error = %v", err)
 	}
@@ -198,16 +188,14 @@ func TestPollingStrategy_WaitForEmailCount(t *testing.T) {
 }
 
 func TestPollingStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		return []interface{}{
-			&testEmail{ID: "email1"},
-			&testEmail{ID: "email2"},
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
+		return []*testEmail{
+			{ID: "email1"},
+			{ID: "email2"},
 		}, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
@@ -215,7 +203,7 @@ func TestPollingStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	results, err := p.WaitForEmailCount(ctx, "hash123", fetcher, matcher, 2, time.Second)
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, time.Second)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -232,40 +220,36 @@ func TestPollingStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
 }
 
 func TestPollingStrategy_WaitForEmailCount_Timeout(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		return []interface{}{
-			&testEmail{ID: "email1"},
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
+		return []*testEmail{
+			{ID: "email1"},
 		}, nil // Only 1 email, but we want 2
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := p.WaitForEmailCount(ctx, "hash123", fetcher, matcher, 2, 10*time.Millisecond)
+	_, err := WaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmailCount() error = %v, want context.DeadlineExceeded", err)
 	}
 }
 
 func TestPollingStrategy_WaitForEmail_DefaultInterval(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
 	fetchCount := 0
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		fetchCount++
 		if fetchCount >= 2 {
-			return []interface{}{&testEmail{ID: "email1"}}, nil
+			return []*testEmail{{ID: "email1"}}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
@@ -273,7 +257,7 @@ func TestPollingStrategy_WaitForEmail_DefaultInterval(t *testing.T) {
 	defer cancel()
 
 	// Pass 0 for pollInterval to use default
-	_, err := p.WaitForEmail(ctx, "hash123", fetcher, matcher, 0)
+	_, err := WaitForEmail(ctx, fetcher, matcher, 0)
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
@@ -334,8 +318,6 @@ type testEmail struct {
 }
 
 func TestPollingStrategy_WaitForEmailWithSync(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
 	var fetchCount int32
 	var syncCount int32
 	currentHash := "hash1"
@@ -352,24 +334,24 @@ func TestPollingStrategy_WaitForEmailWithSync(t *testing.T) {
 		}, nil
 	}
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		count := atomic.AddInt32(&fetchCount, 1)
 		if count >= 2 {
-			return []interface{}{
-				&testEmail{ID: "email1", Subject: "Hello"},
+			return []*testEmail{
+				{ID: "email1", Subject: "Hello"},
 			}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
-		return email.(*testEmail).Subject == "Hello"
+	matcher := func(email *testEmail) bool {
+		return email.Subject == "Hello"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := p.WaitForEmailWithSync(ctx, "hash123", fetcher, matcher, WaitOptions{
+	result, err := WaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
@@ -377,9 +359,8 @@ func TestPollingStrategy_WaitForEmailWithSync(t *testing.T) {
 		t.Fatalf("WaitForEmailWithSync() error = %v", err)
 	}
 
-	email := result.(*testEmail)
-	if email.ID != "email1" {
-		t.Errorf("email.ID = %s, want email1", email.ID)
+	if result.ID != "email1" {
+		t.Errorf("email.ID = %s, want email1", result.ID)
 	}
 
 	// Verify sync was called
@@ -389,8 +370,6 @@ func TestPollingStrategy_WaitForEmailWithSync(t *testing.T) {
 }
 
 func TestPollingStrategy_WaitForEmailWithSync_BackoffOnNoChange(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
 	var syncCount int32
 	var fetchCount int32
 
@@ -402,19 +381,19 @@ func TestPollingStrategy_WaitForEmailWithSync_BackoffOnNoChange(t *testing.T) {
 		}, nil
 	}
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		atomic.AddInt32(&fetchCount, 1)
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := p.WaitForEmailWithSync(ctx, "hash123", fetcher, matcher, WaitOptions{
+	_, err := WaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
 		PollInterval: 5 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
@@ -438,8 +417,6 @@ func TestPollingStrategy_WaitForEmailWithSync_BackoffOnNoChange(t *testing.T) {
 }
 
 func TestPollingStrategy_WaitForEmailCountWithSync(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
 	var fetchCount int32
 
 	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
@@ -449,26 +426,26 @@ func TestPollingStrategy_WaitForEmailCountWithSync(t *testing.T) {
 		}, nil
 	}
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		count := atomic.AddInt32(&fetchCount, 1)
 		if count >= 2 {
-			return []interface{}{
-				&testEmail{ID: "email1"},
-				&testEmail{ID: "email2"},
-				&testEmail{ID: "email3"},
+			return []*testEmail{
+				{ID: "email1"},
+				{ID: "email2"},
+				{ID: "email3"},
 			}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := p.WaitForEmailCountWithSync(ctx, "hash123", fetcher, matcher, 2, WaitOptions{
+	results, err := WaitForEmailCountWithSync(ctx, fetcher, matcher, 2, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
@@ -560,29 +537,28 @@ func TestPollingStrategy_ConcurrentPolling(t *testing.T) {
 		go func(idx int, inboxHash string) {
 			defer wg.Done()
 
-			fetcher := func(ctx context.Context) ([]interface{}, error) {
+			fetcher := func(ctx context.Context) ([]*testEmail, error) {
 				polledInboxes.Store(inboxHash, true)
-				return []interface{}{
-					&testEmail{ID: "email" + inboxHash, Subject: "Test"},
+				return []*testEmail{
+					{ID: "email" + inboxHash, Subject: "Test"},
 				}, nil
 			}
 
-			matcher := func(email interface{}) bool {
+			matcher := func(email *testEmail) bool {
 				return true
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 
-			result, err := p.WaitForEmail(ctx, inboxHash, fetcher, matcher, 10*time.Millisecond)
+			result, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
 			if err != nil {
 				t.Errorf("WaitForEmail() for %s error = %v", inboxHash, err)
 				return
 			}
 
-			email := result.(*testEmail)
-			if email.ID != "email"+inboxHash {
-				t.Errorf("email.ID = %s, want email%s", email.ID, inboxHash)
+			if result.ID != "email"+inboxHash {
+				t.Errorf("email.ID = %s, want email%s", result.ID, inboxHash)
 			}
 		}(i, hash)
 	}

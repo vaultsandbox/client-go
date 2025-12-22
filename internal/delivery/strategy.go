@@ -65,14 +65,15 @@ type Config struct {
 	APIClient *api.Client
 }
 
-// EmailFetcher is a function that retrieves emails from an inbox.
+// EmailFetcher is a generic function that retrieves emails from an inbox.
 // Used by WaitForEmail methods to check for new emails.
-type EmailFetcher func(ctx context.Context) ([]interface{}, error)
+// The type parameter T represents the email type being fetched.
+type EmailFetcher[T any] func(ctx context.Context) ([]T, error)
 
-// EmailMatcher is a predicate function that determines whether an email
-// matches the desired criteria. Used by WaitForEmail methods to filter
-// emails.
-type EmailMatcher func(email interface{}) bool
+// EmailMatcher is a generic predicate function that determines whether an email
+// matches the desired criteria. Used by WaitForEmail methods to filter emails.
+// The type parameter T represents the email type being matched.
+type EmailMatcher[T any] func(email T) bool
 
 // SyncStatus represents the synchronization status of an inbox.
 // Used for efficient change detection in smart polling.

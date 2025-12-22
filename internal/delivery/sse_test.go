@@ -79,49 +79,43 @@ func TestSSEStrategy_Close(t *testing.T) {
 }
 
 func TestSSEStrategy_WaitForEmail(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
 	var callCount int32
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		count := atomic.AddInt32(&callCount, 1)
 		if count >= 3 {
-			return []interface{}{
-				&testEmail{ID: "email1", Subject: "Hello"},
+			return []*testEmail{
+				{ID: "email1", Subject: "Hello"},
 			}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
-		e := email.(*testEmail)
-		return e.Subject == "Hello"
+	matcher := func(email *testEmail) bool {
+		return email.Subject == "Hello"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := s.WaitForEmail(ctx, "hash123", fetcher, matcher, 10*time.Millisecond)
+	result, err := SSEWaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
 
-	email := result.(*testEmail)
-	if email.ID != "email1" {
-		t.Errorf("email.ID = %s, want email1", email.ID)
+	if result.ID != "email1" {
+		t.Errorf("email.ID = %s, want email1", result.ID)
 	}
 }
 
 func TestSSEStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		return []interface{}{
-			&testEmail{ID: "email1", Subject: "Hello"},
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
+		return []*testEmail{
+			{ID: "email1", Subject: "Hello"},
 		}, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
@@ -129,7 +123,7 @@ func TestSSEStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	result, err := s.WaitForEmail(ctx, "hash123", fetcher, matcher, time.Second)
+	result, err := SSEWaitForEmail(ctx, fetcher, matcher, time.Second)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -146,50 +140,46 @@ func TestSSEStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
 }
 
 func TestSSEStrategy_WaitForEmail_Timeout(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := s.WaitForEmail(ctx, "hash123", fetcher, matcher, 10*time.Millisecond)
+	_, err := SSEWaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmail() error = %v, want context.DeadlineExceeded", err)
 	}
 }
 
 func TestSSEStrategy_WaitForEmailCount(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
 	var callCount int32
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		count := atomic.AddInt32(&callCount, 1)
 		if count >= 2 {
-			return []interface{}{
-				&testEmail{ID: "email1"},
-				&testEmail{ID: "email2"},
-				&testEmail{ID: "email3"},
+			return []*testEmail{
+				{ID: "email1"},
+				{ID: "email2"},
+				{ID: "email3"},
 			}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := s.WaitForEmailCount(ctx, "hash123", fetcher, matcher, 2, 10*time.Millisecond)
+	results, err := SSEWaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("WaitForEmailCount() error = %v", err)
 	}
@@ -200,16 +190,14 @@ func TestSSEStrategy_WaitForEmailCount(t *testing.T) {
 }
 
 func TestSSEStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		return []interface{}{
-			&testEmail{ID: "email1"},
-			&testEmail{ID: "email2"},
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
+		return []*testEmail{
+			{ID: "email1"},
+			{ID: "email2"},
 		}, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
@@ -217,7 +205,7 @@ func TestSSEStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	results, err := s.WaitForEmailCount(ctx, "hash123", fetcher, matcher, 2, time.Second)
+	results, err := SSEWaitForEmailCount(ctx, fetcher, matcher, 2, time.Second)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -234,22 +222,20 @@ func TestSSEStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
 }
 
 func TestSSEStrategy_WaitForEmailCount_Timeout(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		return []interface{}{
-			&testEmail{ID: "email1"},
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
+		return []*testEmail{
+			{ID: "email1"},
 		}, nil // Only 1 email, but we want 2
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := s.WaitForEmailCount(ctx, "hash123", fetcher, matcher, 2, 10*time.Millisecond)
+	_, err := SSEWaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmailCount() error = %v, want context.DeadlineExceeded", err)
 	}
@@ -298,18 +284,16 @@ func TestSSEStrategy_Start(t *testing.T) {
 }
 
 func TestSSEStrategy_WaitForEmail_DefaultInterval(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
 	fetchCount := 0
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		fetchCount++
 		if fetchCount >= 2 {
-			return []interface{}{&testEmail{ID: "email1"}}, nil
+			return []*testEmail{{ID: "email1"}}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
@@ -317,7 +301,7 @@ func TestSSEStrategy_WaitForEmail_DefaultInterval(t *testing.T) {
 	defer cancel()
 
 	// Pass 0 for pollInterval to use default
-	_, err := s.WaitForEmail(ctx, "hash123", fetcher, matcher, 0)
+	_, err := SSEWaitForEmail(ctx, fetcher, matcher, 0)
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
@@ -345,8 +329,6 @@ func TestSSEStrategy_LastError(t *testing.T) {
 }
 
 func TestSSEStrategy_WaitForEmailWithSync(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
 	var fetchCount int32
 
 	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
@@ -356,24 +338,24 @@ func TestSSEStrategy_WaitForEmailWithSync(t *testing.T) {
 		}, nil
 	}
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
 		count := atomic.AddInt32(&fetchCount, 1)
 		if count >= 2 {
-			return []interface{}{
-				&testEmail{ID: "email1", Subject: "Hello"},
+			return []*testEmail{
+				{ID: "email1", Subject: "Hello"},
 			}, nil
 		}
 		return nil, nil
 	}
 
-	matcher := func(email interface{}) bool {
-		return email.(*testEmail).Subject == "Hello"
+	matcher := func(email *testEmail) bool {
+		return email.Subject == "Hello"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := s.WaitForEmailWithSync(ctx, "hash123", fetcher, matcher, WaitOptions{
+	result, err := SSEWaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
@@ -381,15 +363,12 @@ func TestSSEStrategy_WaitForEmailWithSync(t *testing.T) {
 		t.Fatalf("WaitForEmailWithSync() error = %v", err)
 	}
 
-	email := result.(*testEmail)
-	if email.ID != "email1" {
-		t.Errorf("email.ID = %s, want email1", email.ID)
+	if result.ID != "email1" {
+		t.Errorf("email.ID = %s, want email1", result.ID)
 	}
 }
 
 func TestSSEStrategy_WaitForEmailCountWithSync(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
 	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
 		return &SyncStatus{
 			EmailCount: 3,
@@ -397,22 +376,22 @@ func TestSSEStrategy_WaitForEmailCountWithSync(t *testing.T) {
 		}, nil
 	}
 
-	fetcher := func(ctx context.Context) ([]interface{}, error) {
-		return []interface{}{
-			&testEmail{ID: "email1"},
-			&testEmail{ID: "email2"},
-			&testEmail{ID: "email3"},
+	fetcher := func(ctx context.Context) ([]*testEmail, error) {
+		return []*testEmail{
+			{ID: "email1"},
+			{ID: "email2"},
+			{ID: "email3"},
 		}, nil
 	}
 
-	matcher := func(email interface{}) bool {
+	matcher := func(email *testEmail) bool {
 		return true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := s.WaitForEmailCountWithSync(ctx, "hash123", fetcher, matcher, 2, WaitOptions{
+	results, err := SSEWaitForEmailCountWithSync(ctx, fetcher, matcher, 2, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
