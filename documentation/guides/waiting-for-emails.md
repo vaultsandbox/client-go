@@ -103,7 +103,7 @@ email, err := inbox.WaitForEmail(ctx,
 
 ```go
 // Trigger multiple emails
-sendNotifications(inbox.EmailAddress, 3)
+sendNotifications(inbox.EmailAddress(), 3)
 
 // Wait for all 3 to arrive
 emails, err := inbox.WaitForEmailCount(ctx, 3,
@@ -171,7 +171,7 @@ func waitForEmailWithFallback(ctx context.Context, inbox *vaultsandbox.Inbox, op
     if err != nil {
         if errors.Is(err, context.DeadlineExceeded) {
             fmt.Println("Timeout, checking if email arrived anyway")
-            emails, listErr := inbox.ListEmails(ctx)
+            emails, listErr := inbox.GetEmails(ctx)
             if listErr != nil {
                 return nil, listErr
             }
@@ -251,7 +251,7 @@ func TestPasswordResetEmail(t *testing.T) {
     defer inbox.Delete(ctx)
 
     // Trigger reset
-    app.RequestPasswordReset(inbox.EmailAddress)
+    app.RequestPasswordReset(inbox.EmailAddress())
 
     // Wait for reset email
     email, err := inbox.WaitForEmail(ctx,
@@ -287,7 +287,7 @@ func TestWelcomeEmailWithVerification(t *testing.T) {
 
     // Sign up
     app.Signup(SignupRequest{
-        Email: inbox.EmailAddress,
+        Email: inbox.EmailAddress(),
         Name:  "Test User",
     })
 
@@ -332,7 +332,7 @@ func TestOrderConfirmationAndShipping(t *testing.T) {
 
     // Place order
     orderId := app.PlaceOrder(OrderRequest{
-        Email: inbox.EmailAddress,
+        Email: inbox.EmailAddress(),
         Items: []string{"widget"},
     })
 
@@ -369,7 +369,7 @@ func TestInvoiceWithPDFAttachment(t *testing.T) {
     inbox, _ := client.CreateInbox(ctx)
     defer inbox.Delete(ctx)
 
-    app.SendInvoice(inbox.EmailAddress)
+    app.SendInvoice(inbox.EmailAddress())
 
     email, err := inbox.WaitForEmail(ctx,
         vaultsandbox.WithWaitTimeout(10*time.Second),
@@ -391,7 +391,7 @@ func TestInvoiceWithPDFAttachment(t *testing.T) {
 
     require.NotNil(t, pdf)
     assert.Regexp(t, regexp.MustCompile(`(?i)invoice.*\.pdf`), pdf.Filename)
-    assert.Greater(t, pdf.Size, int64(0))
+    assert.Greater(t, pdf.Size, 0)
 }
 ```
 
@@ -412,7 +412,7 @@ func waitForFirstMatch(ctx context.Context, inbox *vaultsandbox.Inbox, matchers 
         case <-ctx.Done():
             return nil, fmt.Errorf("no matching email found: %w", ctx.Err())
         case <-ticker.C:
-            emails, err := inbox.ListEmails(ctx)
+            emails, err := inbox.GetEmails(ctx)
             if err != nil {
                 return nil, err
             }
@@ -472,7 +472,7 @@ func waitWithProgress(ctx context.Context, inbox *vaultsandbox.Inbox, timeout ti
                 TimedOut: false,
             })
 
-            emails, err := inbox.ListEmails(ctx)
+            emails, err := inbox.GetEmails(ctx)
             if err != nil {
                 return nil, err
             }
@@ -494,7 +494,7 @@ email, err := waitWithProgress(ctx, inbox, 10*time.Second, func(p WaitProgress) 
 ```go
 func waitConditionally(ctx context.Context, inbox *vaultsandbox.Inbox, subjectPattern *regexp.Regexp) (*vaultsandbox.Email, error) {
     // First check if email already exists
-    existing, err := inbox.ListEmails(ctx)
+    existing, err := inbox.GetEmails(ctx)
     if err != nil {
         return nil, err
     }
@@ -543,7 +543,7 @@ func TestReceivesEmailBad(t *testing.T) {
     sendEmail(inbox.EmailAddress)
     time.Sleep(5 * time.Second) // May not be enough, or wastes time
 
-    emails, _ := inbox.ListEmails(ctx)
+    emails, _ := inbox.GetEmails(ctx)
     assert.Equal(t, 1, len(emails))
 }
 ```
@@ -577,11 +577,11 @@ func TestMultipleUsersReceiveEmails(t *testing.T) {
     wg.Add(2)
     go func() {
         defer wg.Done()
-        sendWelcome(inbox1.EmailAddress)
+        sendWelcome(inbox1.EmailAddress())
     }()
     go func() {
         defer wg.Done()
-        sendWelcome(inbox2.EmailAddress)
+        sendWelcome(inbox2.EmailAddress())
     }()
     wg.Wait()
 
@@ -622,8 +622,8 @@ func TestMultipleUsersWithErrgroup(t *testing.T) {
     defer inbox2.Delete(ctx)
 
     // Send emails
-    sendWelcome(inbox1.EmailAddress)
-    sendWelcome(inbox2.EmailAddress)
+    sendWelcome(inbox1.EmailAddress())
+    sendWelcome(inbox2.EmailAddress())
 
     // Wait in parallel with errgroup
     g, ctx := errgroup.WithContext(ctx)
@@ -664,7 +664,7 @@ email, err := inbox.WaitForEmail(ctx,
 )
 if err != nil {
     fmt.Println("Timeout! Checking inbox manually:")
-    emails, listErr := inbox.ListEmails(ctx)
+    emails, listErr := inbox.GetEmails(ctx)
     if listErr != nil {
         log.Fatal(listErr)
     }

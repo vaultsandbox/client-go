@@ -10,10 +10,10 @@ VaultSandbox automatically decrypts email attachments and provides them as `[]by
 ### Basic Access
 
 ```go
-email, err := inbox.WaitForEmail(ctx, &vaultsandbox.WaitOptions{
-	Subject: regexp.MustCompile(`Invoice`),
-	Timeout: 10 * time.Second,
-})
+email, err := inbox.WaitForEmail(ctx,
+	vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Invoice`)),
+	vaultsandbox.WithWaitTimeout(10*time.Second),
+)
 if err != nil {
 	log.Fatal(err)
 }
@@ -375,10 +375,10 @@ func saveAttachmentSafely(attachment vaultsandbox.Attachment, directory string) 
 
 ```go
 func TestEmailIncludesInvoicePDF(t *testing.T) {
-	email, err := inbox.WaitForEmail(ctx, &vaultsandbox.WaitOptions{
-		Subject: regexp.MustCompile(`Invoice`),
-		Timeout: 10 * time.Second,
-	})
+	email, err := inbox.WaitForEmail(ctx,
+		vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Invoice`)),
+		vaultsandbox.WithWaitTimeout(10*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +486,7 @@ if attachment.Content != nil {
 func TestEmailWithAttachments(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := vaultsandbox.NewClient(vaultsandbox.WithAPIKey(apiKey))
+	client, err := vaultsandbox.New(apiKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,20 +500,20 @@ func TestEmailWithAttachments(t *testing.T) {
 	t.Run("receives invoice with PDF", func(t *testing.T) {
 		// Trigger your application to send an invoice
 		err := app.SendInvoice(SendInvoiceRequest{
-			To:      inbox.EmailAddress,
+			To:      inbox.EmailAddress(),
 			OrderID: "12345",
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		email, err := inbox.WaitForEmail(ctx, &vaultsandbox.WaitOptions{
-			Subject: regexp.MustCompile(`Invoice`),
-			Predicate: func(e *vaultsandbox.Email) bool {
+		email, err := inbox.WaitForEmail(ctx,
+			vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Invoice`)),
+			vaultsandbox.WithPredicate(func(e *vaultsandbox.Email) bool {
 				return len(e.Attachments) > 0
-			},
-			Timeout: 10 * time.Second,
-		})
+			}),
+			vaultsandbox.WithWaitTimeout(10*time.Second),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -550,14 +550,14 @@ func TestEmailWithAttachments(t *testing.T) {
 	})
 
 	t.Run("receives report with multiple attachments", func(t *testing.T) {
-		err := app.SendReport(inbox.EmailAddress)
+		err := app.SendReport(inbox.EmailAddress())
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		email, err := inbox.WaitForEmail(ctx, &vaultsandbox.WaitOptions{
-			Timeout: 10 * time.Second,
-		})
+		email, err := inbox.WaitForEmail(ctx,
+			vaultsandbox.WithWaitTimeout(10*time.Second),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -597,14 +597,14 @@ func TestEmailWithAttachments(t *testing.T) {
 
 ```go
 func TestProcessCSVAttachment(t *testing.T) {
-	err := app.SendReport(inbox.EmailAddress)
+	err := app.SendReport(inbox.EmailAddress())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	email, err := inbox.WaitForEmail(ctx, &vaultsandbox.WaitOptions{
-		Timeout: 10 * time.Second,
-	})
+	email, err := inbox.WaitForEmail(ctx,
+		vaultsandbox.WithWaitTimeout(10*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

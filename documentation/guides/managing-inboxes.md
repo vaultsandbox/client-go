@@ -5,9 +5,9 @@ description: Common operations for creating, using, and deleting inboxes
 
 This guide covers common inbox management operations with practical examples.
 
-## Creating Inboxes
+## Client Configuration
 
-### Basic Creation
+### Basic Client Creation
 
 ```go
 package main
@@ -36,6 +36,68 @@ func main() {
 
 	fmt.Printf("Email address: %s\n", inbox.EmailAddress())
 }
+```
+
+### Client Options
+
+```go
+import (
+	"net/http"
+	"time"
+)
+
+// Custom base URL (for testing or self-hosted)
+client, err := vaultsandbox.New(apiKey, vaultsandbox.WithBaseURL("https://custom.api.com"))
+
+// Custom HTTP client
+httpClient := &http.Client{Timeout: 30 * time.Second}
+client, err := vaultsandbox.New(apiKey, vaultsandbox.WithHTTPClient(httpClient))
+
+// Custom timeout for operations
+client, err := vaultsandbox.New(apiKey, vaultsandbox.WithTimeout(2*time.Minute))
+
+// Configure retries
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithRetries(3),
+	vaultsandbox.WithRetryOn([]int{408, 429, 500, 502, 503, 504}),
+)
+
+// Delivery strategy for real-time emails
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE),      // Server-Sent Events
+	// or vaultsandbox.StrategyPolling for polling
+	// or vaultsandbox.StrategyAuto (default) to try SSE, fall back to polling
+)
+```
+
+### Validate API Key
+
+```go
+// Check if the API key is valid
+if err := client.CheckKey(ctx); err != nil {
+	log.Fatal("Invalid API key:", err)
+}
+```
+
+### Get Server Configuration
+
+```go
+info := client.ServerInfo()
+fmt.Println("Allowed domains:", info.AllowedDomains)
+fmt.Println("Max TTL:", info.MaxTTL)
+fmt.Println("Default TTL:", info.DefaultTTL)
+```
+
+## Creating Inboxes
+
+### Basic Creation
+
+```go
+inbox, err := client.CreateInbox(ctx)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Printf("Email address: %s\n", inbox.EmailAddress())
 ```
 
 ### With Custom TTL
@@ -329,6 +391,246 @@ fmt.Println("Email count:", syncStatus.EmailCount)
 fmt.Println("Emails hash:", syncStatus.EmailsHash)
 ```
 
+### Get Inbox Hash
+
+```go
+// InboxHash returns a unique identifier derived from the inbox's public key
+hash := inbox.InboxHash()
+fmt.Println("Inbox hash:", hash)
+```
+
+## Waiting for Emails
+
+### Basic Wait
+
+```go
+// Wait for any email with default timeout (60 seconds)
+email, err := inbox.WaitForEmail(ctx)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println("Received:", email.Subject)
+```
+
+### Wait with Timeout
+
+```go
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(30*time.Second))
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+### Wait with Filters
+
+```go
+import "regexp"
+
+// Wait for email from specific sender
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithFrom("noreply@example.com"))
+
+// Wait for email with specific subject
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithSubject("Password Reset"))
+
+// Wait for email matching subject regex
+pattern := regexp.MustCompile(`(?i)verification|confirm`)
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithSubjectRegex(pattern))
+
+// Wait for email matching sender regex
+senderPattern := regexp.MustCompile(`@example\.(com|org)$`)
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithFromRegex(senderPattern))
+
+// Wait with custom predicate
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithPredicate(func(e *vaultsandbox.Email) bool {
+	return len(e.Attachments) > 0 // Wait for email with attachments
+}))
+
+// Combine multiple filters
+email, err := inbox.WaitForEmail(ctx,
+	vaultsandbox.WithFrom("support@example.com"),
+	vaultsandbox.WithSubjectRegex(regexp.MustCompile(`(?i)ticket`)),
+	vaultsandbox.WithWaitTimeout(2*time.Minute),
+	vaultsandbox.WithPollInterval(5*time.Second),
+)
+```
+
+### Wait for Multiple Emails
+
+```go
+// Wait until inbox has at least 3 emails
+emails, err := inbox.WaitForEmailCount(ctx, 3, vaultsandbox.WithWaitTimeout(2*time.Minute))
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Printf("Received %d emails\n", len(emails))
+
+// With filters - wait for 2 emails from specific sender
+emails, err := inbox.WaitForEmailCount(ctx, 2,
+	vaultsandbox.WithFrom("notifications@example.com"),
+	vaultsandbox.WithWaitTimeout(time.Minute),
+)
+```
+
+## Working with Email Content
+
+### Get Raw Email
+
+```go
+// Fetch the original raw email content (RFC 5322 format)
+rawContent, err := email.GetRaw(ctx)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println("Raw email:", rawContent)
+```
+
+### Mark Email as Read
+
+```go
+if err := email.MarkAsRead(ctx); err != nil {
+	log.Fatal(err)
+}
+fmt.Println("Email marked as read:", email.IsRead) // true
+```
+
+### Access Email Fields
+
+```go
+email, err := inbox.GetEmail(ctx, emailID)
+if err != nil {
+	log.Fatal(err)
+}
+
+fmt.Println("ID:", email.ID)
+fmt.Println("From:", email.From)
+fmt.Println("To:", email.To)
+fmt.Println("Subject:", email.Subject)
+fmt.Println("Text body:", email.Text)
+fmt.Println("HTML body:", email.HTML)
+fmt.Println("Received:", email.ReceivedAt)
+fmt.Println("Is read:", email.IsRead)
+fmt.Println("Links found:", email.Links)
+
+// Access headers
+for key, value := range email.Headers {
+	fmt.Printf("Header %s: %s\n", key, value)
+}
+
+// Access attachments
+for _, att := range email.Attachments {
+	fmt.Printf("Attachment: %s (%s, %d bytes)\n", att.Filename, att.ContentType, att.Size)
+	// att.Content contains the raw bytes
+}
+
+// Access authentication results (SPF, DKIM, DMARC)
+if email.AuthResults != nil {
+	fmt.Println("SPF:", email.AuthResults.SPF)
+	fmt.Println("DKIM:", email.AuthResults.DKIM)
+	fmt.Println("DMARC:", email.AuthResults.DMARC)
+}
+```
+
+## Real-time Email Monitoring
+
+### Subscribe to Single Inbox
+
+```go
+// Subscribe to new emails on a single inbox
+subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+	fmt.Printf("New email: %s from %s\n", email.Subject, email.From)
+})
+defer subscription.Unsubscribe()
+
+// Keep running to receive notifications
+time.Sleep(10 * time.Minute)
+```
+
+### Monitor Multiple Inboxes
+
+```go
+// Create a monitor for multiple inboxes
+monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2, inbox3})
+if err != nil {
+	log.Fatal(err)
+}
+defer monitor.Unsubscribe()
+
+// Register callback for new emails
+monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
+	fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
+})
+
+// Keep running to receive notifications
+select {}
+```
+
+## Export and Import Inboxes
+
+### Export Inbox
+
+```go
+// Export inbox data (includes private key - handle securely!)
+exported := inbox.Export()
+fmt.Println("Exported at:", exported.ExportedAt)
+fmt.Println("Email address:", exported.EmailAddress)
+fmt.Println("Expires at:", exported.ExpiresAt)
+
+// Export to file
+if err := client.ExportInboxToFile(inbox, "/path/to/inbox.json"); err != nil {
+	log.Fatal(err)
+}
+```
+
+### Import Inbox
+
+```go
+// Import from ExportedInbox struct
+imported, err := client.ImportInbox(ctx, exported)
+if err != nil {
+	log.Fatal(err)
+}
+
+// Import from file
+imported, err := client.ImportInboxFromFile(ctx, "/path/to/inbox.json")
+if err != nil {
+	log.Fatal(err)
+}
+
+// Use imported inbox
+emails, err := imported.GetEmails(ctx)
+```
+
+## Client Inbox Management
+
+### Get Inbox by Address
+
+```go
+// Look up an inbox managed by this client
+inbox, exists := client.GetInbox("test@mail.example.com")
+if exists {
+	fmt.Println("Found inbox:", inbox.EmailAddress())
+}
+```
+
+### List All Client Inboxes
+
+```go
+// Get all inboxes currently managed by this client
+inboxes := client.Inboxes()
+for _, inbox := range inboxes {
+	fmt.Printf("- %s (expires: %s)\n", inbox.EmailAddress(), inbox.ExpiresAt())
+}
+```
+
+### Delete Inbox by Address
+
+```go
+// Delete a specific inbox by email address
+if err := client.DeleteInbox(ctx, "test@mail.example.com"); err != nil {
+	log.Fatal(err)
+}
+```
+
 ## Bulk Operations
 
 ### Create Multiple Inboxes
@@ -584,6 +886,116 @@ func Example() {
 
 ## Error Handling
 
+### Sentinel Errors
+
+The SDK provides sentinel errors for common error conditions:
+
+```go
+import "errors"
+
+// Check for specific error types using errors.Is()
+if errors.Is(err, vaultsandbox.ErrMissingAPIKey) {
+	// API key was not provided
+}
+if errors.Is(err, vaultsandbox.ErrClientClosed) {
+	// Operation attempted on a closed client
+}
+if errors.Is(err, vaultsandbox.ErrUnauthorized) {
+	// Invalid or expired API key
+}
+if errors.Is(err, vaultsandbox.ErrInboxNotFound) {
+	// Inbox does not exist (expired or deleted)
+}
+if errors.Is(err, vaultsandbox.ErrEmailNotFound) {
+	// Email does not exist
+}
+if errors.Is(err, vaultsandbox.ErrInboxAlreadyExists) {
+	// Tried to create/import inbox that already exists
+}
+if errors.Is(err, vaultsandbox.ErrInvalidImportData) {
+	// Import data is malformed or invalid
+}
+if errors.Is(err, vaultsandbox.ErrDecryptionFailed) {
+	// Failed to decrypt email content
+}
+if errors.Is(err, vaultsandbox.ErrSignatureInvalid) {
+	// Email signature verification failed
+}
+if errors.Is(err, vaultsandbox.ErrSSEConnection) {
+	// Server-Sent Events connection failed
+}
+if errors.Is(err, vaultsandbox.ErrInboxExpired) {
+	// Inbox has passed its expiration time
+}
+if errors.Is(err, vaultsandbox.ErrRateLimited) {
+	// API rate limit exceeded
+}
+```
+
+### Error Types
+
+```go
+import "errors"
+
+// APIError - HTTP errors from the API
+var apiErr *vaultsandbox.APIError
+if errors.As(err, &apiErr) {
+	fmt.Printf("Status: %d\n", apiErr.StatusCode)
+	fmt.Printf("Message: %s\n", apiErr.Message)
+	fmt.Printf("Request ID: %s\n", apiErr.RequestID)
+}
+
+// NetworkError - Network-level failures
+var netErr *vaultsandbox.NetworkError
+if errors.As(err, &netErr) {
+	fmt.Printf("URL: %s\n", netErr.URL)
+	fmt.Printf("Attempt: %d\n", netErr.Attempt)
+	fmt.Printf("Cause: %v\n", netErr.Err)
+}
+
+// TimeoutError - Operation exceeded deadline
+var timeoutErr *vaultsandbox.TimeoutError
+if errors.As(err, &timeoutErr) {
+	fmt.Printf("Operation: %s\n", timeoutErr.Operation)
+	fmt.Printf("Timeout: %v\n", timeoutErr.Timeout)
+}
+
+// DecryptionError - Email decryption failure
+var decryptErr *vaultsandbox.DecryptionError
+if errors.As(err, &decryptErr) {
+	fmt.Printf("Stage: %s\n", decryptErr.Stage) // "kem", "hkdf", or "aes"
+	fmt.Printf("Message: %s\n", decryptErr.Message)
+}
+
+// SignatureVerificationError - Signature check failed
+var sigErr *vaultsandbox.SignatureVerificationError
+if errors.As(err, &sigErr) {
+	fmt.Printf("Message: %s\n", sigErr.Message)
+}
+
+// SSEError - Server-Sent Events connection failure
+var sseErr *vaultsandbox.SSEError
+if errors.As(err, &sseErr) {
+	fmt.Printf("Attempts: %d\n", sseErr.Attempts)
+	fmt.Printf("Cause: %v\n", sseErr.Err)
+}
+
+// ValidationError - Input validation failures
+var valErr *vaultsandbox.ValidationError
+if errors.As(err, &valErr) {
+	for _, e := range valErr.Errors {
+		fmt.Println("Validation error:", e)
+	}
+}
+
+// StrategyError - Delivery strategy failure
+var stratErr *vaultsandbox.StrategyError
+if errors.As(err, &stratErr) {
+	fmt.Printf("Message: %s\n", stratErr.Message)
+	fmt.Printf("Cause: %v\n", stratErr.Err)
+}
+```
+
 ### Handling Expired Inboxes
 
 ```go
@@ -618,6 +1030,44 @@ if err != nil {
 		fmt.Printf("Network error: %v\n", netErr.Err)
 	default:
 		log.Fatal(err)
+	}
+}
+```
+
+### Comprehensive Error Handling
+
+```go
+func handleError(err error) {
+	if err == nil {
+		return
+	}
+
+	switch {
+	case errors.Is(err, vaultsandbox.ErrUnauthorized):
+		log.Fatal("Invalid API key - please check your credentials")
+
+	case errors.Is(err, vaultsandbox.ErrRateLimited):
+		log.Println("Rate limited - waiting before retry")
+		time.Sleep(time.Minute)
+
+	case errors.Is(err, vaultsandbox.ErrInboxNotFound):
+		log.Println("Inbox not found - it may have expired")
+
+	case errors.Is(err, vaultsandbox.ErrDecryptionFailed):
+		log.Println("Decryption failed - email may be corrupted")
+
+	default:
+		var apiErr *vaultsandbox.APIError
+		var netErr *vaultsandbox.NetworkError
+
+		switch {
+		case errors.As(err, &apiErr):
+			log.Printf("API error %d: %s", apiErr.StatusCode, apiErr.Message)
+		case errors.As(err, &netErr):
+			log.Printf("Network error: %v", netErr.Err)
+		default:
+			log.Printf("Unexpected error: %v", err)
+		}
 	}
 }
 ```

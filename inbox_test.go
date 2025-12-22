@@ -1,6 +1,7 @@
 package vaultsandbox
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -243,6 +244,120 @@ func TestInbox_Export_Roundtrip(t *testing.T) {
 	if !reconstructed.expiresAt.Equal(original.expiresAt) {
 		t.Errorf("expiresAt = %v, want %v", reconstructed.expiresAt, original.expiresAt)
 	}
+}
+
+func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
+	inbox := &Inbox{}
+
+	t.Run("with valid auth results", func(t *testing.T) {
+		authResultsJSON := json.RawMessage(`{
+			"spf": {"status": "pass", "domain": "example.com"},
+			"dkim": [{"status": "pass", "domain": "example.com", "selector": "default"}],
+			"dmarc": {"status": "pass", "policy": "reject"},
+			"reverseDns": {"status": "pass", "hostname": "mail.example.com"}
+		}`)
+
+		decrypted := &crypto.DecryptedEmail{
+			ID:          "test-id",
+			From:        "sender@example.com",
+			To:          []string{"recipient@example.com"},
+			Subject:     "Test Subject",
+			AuthResults: authResultsJSON,
+		}
+
+		email := inbox.convertDecryptedEmail(decrypted)
+
+		if email.AuthResults == nil {
+			t.Fatal("AuthResults should not be nil")
+		}
+		if email.AuthResults.SPF == nil {
+			t.Fatal("SPF should not be nil")
+		}
+		if email.AuthResults.SPF.Status != "pass" {
+			t.Errorf("SPF.Status = %s, want pass", email.AuthResults.SPF.Status)
+		}
+		if email.AuthResults.SPF.Domain != "example.com" {
+			t.Errorf("SPF.Domain = %s, want example.com", email.AuthResults.SPF.Domain)
+		}
+		if len(email.AuthResults.DKIM) != 1 {
+			t.Fatalf("DKIM length = %d, want 1", len(email.AuthResults.DKIM))
+		}
+		if email.AuthResults.DKIM[0].Status != "pass" {
+			t.Errorf("DKIM[0].Status = %s, want pass", email.AuthResults.DKIM[0].Status)
+		}
+		if email.AuthResults.DMARC == nil {
+			t.Fatal("DMARC should not be nil")
+		}
+		if email.AuthResults.DMARC.Status != "pass" {
+			t.Errorf("DMARC.Status = %s, want pass", email.AuthResults.DMARC.Status)
+		}
+		if email.AuthResults.ReverseDNS == nil {
+			t.Fatal("ReverseDNS should not be nil")
+		}
+		if email.AuthResults.ReverseDNS.Status != "pass" {
+			t.Errorf("ReverseDNS.Status = %s, want pass", email.AuthResults.ReverseDNS.Status)
+		}
+	})
+
+	t.Run("with empty auth results", func(t *testing.T) {
+		decrypted := &crypto.DecryptedEmail{
+			ID:          "test-id",
+			From:        "sender@example.com",
+			To:          []string{"recipient@example.com"},
+			Subject:     "Test Subject",
+			AuthResults: nil,
+		}
+
+		email := inbox.convertDecryptedEmail(decrypted)
+
+		if email.AuthResults != nil {
+			t.Error("AuthResults should be nil when not present")
+		}
+	})
+
+	t.Run("with invalid JSON auth results", func(t *testing.T) {
+		decrypted := &crypto.DecryptedEmail{
+			ID:          "test-id",
+			From:        "sender@example.com",
+			To:          []string{"recipient@example.com"},
+			Subject:     "Test Subject",
+			AuthResults: json.RawMessage(`{invalid json`),
+		}
+
+		email := inbox.convertDecryptedEmail(decrypted)
+
+		// Should gracefully handle invalid JSON
+		if email.AuthResults != nil {
+			t.Error("AuthResults should be nil for invalid JSON")
+		}
+	})
+
+	t.Run("validate and IsPassing work correctly", func(t *testing.T) {
+		authResultsJSON := json.RawMessage(`{
+			"spf": {"status": "pass"},
+			"dkim": [{"status": "pass"}],
+			"dmarc": {"status": "pass"}
+		}`)
+
+		decrypted := &crypto.DecryptedEmail{
+			ID:          "test-id",
+			AuthResults: authResultsJSON,
+		}
+
+		email := inbox.convertDecryptedEmail(decrypted)
+
+		if email.AuthResults == nil {
+			t.Fatal("AuthResults should not be nil")
+		}
+
+		validation := email.AuthResults.Validate()
+		if !validation.Passed {
+			t.Error("Validate().Passed should be true")
+		}
+		if !email.AuthResults.IsPassing() {
+			t.Error("IsPassing() should return true")
+		}
+	})
 }
 
 // Note: Full inbox tests require a real API connection

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/vaultsandbox/client-go/authresults"
 	"github.com/vaultsandbox/client-go/internal/api"
 	"github.com/vaultsandbox/client-go/internal/crypto"
 )
@@ -467,7 +468,7 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 		}
 	}
 
-	return &Email{
+	email := &Email{
 		ID:          d.ID,
 		From:        d.From,
 		To:          d.To,
@@ -481,4 +482,14 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 		IsRead:      d.IsRead,
 		inbox:       i,
 	}
+
+	// Unmarshal AuthResults if present
+	if len(d.AuthResults) > 0 {
+		var ar authresults.AuthResults
+		if err := json.Unmarshal(d.AuthResults, &ar); err == nil {
+			email.AuthResults = &ar
+		}
+	}
+
+	return email
 }
