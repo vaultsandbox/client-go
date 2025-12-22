@@ -39,7 +39,8 @@ type Client struct {
 	closed         bool
 
 	// Event handling
-	eventCallbacks map[string][]emailEventCallback // inboxHash -> callbacks
+	eventCallbacks map[string]map[int]emailEventCallback // inboxHash -> id -> callback
+	nextCallbackID int
 	callbacksMu    sync.RWMutex
 	strategyCtx    context.Context
 	strategyCancel context.CancelFunc
@@ -130,7 +131,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		serverInfo:     serverInfo,
 		inboxes:        make(map[string]*Inbox),
 		inboxesByHash:  make(map[string]*Inbox),
-		eventCallbacks: make(map[string][]emailEventCallback),
+		eventCallbacks: make(map[string]map[int]emailEventCallback),
 		strategyCtx:    strategyCtx,
 		strategyCancel: strategyCancel,
 	}
@@ -392,11 +393,16 @@ func (c *Client) handleSSEEvent(event *api.SSEEvent) error {
 
 	c.callbacksMu.RLock()
 	callbacks := c.eventCallbacks[event.InboxID]
-	c.callbacksMu.RUnlock()
-
 	if len(callbacks) == 0 {
+		c.callbacksMu.RUnlock()
 		return nil
 	}
+	// Copy callbacks to slice for iteration outside lock
+	callbacksCopy := make([]emailEventCallback, 0, len(callbacks))
+	for _, cb := range callbacks {
+		callbacksCopy = append(callbacksCopy, cb)
+	}
+	c.callbacksMu.RUnlock()
 
 	// Find the inbox using O(1) lookup
 	c.mu.RLock()
@@ -417,37 +423,40 @@ func (c *Client) handleSSEEvent(event *api.SSEEvent) error {
 	}
 
 	// Call all registered callbacks
-	c.callbacksMu.RLock()
-	callbacksCopy := make([]emailEventCallback, len(callbacks))
-	copy(callbacksCopy, callbacks)
-	c.callbacksMu.RUnlock()
-
 	for _, cb := range callbacksCopy {
-		if cb != nil {
-			go cb(inbox, email)
-		}
+		go cb(inbox, email)
 	}
 
 	return nil
 }
 
 // registerEmailCallback registers a callback for email events on a specific inbox.
-// Returns an index that can be used to unregister the callback.
+// Returns an ID that can be used to unregister the callback.
 func (c *Client) registerEmailCallback(inboxHash string, callback emailEventCallback) int {
 	c.callbacksMu.Lock()
 	defer c.callbacksMu.Unlock()
 
-	c.eventCallbacks[inboxHash] = append(c.eventCallbacks[inboxHash], callback)
-	return len(c.eventCallbacks[inboxHash]) - 1
+	if c.eventCallbacks[inboxHash] == nil {
+		c.eventCallbacks[inboxHash] = make(map[int]emailEventCallback)
+	}
+
+	id := c.nextCallbackID
+	c.nextCallbackID++
+	c.eventCallbacks[inboxHash][id] = callback
+	return id
 }
 
-// unregisterEmailCallback removes a callback by setting it to nil.
-func (c *Client) unregisterEmailCallback(inboxHash string, index int) {
+// unregisterEmailCallback removes a callback by its ID.
+func (c *Client) unregisterEmailCallback(inboxHash string, id int) {
 	c.callbacksMu.Lock()
 	defer c.callbacksMu.Unlock()
 
-	if callbacks, ok := c.eventCallbacks[inboxHash]; ok && index < len(callbacks) {
-		callbacks[index] = nil
+	if callbacks, ok := c.eventCallbacks[inboxHash]; ok {
+		delete(callbacks, id)
+		// Clean up empty maps to avoid memory accumulation
+		if len(callbacks) == 0 {
+			delete(c.eventCallbacks, inboxHash)
+		}
 	}
 }
 
@@ -478,7 +487,7 @@ func (c *Client) Close() error {
 	c.inboxes = make(map[string]*Inbox)
 	c.inboxesByHash = make(map[string]*Inbox)
 	c.callbacksMu.Lock()
-	c.eventCallbacks = make(map[string][]emailEventCallback)
+	c.eventCallbacks = make(map[string]map[int]emailEventCallback)
 	c.callbacksMu.Unlock()
 
 	return nil

@@ -10,7 +10,7 @@ func TestInboxMonitor_OnEmail(t *testing.T) {
 	// Create a mock client with minimal setup
 	c := &Client{
 		inboxes:        make(map[string]*Inbox),
-		eventCallbacks: make(map[string][]emailEventCallback),
+		eventCallbacks: make(map[string]map[int]emailEventCallback),
 	}
 
 	// Create a mock inbox
@@ -52,7 +52,7 @@ func TestInboxMonitor_OnEmail(t *testing.T) {
 func TestInboxMonitor_MultipleCallbacks(t *testing.T) {
 	c := &Client{
 		inboxes:        make(map[string]*Inbox),
-		eventCallbacks: make(map[string][]emailEventCallback),
+		eventCallbacks: make(map[string]map[int]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -106,7 +106,7 @@ func TestInboxMonitor_MultipleCallbacks(t *testing.T) {
 func TestInboxMonitor_Unsubscribe(t *testing.T) {
 	c := &Client{
 		inboxes:        make(map[string]*Inbox),
-		eventCallbacks: make(map[string][]emailEventCallback),
+		eventCallbacks: make(map[string]map[int]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -155,7 +155,7 @@ func TestInboxMonitor_Unsubscribe(t *testing.T) {
 func TestInboxMonitor_SingleSubscriptionUnsubscribe(t *testing.T) {
 	c := &Client{
 		inboxes:        make(map[string]*Inbox),
-		eventCallbacks: make(map[string][]emailEventCallback),
+		eventCallbacks: make(map[string]map[int]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -258,7 +258,7 @@ func TestMonitorInboxes_ClosedClient(t *testing.T) {
 func TestInboxMonitor_MultipleInboxes(t *testing.T) {
 	c := &Client{
 		inboxes:        make(map[string]*Inbox),
-		eventCallbacks: make(map[string][]emailEventCallback),
+		eventCallbacks: make(map[string]map[int]emailEventCallback),
 	}
 
 	// Create multiple inboxes
@@ -332,7 +332,7 @@ func TestInboxMonitor_MultipleInboxes(t *testing.T) {
 func TestInboxMonitor_UnsubscribeAll(t *testing.T) {
 	c := &Client{
 		inboxes:        make(map[string]*Inbox),
-		eventCallbacks: make(map[string][]emailEventCallback),
+		eventCallbacks: make(map[string]map[int]emailEventCallback),
 	}
 
 	inbox := &Inbox{
@@ -403,7 +403,7 @@ func TestInboxMonitor_UnsubscribeAll(t *testing.T) {
 func TestInboxMonitor_Unsubscribe_Idempotent(t *testing.T) {
 	c := &Client{
 		inboxes:        make(map[string]*Inbox),
-		eventCallbacks: make(map[string][]emailEventCallback),
+		eventCallbacks: make(map[string]map[int]emailEventCallback),
 	}
 
 	inbox := &Inbox{
