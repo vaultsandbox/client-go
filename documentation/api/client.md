@@ -98,7 +98,7 @@ WithEmailAddress(email string) InboxOption
 
 | Option             | Type            | Description                                                                    |
 | ------------------ | --------------- | ------------------------------------------------------------------------------ |
-| `WithTTL`          | `time.Duration` | Time-to-live for the inbox (min: 60s, max: 7 days, default: server's default)  |
+| `WithTTL`          | `time.Duration` | Time-to-live for the inbox (min: 60s, max: 7 days, default: 1 hour)            |
 | `WithEmailAddress` | `string`        | Request a specific email address (e.g., `test@inbox.vaultsandbox.com`)         |
 
 #### Returns

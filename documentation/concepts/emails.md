@@ -8,7 +8,7 @@ Email objects in VaultSandbox represent decrypted emails with all their content,
 ## Email Structure
 
 ```go
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{Timeout: 30 * time.Second})
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(30*time.Second))
 if err != nil {
     log.Fatal(err)
 }
@@ -83,9 +83,9 @@ Email subject line.
 fmt.Println(email.Subject) // "Password Reset Request"
 
 // Use in filtering
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{
-    Subject: regexp.MustCompile(`Password Reset`),
-})
+email, err := inbox.WaitForEmail(ctx,
+    vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Password Reset`)),
+)
 ```
 
 ### Text
@@ -336,10 +336,10 @@ type Attachment struct {
 ### Content Validation
 
 ```go
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{
-    Subject: regexp.MustCompile(`Welcome`),
-    Timeout: 10 * time.Second,
-})
+email, err := inbox.WaitForEmail(ctx,
+    vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Welcome`)),
+    vaultsandbox.WithWaitTimeout(10*time.Second),
+)
 if err != nil {
     t.Fatal(err)
 }
@@ -376,9 +376,9 @@ if !strings.HasPrefix(verifyLink, "https://") {
 ### Link Extraction and Testing
 
 ```go
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{
-    Subject: regexp.MustCompile(`Reset`),
-})
+email, err := inbox.WaitForEmail(ctx,
+    vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Reset`)),
+)
 if err != nil {
     t.Fatal(err)
 }
@@ -457,7 +457,7 @@ startTime := time.Now()
 sendWelcomeEmail(inbox.EmailAddress())
 
 // Wait and receive
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{Timeout: 10 * time.Second})
+email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
 if err != nil {
     t.Fatal(err)
 }
@@ -507,10 +507,10 @@ func TestWelcomeEmail(t *testing.T) {
     // Trigger email
     registerUser(inbox.EmailAddress())
 
-    email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{
-        Subject: regexp.MustCompile(`Welcome`),
-        Timeout: 10 * time.Second,
-    })
+    email, err := inbox.WaitForEmail(ctx,
+        vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Welcome`)),
+        vaultsandbox.WithWaitTimeout(10*time.Second),
+    )
     if err != nil {
         t.Fatal(err)
     }
@@ -548,7 +548,7 @@ func TestUnsubscribeLink(t *testing.T) {
 
     registerUser(inbox.EmailAddress())
 
-    email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{Timeout: 10 * time.Second})
+    email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
     if err != nil {
         t.Fatal(err)
     }
@@ -580,10 +580,10 @@ func TestPasswordResetFlow(t *testing.T) {
 
     requestPasswordReset(inbox.EmailAddress())
 
-    email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{
-        Subject: regexp.MustCompile(`(?i)reset`),
-        Timeout: 10 * time.Second,
-    })
+    email, err := inbox.WaitForEmail(ctx,
+        vaultsandbox.WithSubjectRegex(regexp.MustCompile(`(?i)reset`)),
+        vaultsandbox.WithWaitTimeout(10*time.Second),
+    )
     if err != nil {
         t.Fatal(err)
     }
@@ -637,10 +637,10 @@ func TestWelcomeEmailWithTestify(t *testing.T) {
 
     registerUser(inbox.EmailAddress())
 
-    email, err := inbox.WaitForEmail(ctx, vaultsandbox.WaitOptions{
-        Subject: regexp.MustCompile(`Welcome`),
-        Timeout: 10 * time.Second,
-    })
+    email, err := inbox.WaitForEmail(ctx,
+        vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Welcome`)),
+        vaultsandbox.WithWaitTimeout(10*time.Second),
+    )
     require.NoError(t, err)
 
     assert.Equal(t, "noreply@example.com", email.From)

@@ -206,11 +206,12 @@ fmt.Printf("Received %d emails\n", len(emails))
 ### Deleting Emails
 
 ```go
-// Delete via inbox
-err := inbox.client.apiClient.DeleteEmail(ctx, inbox.InboxHash(), "email-id-123")
-
-// Or via email object
-err := email.Delete(ctx)
+// Get the email first, then delete
+email, err := inbox.GetEmail(ctx, "email-id-123")
+if err != nil {
+	log.Fatal(err)
+}
+err = email.Delete(ctx)
 ```
 
 ### Deleting Inbox

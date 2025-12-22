@@ -25,9 +25,10 @@ var (
     ErrInboxAlreadyExists error
     ErrInvalidImportData  error
     ErrDecryptionFailed   error
-    ErrSignatureInvalid   error
-    ErrSSEConnection      error
-    ErrInboxExpired       error
+    ErrSignatureInvalid     error
+    ErrSSEConnection        error
+    ErrInvalidSecretKeySize error
+    ErrInboxExpired         error
     ErrRateLimited        error
 )
 
@@ -235,6 +236,19 @@ Returned when the SSE connection fails.
 err := inbox.Subscribe(ctx, handler)
 if errors.Is(err, vaultsandbox.ErrSSEConnection) {
     log.Println("SSE connection failed - consider using polling strategy")
+}
+```
+
+---
+
+### ErrInvalidSecretKeySize
+
+Returned when the secret key size is invalid during cryptographic operations.
+
+```go
+inbox, err := client.ImportInbox(ctx, exportedData)
+if errors.Is(err, vaultsandbox.ErrInvalidSecretKeySize) {
+    log.Println("Invalid secret key size - the exported data may be corrupted")
 }
 ```
 
