@@ -60,7 +60,7 @@ func main() {
 
 	// Wait for email
 	email, err := inbox.WaitForEmail(ctx,
-		vaultsandbox.WithTimeout(30*time.Second),
+		vaultsandbox.WithWaitTimeout(30*time.Second),
 	)
 	if err != nil {
 		log.Fatal(err)

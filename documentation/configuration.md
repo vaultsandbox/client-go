@@ -551,6 +551,23 @@ runTests()
 
 ### Error Handling
 
+**Error Types**:
+
+- `APIError` - HTTP errors from the API with `StatusCode`, `Message`, and `RequestID` fields
+- `NetworkError` - Network-level failures with `Err` (underlying error), `URL`, and `Attempt` fields
+- `TimeoutError` - Operation deadline exceeded with `Operation` and `Timeout` fields
+- `DecryptionError` - Email decryption failures with `Stage`, `Message`, and `Err` fields
+
+**Sentinel Errors** (use with `errors.Is()`):
+
+- `ErrUnauthorized` - Invalid or expired API key
+- `ErrInboxNotFound` - Inbox does not exist
+- `ErrEmailNotFound` - Email does not exist
+- `ErrInboxExpired` - Inbox TTL has elapsed
+- `ErrRateLimited` - API rate limit exceeded
+- `ErrDecryptionFailed` - Email decryption failed
+- `ErrClientClosed` - Client has been closed
+
 **Do**:
 
 ```go
@@ -561,9 +578,13 @@ if err != nil {
 
 	switch {
 	case errors.As(err, &apiErr):
-		log.Printf("API error: %d %s", apiErr.StatusCode, apiErr.Message)
+		log.Printf("API error %d: %s (request: %s)", apiErr.StatusCode, apiErr.Message, apiErr.RequestID)
 	case errors.As(err, &netErr):
-		log.Printf("Network error: %s", netErr.Error())
+		log.Printf("Network error on %s (attempt %d): %v", netErr.URL, netErr.Attempt, netErr.Err)
+	case errors.Is(err, vaultsandbox.ErrUnauthorized):
+		log.Printf("Invalid API key")
+	case errors.Is(err, vaultsandbox.ErrRateLimited):
+		log.Printf("Rate limited, retry later")
 	default:
 		log.Printf("Unexpected error: %v", err)
 	}
