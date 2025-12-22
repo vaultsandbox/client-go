@@ -382,9 +382,9 @@ func TestInvoiceWithPDFAttachment(t *testing.T) {
 
     // Find PDF attachment
     var pdf *vaultsandbox.Attachment
-    for _, att := range email.Attachments {
-        if att.ContentType == "application/pdf" {
-            pdf = att
+    for i := range email.Attachments {
+        if email.Attachments[i].ContentType == "application/pdf" {
+            pdf = &email.Attachments[i]
             break
         }
     }
@@ -525,7 +525,7 @@ func TestReceivesEmail(t *testing.T) {
     inbox, _ := client.CreateInbox(ctx)
     defer inbox.Delete(ctx)
 
-    sendEmail(inbox.EmailAddress)
+    sendEmail(inbox.EmailAddress())
 
     email, err := inbox.WaitForEmail(ctx,
         vaultsandbox.WithWaitTimeout(10*time.Second),
@@ -540,7 +540,7 @@ func TestReceivesEmailBad(t *testing.T) {
     inbox, _ := client.CreateInbox(ctx)
     defer inbox.Delete(ctx)
 
-    sendEmail(inbox.EmailAddress)
+    sendEmail(inbox.EmailAddress())
     time.Sleep(5 * time.Second) // May not be enough, or wastes time
 
     emails, _ := inbox.GetEmails(ctx)

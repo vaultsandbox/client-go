@@ -102,7 +102,9 @@ vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyPolling) // Force polling
 
 **Default**: `60 * time.Second`
 
-**Description**: Default timeout for operations
+**Description**: Default timeout for wait operations (`WaitForEmail`, `WaitForEmailCount`) and API key validation during client creation. This timeout is also passed to the internal HTTP client for individual requests.
+
+**Note**: This controls the maximum time for wait operations, not per-HTTP-request timeouts. For fine-grained HTTP timeout control, use `WithHTTPClient` with a custom `http.Client`.
 
 **Examples**:
 
@@ -405,6 +407,161 @@ func main() {
 
 ## Client Methods
 
+### CreateInbox()
+
+Create a new temporary email inbox:
+
+```go
+inbox, err := client.CreateInbox(ctx,
+	vaultsandbox.WithTTL(30 * time.Minute),
+	vaultsandbox.WithEmailAddress("test@mail.example.com"),
+)
+```
+
+**Signature**: `CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, error)`
+
+**Returns**: A new `*Inbox` that can receive emails.
+
+### ImportInbox()
+
+Import a previously exported inbox:
+
+```go
+inbox, err := client.ImportInbox(ctx, exportedData)
+```
+
+**Signature**: `ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, error)`
+
+**Returns**: The restored `*Inbox`.
+
+**Errors**: Returns `ErrInboxAlreadyExists` if the inbox is already managed by this client.
+
+### DeleteInbox()
+
+Delete an inbox by email address:
+
+```go
+err := client.DeleteInbox(ctx, "test@mail.example.com")
+```
+
+**Signature**: `DeleteInbox(ctx context.Context, emailAddress string) error`
+
+### DeleteAllInboxes()
+
+Delete all inboxes managed by this client:
+
+```go
+count, err := client.DeleteAllInboxes(ctx)
+fmt.Printf("Deleted %d inboxes\n", count)
+```
+
+**Signature**: `DeleteAllInboxes(ctx context.Context) (int, error)`
+
+**Returns**: The number of inboxes deleted.
+
+### GetInbox()
+
+Get an inbox by email address:
+
+```go
+inbox, exists := client.GetInbox("test@mail.example.com")
+if exists {
+	// Use inbox
+}
+```
+
+**Signature**: `GetInbox(emailAddress string) (*Inbox, bool)`
+
+**Returns**: The inbox and `true` if found, otherwise `nil` and `false`.
+
+### Inboxes()
+
+Get all inboxes managed by this client:
+
+```go
+inboxes := client.Inboxes()
+for _, inbox := range inboxes {
+	fmt.Println(inbox.EmailAddress())
+}
+```
+
+**Signature**: `Inboxes() []*Inbox`
+
+### ServerInfo()
+
+Get server configuration:
+
+```go
+info := client.ServerInfo()
+fmt.Printf("Max TTL: %v\n", info.MaxTTL)
+fmt.Printf("Allowed domains: %v\n", info.AllowedDomains)
+```
+
+**Signature**: `ServerInfo() *ServerInfo`
+
+**Returns**: `*ServerInfo` containing:
+
+- `AllowedDomains []string` - Email domains the server accepts
+- `MaxTTL time.Duration` - Maximum inbox TTL allowed
+- `DefaultTTL time.Duration` - Default inbox TTL
+
+### CheckKey()
+
+Validate the API key:
+
+```go
+err := client.CheckKey(ctx)
+if err != nil {
+	log.Fatal("Invalid API key")
+}
+```
+
+**Signature**: `CheckKey(ctx context.Context) error`
+
+**Note**: The API key is automatically validated when creating a client with `New()`.
+
+### ExportInboxToFile()
+
+Export an inbox to a JSON file:
+
+```go
+err := client.ExportInboxToFile(inbox, "/path/to/inbox.json")
+```
+
+**Signature**: `ExportInboxToFile(inbox *Inbox, filePath string) error`
+
+**Warning**: The exported file contains private key material. Handle securely.
+
+### ImportInboxFromFile()
+
+Import an inbox from a JSON file:
+
+```go
+inbox, err := client.ImportInboxFromFile(ctx, "/path/to/inbox.json")
+```
+
+**Signature**: `ImportInboxFromFile(ctx context.Context, filePath string) (*Inbox, error)`
+
+### MonitorInboxes()
+
+Create a monitor that watches multiple inboxes for new emails:
+
+```go
+monitor, err := client.MonitorInboxes([]*Inbox{inbox1, inbox2})
+if err != nil {
+	log.Fatal(err)
+}
+defer monitor.Unsubscribe()
+
+monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
+	fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
+})
+```
+
+**Signature**: `MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error)`
+
+**Returns**: An `*InboxMonitor` that can register callbacks for email events.
+
 ### Close()
 
 Close the client and clean up resources:
@@ -437,6 +594,291 @@ defer client.Close()
 // Use client
 inbox, err := client.CreateInbox(ctx)
 // ...
+```
+
+## Inbox Methods
+
+### EmailAddress()
+
+Get the inbox email address:
+
+```go
+email := inbox.EmailAddress()
+```
+
+**Signature**: `EmailAddress() string`
+
+### ExpiresAt()
+
+Get when the inbox expires:
+
+```go
+expiry := inbox.ExpiresAt()
+fmt.Printf("Expires at: %v\n", expiry)
+```
+
+**Signature**: `ExpiresAt() time.Time`
+
+### InboxHash()
+
+Get the SHA-256 hash of the public key:
+
+```go
+hash := inbox.InboxHash()
+```
+
+**Signature**: `InboxHash() string`
+
+### IsExpired()
+
+Check if the inbox has expired:
+
+```go
+if inbox.IsExpired() {
+	// Create a new inbox
+}
+```
+
+**Signature**: `IsExpired() bool`
+
+### GetSyncStatus()
+
+Get the synchronization status of the inbox:
+
+```go
+status, err := inbox.GetSyncStatus(ctx)
+fmt.Printf("Email count: %d\n", status.EmailCount)
+fmt.Printf("Emails hash: %s\n", status.EmailsHash)
+```
+
+**Signature**: `GetSyncStatus(ctx context.Context) (*SyncStatus, error)`
+
+**Returns**: `*SyncStatus` containing:
+
+- `EmailCount int` - Number of emails in the inbox
+- `EmailsHash string` - Hash of the email list for change detection
+
+### GetEmails()
+
+Fetch all emails in the inbox:
+
+```go
+emails, err := inbox.GetEmails(ctx)
+for _, email := range emails {
+	fmt.Printf("Subject: %s\n", email.Subject)
+}
+```
+
+**Signature**: `GetEmails(ctx context.Context) ([]*Email, error)`
+
+### GetEmail()
+
+Fetch a specific email by ID:
+
+```go
+email, err := inbox.GetEmail(ctx, "email-id-123")
+```
+
+**Signature**: `GetEmail(ctx context.Context, emailID string) (*Email, error)`
+
+### WaitForEmail()
+
+Wait for an email matching the given criteria:
+
+```go
+email, err := inbox.WaitForEmail(ctx,
+	vaultsandbox.WithSubject("Welcome"),
+	vaultsandbox.WithWaitTimeout(30 * time.Second),
+)
+```
+
+**Signature**: `WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, error)`
+
+### WaitForEmailCount()
+
+Wait until the inbox has at least N emails matching criteria:
+
+```go
+emails, err := inbox.WaitForEmailCount(ctx, 3,
+	vaultsandbox.WithFrom("noreply@example.com"),
+)
+```
+
+**Signature**: `WaitForEmailCount(ctx context.Context, count int, opts ...WaitOption) ([]*Email, error)`
+
+### Delete()
+
+Delete the inbox:
+
+```go
+err := inbox.Delete(ctx)
+```
+
+**Signature**: `Delete(ctx context.Context) error`
+
+### Export()
+
+Export inbox data including private key:
+
+```go
+data := inbox.Export()
+// data can be serialized to JSON and stored
+```
+
+**Signature**: `Export() *ExportedInbox`
+
+**Warning**: The returned data contains private key material. Handle securely.
+
+### OnNewEmail()
+
+Subscribe to new email notifications:
+
+```go
+subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+	fmt.Printf("New email: %s\n", email.Subject)
+})
+defer subscription.Unsubscribe()
+```
+
+**Signature**: `OnNewEmail(callback InboxEmailCallback) Subscription`
+
+**Returns**: A `Subscription` that can be used to unsubscribe.
+
+## Email Methods
+
+### GetRaw()
+
+Fetch the raw email content (RFC 5322 format):
+
+```go
+raw, err := email.GetRaw(ctx)
+fmt.Println(raw)
+```
+
+**Signature**: `GetRaw(ctx context.Context) (string, error)`
+
+### MarkAsRead()
+
+Mark the email as read:
+
+```go
+err := email.MarkAsRead(ctx)
+```
+
+**Signature**: `MarkAsRead(ctx context.Context) error`
+
+### Delete()
+
+Delete the email:
+
+```go
+err := email.Delete(ctx)
+```
+
+**Signature**: `Delete(ctx context.Context) error`
+
+## Types
+
+### Email
+
+Represents a decrypted email:
+
+```go
+type Email struct {
+	ID          string
+	From        string
+	To          []string
+	Subject     string
+	Text        string
+	HTML        string
+	ReceivedAt  time.Time
+	Headers     map[string]string
+	Attachments []Attachment
+	Links       []string
+	AuthResults *authresults.AuthResults
+	IsRead      bool
+}
+```
+
+### Attachment
+
+Represents an email attachment:
+
+```go
+type Attachment struct {
+	Filename           string
+	ContentType        string
+	Size               int
+	ContentID          string
+	ContentDisposition string
+	Content            []byte
+	Checksum           string
+}
+```
+
+### ServerInfo
+
+Contains server configuration:
+
+```go
+type ServerInfo struct {
+	AllowedDomains []string
+	MaxTTL         time.Duration
+	DefaultTTL     time.Duration
+}
+```
+
+### SyncStatus
+
+Represents the synchronization status of an inbox:
+
+```go
+type SyncStatus struct {
+	EmailCount int
+	EmailsHash string
+}
+```
+
+### ExportedInbox
+
+Contains all data needed to restore an inbox:
+
+```go
+type ExportedInbox struct {
+	EmailAddress string
+	ExpiresAt    time.Time
+	InboxHash    string
+	ServerSigPk  string
+	PublicKeyB64 string
+	SecretKeyB64 string
+	ExportedAt   time.Time
+}
+```
+
+**Warning**: Contains private key material. Handle securely.
+
+### Subscription
+
+Interface for active subscriptions:
+
+```go
+type Subscription interface {
+	Unsubscribe()
+}
+```
+
+### InboxMonitor
+
+Monitors multiple inboxes for new emails:
+
+```go
+type InboxMonitor struct {
+	// Internal fields
+}
+
+// Methods:
+// OnEmail(callback EmailCallback) Subscription
+// Unsubscribe()
 ```
 
 ## Strategy Selection Guide
@@ -557,15 +999,25 @@ runTests()
 - `NetworkError` - Network-level failures with `Err` (underlying error), `URL`, and `Attempt` fields
 - `TimeoutError` - Operation deadline exceeded with `Operation` and `Timeout` fields
 - `DecryptionError` - Email decryption failures with `Stage`, `Message`, and `Err` fields
+- `SignatureVerificationError` - Signature verification failures with `Message` field
+- `SSEError` - SSE connection failures with `Err` (underlying error) and `Attempts` fields
+- `ValidationError` - Multiple validation failures with `Errors` ([]string) field
+- `StrategyError` - Delivery strategy failures with `Message` and `Err` fields
 
 **Sentinel Errors** (use with `errors.Is()`):
 
+- `ErrMissingAPIKey` - No API key provided to `New()`
 - `ErrUnauthorized` - Invalid or expired API key
 - `ErrInboxNotFound` - Inbox does not exist
 - `ErrEmailNotFound` - Email does not exist
 - `ErrInboxExpired` - Inbox TTL has elapsed
+- `ErrInboxAlreadyExists` - Inbox already exists (when importing duplicate)
+- `ErrInvalidImportData` - Invalid inbox import data
 - `ErrRateLimited` - API rate limit exceeded
 - `ErrDecryptionFailed` - Email decryption failed
+- `ErrSignatureInvalid` - Signature verification failed
+- `ErrSSEConnection` - SSE connection error
+- `ErrInvalidSecretKeySize` - Invalid secret key size
 - `ErrClientClosed` - Client has been closed
 
 **Do**:
