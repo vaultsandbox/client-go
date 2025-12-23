@@ -166,7 +166,7 @@ func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, e
 	case email := <-resultCh:
 		return email, nil
 	case <-ctx.Done():
-		return nil, ErrEmailNotFound
+		return nil, ctx.Err()
 	}
 }
 
@@ -243,7 +243,7 @@ func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOp
 			}
 			mu.Unlock()
 		case <-ctx.Done():
-			return nil, ErrEmailNotFound
+			return nil, ctx.Err()
 		}
 	}
 }
