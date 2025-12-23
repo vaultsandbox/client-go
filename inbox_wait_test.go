@@ -66,7 +66,7 @@ func TestInbox_Watch_ReceivesEmails(t *testing.T) {
 
 	// Simulate email arrival
 	testEmail := &Email{ID: "email-1", Subject: "Test"}
-	client.notifyWatchers("test-hash", testEmail)
+	client.notifyWatchers(ctx, "test-hash", testEmail)
 
 	select {
 	case email := <-ch:
@@ -109,7 +109,7 @@ func TestInbox_Watch_MultipleWatchers(t *testing.T) {
 
 	// Both should receive the same email
 	testEmail := &Email{ID: "email-1"}
-	client.notifyWatchers("test-hash", testEmail)
+	client.notifyWatchers(ctx1, "test-hash", testEmail)
 
 	for i, ch := range []<-chan *Email{ch1, ch2} {
 		select {
@@ -205,11 +205,11 @@ func TestClient_WatchInboxes_ReceivesFromMultipleInboxes(t *testing.T) {
 
 	// Send email to first inbox
 	email1 := &Email{ID: "email-1", Subject: "To Inbox 1"}
-	client.notifyWatchers("hash-1", email1)
+	client.notifyWatchers(ctx, "hash-1", email1)
 
 	// Send email to second inbox
 	email2 := &Email{ID: "email-2", Subject: "To Inbox 2"}
-	client.notifyWatchers("hash-2", email2)
+	client.notifyWatchers(ctx, "hash-2", email2)
 
 	received := make(map[string]string) // emailID -> inboxAddress
 
@@ -330,27 +330,32 @@ func TestClient_removeWatcher_CleansUpEmptySlice(t *testing.T) {
 	}
 }
 
-func TestClient_notifyWatchers_NonBlocking(t *testing.T) {
+func TestClient_notifyWatchers_RespectsContext(t *testing.T) {
 	client := &Client{
 		watchers: make(map[string][]chan<- *Email),
 	}
 
-	// Create a channel with no buffer
+	// Create a channel with no buffer - will block without context cancel
 	ch := make(chan *Email)
 	client.addWatcher("test-hash", ch)
 
-	// This should not block even though no one is reading
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// This will block until context is cancelled
 	done := make(chan struct{})
 	go func() {
-		client.notifyWatchers("test-hash", &Email{ID: "test"})
+		client.notifyWatchers(ctx, "test-hash", &Email{ID: "test"})
 		close(done)
 	}()
 
+	// Cancel context to unblock
+	cancel()
+
 	select {
 	case <-done:
-		// Success - notifyWatchers returned without blocking
+		// Success - notifyWatchers returned after context cancel
 	case <-time.After(100 * time.Millisecond):
-		t.Error("notifyWatchers blocked on full channel")
+		t.Error("notifyWatchers did not return after context cancel")
 	}
 }
 
@@ -362,7 +367,7 @@ func TestClient_notifyWatchers_NoWatchers(t *testing.T) {
 	// Should not panic or block
 	done := make(chan struct{})
 	go func() {
-		client.notifyWatchers("nonexistent-hash", &Email{ID: "test"})
+		client.notifyWatchers(context.Background(), "nonexistent-hash", &Email{ID: "test"})
 		close(done)
 	}()
 
@@ -396,7 +401,7 @@ func TestClient_notifyWatchers_ConcurrentAccess(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			client.notifyWatchers("test-hash", &Email{ID: "test"})
+			client.notifyWatchers(context.Background(), "test-hash", &Email{ID: "test"})
 		}
 	}()
 

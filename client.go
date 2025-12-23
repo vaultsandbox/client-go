@@ -566,7 +566,7 @@ func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
 
 	// Notify watchers for each email
 	for _, email := range emails {
-		c.notifyWatchers(inbox.inboxHash, email)
+		c.notifyWatchers(ctx, inbox.inboxHash, email)
 	}
 }
 
@@ -602,8 +602,8 @@ func (c *Client) removeWatcher(inboxHash string, ch chan<- *Email) {
 }
 
 // notifyWatchers sends an email to all registered watchers for an inbox.
-// Uses non-blocking sends to avoid blocking the event loop.
-func (c *Client) notifyWatchers(inboxHash string, email *Email) {
+// Blocks until each watcher receives the email or context is cancelled.
+func (c *Client) notifyWatchers(ctx context.Context, inboxHash string, email *Email) {
 	c.watchersMu.RLock()
 	watchers := c.watchers[inboxHash]
 	if len(watchers) == 0 {
@@ -618,8 +618,8 @@ func (c *Client) notifyWatchers(inboxHash string, email *Email) {
 	for _, ch := range watchersCopy {
 		select {
 		case ch <- email:
-		default:
-			// Non-blocking: drop if channel is full
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -649,7 +649,7 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 	}
 
 	// Notify all watchers
-	c.notifyWatchers(inbox.inboxHash, email)
+	c.notifyWatchers(ctx, inbox.inboxHash, email)
 
 	return nil
 }
