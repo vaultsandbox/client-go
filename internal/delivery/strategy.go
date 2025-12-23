@@ -70,7 +70,39 @@ type Strategy interface {
 type Config struct {
 	// APIClient is the API client used for making requests to the server.
 	APIClient *api.Client
+
+	// PollingInitialInterval is the starting interval between polls.
+	// If zero, defaults to DefaultPollingInitialInterval.
+	PollingInitialInterval time.Duration
+
+	// PollingMaxBackoff is the maximum interval between polls.
+	// If zero, defaults to DefaultPollingMaxBackoff.
+	PollingMaxBackoff time.Duration
+
+	// PollingBackoffMultiplier is the factor by which the interval
+	// increases after each poll with no changes.
+	// If zero, defaults to DefaultPollingBackoffMultiplier.
+	PollingBackoffMultiplier float64
+
+	// PollingJitterFactor is the maximum random jitter added to
+	// poll intervals (as a fraction of the interval).
+	// If zero, defaults to DefaultPollingJitterFactor.
+	PollingJitterFactor float64
+
+	// SSEConnectionTimeout is the maximum time to wait for an SSE connection
+	// to be established before falling back to polling (when using auto mode).
+	// If zero, defaults to DefaultSSEConnectionTimeout.
+	SSEConnectionTimeout time.Duration
 }
+
+// Default polling configuration values.
+const (
+	DefaultPollingInitialInterval   = 2 * time.Second
+	DefaultPollingMaxBackoff        = 30 * time.Second
+	DefaultPollingBackoffMultiplier = 1.5
+	DefaultPollingJitterFactor      = 0.3
+	DefaultSSEConnectionTimeout     = 5 * time.Second
+)
 
 // EmailFetcher is a generic function that retrieves emails from an inbox.
 // Used by WaitForEmail methods to check for new emails.

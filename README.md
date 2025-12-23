@@ -478,6 +478,11 @@ func New(apiKey string, opts ...Option) (*Client, error)
 - `WithTimeout(timeout time.Duration)` — Operation timeout
 - `WithRetries(count int)` — Max retry attempts for HTTP requests (default: 3)
 - `WithRetryOn(statusCodes []int)` — HTTP status codes that trigger a retry (default: 408, 429, 500, 502, 503, 504)
+- `WithPollingInitialInterval(interval time.Duration)` — Initial polling interval (default: 2s)
+- `WithPollingMaxBackoff(maxBackoff time.Duration)` — Maximum polling backoff interval (default: 30s)
+- `WithPollingBackoffMultiplier(multiplier float64)` — Backoff multiplier (default: 1.5)
+- `WithPollingJitterFactor(factor float64)` — Jitter factor for polling intervals (default: 0.3)
+- `WithSSEConnectionTimeout(timeout time.Duration)` — SSE connection timeout for auto mode fallback (default: 5s)
 
 #### Methods
 

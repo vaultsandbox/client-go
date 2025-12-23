@@ -32,6 +32,13 @@ type clientConfig struct {
 	timeout          time.Duration
 	retries          int
 	retryOn          []int
+
+	// Polling configuration
+	pollingInitialInterval   time.Duration
+	pollingMaxBackoff        time.Duration
+	pollingBackoffMultiplier float64
+	pollingJitterFactor      float64
+	sseConnectionTimeout     time.Duration
 }
 
 // inboxConfig holds configuration for inbox creation.
@@ -100,6 +107,53 @@ func WithRetries(count int) Option {
 func WithRetryOn(statusCodes []int) Option {
 	return func(c *clientConfig) {
 		c.retryOn = statusCodes
+	}
+}
+
+// WithPollingInitialInterval sets the initial polling interval.
+// This is the interval used when emails are actively being received.
+// Default: 2 seconds
+func WithPollingInitialInterval(interval time.Duration) Option {
+	return func(c *clientConfig) {
+		c.pollingInitialInterval = interval
+	}
+}
+
+// WithPollingMaxBackoff sets the maximum polling backoff interval.
+// When no new emails arrive, the polling interval increases up to this maximum.
+// Default: 30 seconds
+func WithPollingMaxBackoff(maxBackoff time.Duration) Option {
+	return func(c *clientConfig) {
+		c.pollingMaxBackoff = maxBackoff
+	}
+}
+
+// WithPollingBackoffMultiplier sets the backoff multiplier for polling.
+// After each poll with no changes, the interval is multiplied by this factor.
+// Default: 1.5
+func WithPollingBackoffMultiplier(multiplier float64) Option {
+	return func(c *clientConfig) {
+		c.pollingBackoffMultiplier = multiplier
+	}
+}
+
+// WithPollingJitterFactor sets the jitter factor for polling intervals.
+// Random jitter up to this fraction of the interval is added to prevent
+// synchronized polling across multiple clients.
+// Default: 0.3 (30%)
+func WithPollingJitterFactor(factor float64) Option {
+	return func(c *clientConfig) {
+		c.pollingJitterFactor = factor
+	}
+}
+
+// WithSSEConnectionTimeout sets the timeout for SSE connection establishment.
+// When using StrategyAuto, if the SSE connection is not established within
+// this timeout, the client falls back to polling.
+// Default: 5 seconds
+func WithSSEConnectionTimeout(timeout time.Duration) Option {
+	return func(c *clientConfig) {
+		c.sseConnectionTimeout = timeout
 	}
 }
 

@@ -170,6 +170,81 @@ client, err := vaultsandbox.New(apiKey,
 )
 ```
 
+#### WithPollingInitialInterval
+
+**Signature**: `WithPollingInitialInterval(interval time.Duration) Option`
+
+**Default**: `2 * time.Second`
+
+**Description**: Initial polling interval when using polling strategy. This is the interval used when emails are actively being received.
+
+**Example**:
+
+```go
+vaultsandbox.WithPollingInitialInterval(1 * time.Second)  // More responsive
+vaultsandbox.WithPollingInitialInterval(5 * time.Second)  // Less aggressive
+```
+
+#### WithPollingMaxBackoff
+
+**Signature**: `WithPollingMaxBackoff(maxBackoff time.Duration) Option`
+
+**Default**: `30 * time.Second`
+
+**Description**: Maximum polling backoff interval. When no new emails arrive, the polling interval increases exponentially up to this maximum.
+
+**Example**:
+
+```go
+vaultsandbox.WithPollingMaxBackoff(60 * time.Second)  // Longer backoff
+vaultsandbox.WithPollingMaxBackoff(10 * time.Second)  // Shorter backoff
+```
+
+#### WithPollingBackoffMultiplier
+
+**Signature**: `WithPollingBackoffMultiplier(multiplier float64) Option`
+
+**Default**: `1.5`
+
+**Description**: Backoff multiplier for polling. After each poll with no changes, the interval is multiplied by this factor until it reaches the maximum backoff.
+
+**Example**:
+
+```go
+vaultsandbox.WithPollingBackoffMultiplier(2.0)  // Faster backoff
+vaultsandbox.WithPollingBackoffMultiplier(1.2)  // Slower backoff
+```
+
+#### WithPollingJitterFactor
+
+**Signature**: `WithPollingJitterFactor(factor float64) Option`
+
+**Default**: `0.3` (30%)
+
+**Description**: Jitter factor for polling intervals. Random jitter up to this fraction of the interval is added to prevent synchronized polling across multiple clients (thundering herd problem).
+
+**Example**:
+
+```go
+vaultsandbox.WithPollingJitterFactor(0.5)  // Up to 50% jitter
+vaultsandbox.WithPollingJitterFactor(0.1)  // Up to 10% jitter
+```
+
+#### WithSSEConnectionTimeout
+
+**Signature**: `WithSSEConnectionTimeout(timeout time.Duration) Option`
+
+**Default**: `5 * time.Second`
+
+**Description**: Timeout for SSE connection establishment when using `StrategyAuto`. If the SSE connection is not established within this timeout, the client automatically falls back to polling.
+
+**Example**:
+
+```go
+vaultsandbox.WithSSEConnectionTimeout(10 * time.Second)  // More time for SSE
+vaultsandbox.WithSSEConnectionTimeout(2 * time.Second)   // Quick fallback
+```
+
 ## Inbox Options
 
 Options passed to `CreateInbox()`.
@@ -367,6 +442,31 @@ client, err := vaultsandbox.New(os.Getenv("VAULTSANDBOX_API_KEY"),
 	vaultsandbox.WithRetries(10),
 	vaultsandbox.WithRetryOn([]int{408, 429, 500, 502, 503, 504}),
 	vaultsandbox.WithTimeout(2 * time.Minute),
+)
+```
+
+### Custom Polling Configuration
+
+```go
+client, err := vaultsandbox.New(os.Getenv("VAULTSANDBOX_API_KEY"),
+	vaultsandbox.WithBaseURL(os.Getenv("VAULTSANDBOX_URL")),
+	vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyPolling),
+	vaultsandbox.WithPollingInitialInterval(1 * time.Second),  // Faster initial polling
+	vaultsandbox.WithPollingMaxBackoff(15 * time.Second),      // Lower max backoff
+	vaultsandbox.WithPollingBackoffMultiplier(1.2),            // Slower backoff growth
+	vaultsandbox.WithPollingJitterFactor(0.2),                 // Less jitter
+)
+```
+
+### Tuned Auto Mode Configuration
+
+```go
+client, err := vaultsandbox.New(os.Getenv("VAULTSANDBOX_API_KEY"),
+	vaultsandbox.WithBaseURL(os.Getenv("VAULTSANDBOX_URL")),
+	vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyAuto),
+	vaultsandbox.WithSSEConnectionTimeout(10 * time.Second),   // More time for SSE
+	vaultsandbox.WithPollingInitialInterval(2 * time.Second),  // Fallback polling config
+	vaultsandbox.WithPollingMaxBackoff(30 * time.Second),
 )
 ```
 

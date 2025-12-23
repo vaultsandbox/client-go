@@ -9,24 +9,26 @@ import (
 	"github.com/vaultsandbox/client-go/internal/api"
 )
 
-// Polling backoff constants control the adaptive polling behavior.
-// When no new emails are detected, the polling interval increases
-// exponentially up to MaxBackoff. When changes are detected, the
-// interval resets to InitialInterval.
+// Legacy polling backoff constants for backwards compatibility.
+// Prefer using Config fields to customize these values.
 const (
 	// PollingInitialInterval is the starting interval between polls.
+	// Deprecated: Use Config.PollingInitialInterval instead.
 	PollingInitialInterval = 2 * time.Second
 
 	// PollingMaxBackoff is the maximum interval between polls.
+	// Deprecated: Use Config.PollingMaxBackoff instead.
 	PollingMaxBackoff = 30 * time.Second
 
 	// PollingBackoffMultiplier is the factor by which the interval
 	// increases after each poll with no changes.
+	// Deprecated: Use Config.PollingBackoffMultiplier instead.
 	PollingBackoffMultiplier = 1.5
 
 	// PollingJitterFactor is the maximum random jitter added to
 	// poll intervals (as a fraction of the interval) to prevent
 	// thundering herd problems when multiple clients poll.
+	// Deprecated: Use Config.PollingJitterFactor instead.
 	PollingJitterFactor = 0.3
 )
 
@@ -39,12 +41,18 @@ const (
 // arrive, polling intervals gradually increase. When changes are detected,
 // intervals reset to the initial value for responsive delivery.
 type PollingStrategy struct {
-	apiClient *api.Client            // API client for making requests.
+	apiClient *api.Client             // API client for making requests.
 	inboxes   map[string]*polledInbox // Active inboxes keyed by hash.
 	handler   EventHandler            // Callback for new email events.
 	cancel    context.CancelFunc      // Cancels the poll loop goroutine.
 	mu        sync.RWMutex            // Protects inboxes and handler.
 	started   bool                    // Whether polling is active.
+
+	// Configurable polling parameters
+	initialInterval   time.Duration
+	maxBackoff        time.Duration
+	backoffMultiplier float64
+	jitterFactor      float64
 }
 
 // polledInbox tracks the state of a single inbox being polled.
@@ -59,9 +67,33 @@ type polledInbox struct {
 // NewPollingStrategy creates a new polling strategy with the given configuration.
 // The strategy is created in a stopped state; call Start to begin polling.
 func NewPollingStrategy(cfg Config) *PollingStrategy {
+	initialInterval := cfg.PollingInitialInterval
+	if initialInterval == 0 {
+		initialInterval = DefaultPollingInitialInterval
+	}
+
+	maxBackoff := cfg.PollingMaxBackoff
+	if maxBackoff == 0 {
+		maxBackoff = DefaultPollingMaxBackoff
+	}
+
+	backoffMultiplier := cfg.PollingBackoffMultiplier
+	if backoffMultiplier == 0 {
+		backoffMultiplier = DefaultPollingBackoffMultiplier
+	}
+
+	jitterFactor := cfg.PollingJitterFactor
+	if jitterFactor == 0 {
+		jitterFactor = DefaultPollingJitterFactor
+	}
+
 	return &PollingStrategy{
-		apiClient: cfg.APIClient,
-		inboxes:   make(map[string]*polledInbox),
+		apiClient:         cfg.APIClient,
+		inboxes:           make(map[string]*polledInbox),
+		initialInterval:   initialInterval,
+		maxBackoff:        maxBackoff,
+		backoffMultiplier: backoffMultiplier,
+		jitterFactor:      jitterFactor,
 	}
 }
 
@@ -86,7 +118,7 @@ func (p *PollingStrategy) Start(ctx context.Context, inboxes []InboxInfo, handle
 			hash:         inbox.Hash,
 			emailAddress: inbox.EmailAddress,
 			seenEmails:   make(map[string]struct{}),
-			interval:     PollingInitialInterval,
+			interval:     p.initialInterval,
 		}
 	}
 	p.started = true
@@ -120,7 +152,7 @@ func (p *PollingStrategy) AddInbox(inbox InboxInfo) error {
 		hash:         inbox.Hash,
 		emailAddress: inbox.EmailAddress,
 		seenEmails:   make(map[string]struct{}),
-		interval:     PollingInitialInterval,
+		interval:     p.initialInterval,
 	}
 	return nil
 }
@@ -149,7 +181,7 @@ func (p *PollingStrategy) pollLoop(ctx context.Context) {
 		// Get minimum wait duration across all inboxes
 		minWait := p.pollAll(ctx)
 		if minWait == 0 {
-			minWait = PollingInitialInterval
+			minWait = p.initialInterval
 		}
 
 		select {
@@ -172,7 +204,7 @@ func (p *PollingStrategy) pollAll(ctx context.Context) time.Duration {
 	p.mu.RUnlock()
 
 	if len(inboxList) == 0 {
-		return PollingInitialInterval
+		return p.initialInterval
 	}
 
 	for _, inbox := range inboxList {
@@ -208,9 +240,9 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 	// No changes since last poll
 	if sync.EmailsHash == inbox.lastHash {
 		// Increase backoff
-		newInterval := time.Duration(float64(inbox.interval) * PollingBackoffMultiplier)
-		if newInterval > PollingMaxBackoff {
-			newInterval = PollingMaxBackoff
+		newInterval := time.Duration(float64(inbox.interval) * p.backoffMultiplier)
+		if newInterval > p.maxBackoff {
+			newInterval = p.maxBackoff
 		}
 		inbox.interval = newInterval
 		return
@@ -218,7 +250,7 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 
 	// Changes detected - fetch emails
 	inbox.lastHash = sync.EmailsHash
-	inbox.interval = PollingInitialInterval // Reset backoff
+	inbox.interval = p.initialInterval // Reset backoff
 
 	resp, err := p.apiClient.GetEmails(ctx, inbox.emailAddress)
 	if err != nil {
@@ -249,7 +281,7 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 // jitter to the base interval to prevent synchronized polling across clients.
 func (p *PollingStrategy) getWaitDuration(inbox *polledInbox) time.Duration {
 	// Add jitter to prevent thundering herd
-	jitter := time.Duration(rand.Float64() * PollingJitterFactor * float64(inbox.interval))
+	jitter := time.Duration(rand.Float64() * p.jitterFactor * float64(inbox.interval))
 	return inbox.interval + jitter
 }
 

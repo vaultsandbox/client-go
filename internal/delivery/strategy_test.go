@@ -36,7 +36,4 @@ func TestStrategyInterface(t *testing.T) {
 
 	// Verify SSEStrategy implements Strategy
 	var _ Strategy = (*SSEStrategy)(nil)
-
-	// Verify AutoStrategy implements Strategy
-	var _ Strategy = (*AutoStrategy)(nil)
 }
