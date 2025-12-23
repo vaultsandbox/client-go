@@ -130,7 +130,7 @@ func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*Crea
 	}
 
 	var apiResp createInboxAPIResponse
-	if err := c.do(ctx, http.MethodPost, "/api/inboxes", apiReq, &apiResp); err != nil {
+	if err := c.Do(ctx, http.MethodPost, "/api/inboxes", apiReq, &apiResp); err != nil {
 		return nil, apierrors.WithResourceType(err, apierrors.ResourceInbox)
 	}
 
@@ -158,7 +158,7 @@ type GetEmailsResponse struct {
 func (c *Client) GetEmails(ctx context.Context, emailAddress string) (*GetEmailsResponse, error) {
 	var resp []RawEmail
 	path := fmt.Sprintf("/api/inboxes/%s/emails", url.PathEscape(emailAddress))
-	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+	if err := c.Do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		// This endpoint can fail due to inbox not found
 		return nil, apierrors.WithResourceType(err, apierrors.ResourceInbox)
 	}
@@ -175,7 +175,7 @@ func (c *Client) GetEmails(ctx context.Context, emailAddress string) (*GetEmails
 func (c *Client) GetEmail(ctx context.Context, emailAddress, emailID string) (*RawEmail, error) {
 	var resp RawEmail
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
-	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+	if err := c.Do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return nil, apierrors.WithResourceType(err, apierrors.ResourceEmail)
 	}
 
@@ -188,7 +188,7 @@ func (c *Client) GetEmailRaw(ctx context.Context, emailAddress, emailID string) 
 		Raw string `json:"raw"`
 	}
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/raw", url.PathEscape(emailAddress), url.PathEscape(emailID))
-	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+	if err := c.Do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		return "", apierrors.WithResourceType(err, apierrors.ResourceEmail)
 	}
 	return resp.Raw, nil
@@ -197,18 +197,18 @@ func (c *Client) GetEmailRaw(ctx context.Context, emailAddress, emailID string) 
 // MarkEmailAsRead marks an email as read.
 func (c *Client) MarkEmailAsRead(ctx context.Context, emailAddress, emailID string) error {
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/read", url.PathEscape(emailAddress), url.PathEscape(emailID))
-	return apierrors.WithResourceType(c.do(ctx, http.MethodPatch, path, nil, nil), apierrors.ResourceEmail)
+	return apierrors.WithResourceType(c.Do(ctx, http.MethodPatch, path, nil, nil), apierrors.ResourceEmail)
 }
 
 // DeleteEmail deletes the specified email from an inbox.
 func (c *Client) DeleteEmail(ctx context.Context, emailAddress, emailID string) error {
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
-	return apierrors.WithResourceType(c.do(ctx, http.MethodDelete, path, nil, nil), apierrors.ResourceEmail)
+	return apierrors.WithResourceType(c.Do(ctx, http.MethodDelete, path, nil, nil), apierrors.ResourceEmail)
 }
 
 // DeleteInbox deletes the inbox with the given email address.
 func (c *Client) DeleteInbox(ctx context.Context, emailAddress string) error {
 	path := fmt.Sprintf("/api/inboxes/%s", url.PathEscape(emailAddress))
-	return apierrors.WithResourceType(c.do(ctx, http.MethodDelete, path, nil, nil), apierrors.ResourceInbox)
+	return apierrors.WithResourceType(c.Do(ctx, http.MethodDelete, path, nil, nil), apierrors.ResourceInbox)
 }
 

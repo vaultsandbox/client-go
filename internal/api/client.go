@@ -38,75 +38,6 @@ type Client struct {
 	retryOn []int
 }
 
-// Config holds API client configuration for use with [NewClient].
-type Config struct {
-	// BaseURL is the VaultSandbox API base URL (required).
-	BaseURL string
-	// APIKey is the API key for authentication (required).
-	APIKey string
-	// HTTPClient is an optional custom HTTP client. If nil, a default client
-	// with the configured Timeout is created.
-	HTTPClient *http.Client
-	// MaxRetries is the maximum retry attempts. Defaults to [DefaultMaxRetries].
-	MaxRetries int
-	// RetryDelay is the base delay between retries. Defaults to [DefaultRetryDelay].
-	RetryDelay time.Duration
-	// Timeout is the HTTP client timeout. Defaults to [DefaultTimeout].
-	// Ignored if HTTPClient is provided.
-	Timeout time.Duration
-	// RetryOn specifies HTTP status codes that trigger a retry.
-	// Defaults to [DefaultRetryOn].
-	RetryOn []int
-}
-
-// NewClient creates a new API client from the provided configuration.
-// Both BaseURL and APIKey are required; all other fields have sensible defaults.
-//
-// Returns an error if required fields are missing.
-func NewClient(cfg Config) (*Client, error) {
-	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("API key is required")
-	}
-	if cfg.BaseURL == "" {
-		return nil, fmt.Errorf("base URL is required")
-	}
-
-	httpClient := cfg.HTTPClient
-	if httpClient == nil {
-		timeout := cfg.Timeout
-		if timeout == 0 {
-			timeout = DefaultTimeout
-		}
-		httpClient = &http.Client{
-			Timeout: timeout,
-		}
-	}
-
-	maxRetries := cfg.MaxRetries
-	if maxRetries == 0 {
-		maxRetries = DefaultMaxRetries
-	}
-
-	retryDelay := cfg.RetryDelay
-	if retryDelay == 0 {
-		retryDelay = DefaultRetryDelay
-	}
-
-	retryOn := cfg.RetryOn
-	if len(retryOn) == 0 {
-		retryOn = DefaultRetryOn
-	}
-
-	return &Client{
-		httpClient: httpClient,
-		baseURL:    cfg.BaseURL,
-		apiKey:     cfg.APIKey,
-		maxRetries: maxRetries,
-		retryDelay: retryDelay,
-		retryOn:    retryOn,
-	}, nil
-}
-
 // New creates a new API client using the functional options pattern.
 // The apiKey is required for authentication. Use [Option] functions like
 // [WithBaseURL], [WithTimeout], and [WithRetries] to customize behavior.
@@ -288,11 +219,6 @@ func (c *Client) doWithRetry(ctx context.Context, method, path string, body io.R
 	}
 
 	return lastErr
-}
-
-// do is a convenience wrapper for internal use.
-func (c *Client) do(ctx context.Context, method, path string, body interface{}, result interface{}) error {
-	return c.Do(ctx, method, path, body, result)
 }
 
 // isRetryable checks if a status code should trigger a retry based on retryOn.

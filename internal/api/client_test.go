@@ -13,33 +13,24 @@ import (
 	"github.com/vaultsandbox/client-go/internal/apierrors"
 )
 
-func TestNewClient_RequiresAPIKey(t *testing.T) {
-	_, err := NewClient(Config{
-		BaseURL: "https://example.com",
-		APIKey:  "",
-	})
+func TestNew_RequiresAPIKey(t *testing.T) {
+	_, err := New("", WithBaseURL("https://example.com"))
 	if err == nil {
 		t.Error("expected error for empty API key")
 	}
 }
 
-func TestNewClient_RequiresBaseURL(t *testing.T) {
-	_, err := NewClient(Config{
-		BaseURL: "",
-		APIKey:  "test-key",
-	})
+func TestNew_RequiresBaseURL(t *testing.T) {
+	_, err := New("test-key") // No base URL option
 	if err == nil {
-		t.Error("expected error for empty base URL")
+		t.Error("expected error for missing base URL")
 	}
 }
 
-func TestNewClient_DefaultValues(t *testing.T) {
-	client, err := NewClient(Config{
-		BaseURL: "https://example.com",
-		APIKey:  "test-key",
-	})
+func TestNew_DefaultValues(t *testing.T) {
+	client, err := New("test-key", WithBaseURL("https://example.com"))
 	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
+		t.Fatalf("New() error = %v", err)
 	}
 
 	if client.httpClient == nil {
@@ -56,18 +47,16 @@ func TestNewClient_DefaultValues(t *testing.T) {
 	}
 }
 
-func TestNewClient_CustomValues(t *testing.T) {
+func TestNew_CustomValues(t *testing.T) {
 	customHTTPClient := &http.Client{Timeout: 60 * time.Second}
 
-	client, err := NewClient(Config{
-		BaseURL:    "https://custom.example.com",
-		APIKey:     "custom-key",
-		HTTPClient: customHTTPClient,
-		MaxRetries: 5,
-		RetryDelay: 2 * time.Second,
-	})
+	client, err := New("custom-key",
+		WithBaseURL("https://custom.example.com"),
+		WithHTTPClient(customHTTPClient),
+		WithRetries(5),
+	)
 	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
+		t.Fatalf("New() error = %v", err)
 	}
 
 	if client.httpClient != customHTTPClient {
@@ -75,9 +64,6 @@ func TestNewClient_CustomValues(t *testing.T) {
 	}
 	if client.maxRetries != 5 {
 		t.Errorf("maxRetries = %d, want 5", client.maxRetries)
-	}
-	if client.retryDelay != 2*time.Second {
-		t.Errorf("retryDelay = %v, want 2s", client.retryDelay)
 	}
 }
 
@@ -102,13 +88,6 @@ func TestNew_WithOptions(t *testing.T) {
 	}
 }
 
-func TestNew_RequiresBaseURL(t *testing.T) {
-	_, err := New("test-key") // No base URL option
-	if err == nil {
-		t.Error("expected error for missing base URL")
-	}
-}
-
 func TestClient_Do_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify headers
@@ -124,10 +103,7 @@ func TestClient_Do_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		BaseURL: server.URL,
-		APIKey:  "test-key",
-	})
+	client, _ := New("test-key", WithBaseURL(server.URL))
 
 	var result struct{ OK bool }
 	err := client.Do(context.Background(), "GET", "/test", nil, &result)
@@ -154,10 +130,7 @@ func TestClient_Do_WithBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		BaseURL: server.URL,
-		APIKey:  "test-key",
-	})
+	client, _ := New("test-key", WithBaseURL(server.URL))
 
 	request := struct{ Name string }{Name: "test"}
 	var result struct{ Received string }
@@ -177,10 +150,7 @@ func TestClient_Do_NoContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		BaseURL: server.URL,
-		APIKey:  "test-key",
-	})
+	client, _ := New("test-key", WithBaseURL(server.URL))
 
 	err := client.Do(context.Background(), "DELETE", "/test", nil, nil)
 	if err != nil {
@@ -202,12 +172,12 @@ func TestClient_Do_Retry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		BaseURL:    server.URL,
-		APIKey:     "test-key",
-		MaxRetries: 3,
-		RetryDelay: time.Millisecond,
-	})
+	client, _ := New("test-key",
+		WithBaseURL(server.URL),
+		WithRetries(3),
+	)
+	// Override retry delay for faster tests
+	client.retryDelay = time.Millisecond
 
 	var result struct{ OK bool }
 	err := client.Do(context.Background(), "GET", "/test", nil, &result)
@@ -229,12 +199,11 @@ func TestClient_Do_NoRetryOn4xx(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		BaseURL:    server.URL,
-		APIKey:     "test-key",
-		MaxRetries: 3,
-		RetryDelay: time.Millisecond,
-	})
+	client, _ := New("test-key",
+		WithBaseURL(server.URL),
+		WithRetries(3),
+	)
+	client.retryDelay = time.Millisecond
 
 	err := client.Do(context.Background(), "GET", "/test", nil, nil)
 	if err == nil {
@@ -252,10 +221,7 @@ func TestClient_Do_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, _ := NewClient(Config{
-		BaseURL: server.URL,
-		APIKey:  "test-key",
-	})
+	client, _ := New("test-key", WithBaseURL(server.URL))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -328,11 +294,10 @@ func TestClient_Do_ErrorResponse(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client, _ := NewClient(Config{
-				BaseURL:    server.URL,
-				APIKey:     "test-key",
-				MaxRetries: 0, // No retries for faster tests
-			})
+			client, _ := New("test-key",
+				WithBaseURL(server.URL),
+				WithRetries(0), // No retries for faster tests
+			)
 
 			err := client.Do(context.Background(), "GET", "/test", nil, nil)
 			if err == nil {
@@ -344,10 +309,7 @@ func TestClient_Do_ErrorResponse(t *testing.T) {
 }
 
 func TestClient_BaseURL(t *testing.T) {
-	client, _ := NewClient(Config{
-		BaseURL: "https://example.com",
-		APIKey:  "test-key",
-	})
+	client, _ := New("test-key", WithBaseURL("https://example.com"))
 
 	if client.BaseURL() != "https://example.com" {
 		t.Errorf("BaseURL() = %s, want https://example.com", client.BaseURL())
@@ -357,11 +319,10 @@ func TestClient_BaseURL(t *testing.T) {
 func TestClient_HTTPClient(t *testing.T) {
 	customHTTPClient := &http.Client{Timeout: 60 * time.Second}
 
-	client, _ := NewClient(Config{
-		BaseURL:    "https://example.com",
-		APIKey:     "test-key",
-		HTTPClient: customHTTPClient,
-	})
+	client, _ := New("test-key",
+		WithBaseURL("https://example.com"),
+		WithHTTPClient(customHTTPClient),
+	)
 
 	if client.HTTPClient() != customHTTPClient {
 		t.Error("HTTPClient() did not return the custom client")
@@ -369,10 +330,7 @@ func TestClient_HTTPClient(t *testing.T) {
 }
 
 func TestClient_SetHTTPClient(t *testing.T) {
-	client, _ := NewClient(Config{
-		BaseURL: "https://example.com",
-		APIKey:  "test-key",
-	})
+	client, _ := New("test-key", WithBaseURL("https://example.com"))
 
 	newHTTPClient := &http.Client{Timeout: 120 * time.Second}
 	client.SetHTTPClient(newHTTPClient)
@@ -384,10 +342,7 @@ func TestClient_SetHTTPClient(t *testing.T) {
 
 func TestIsRetryable(t *testing.T) {
 	// Create a client with default retryOn status codes
-	client, _ := NewClient(Config{
-		BaseURL: "https://example.com",
-		APIKey:  "test-key",
-	})
+	client, _ := New("test-key", WithBaseURL("https://example.com"))
 
 	tests := []struct {
 		statusCode int
@@ -420,11 +375,10 @@ func TestIsRetryable(t *testing.T) {
 
 func TestIsRetryable_CustomStatusCodes(t *testing.T) {
 	// Create a client with custom retryOn status codes
-	client, _ := NewClient(Config{
-		BaseURL: "https://example.com",
-		APIKey:  "test-key",
-		RetryOn: []int{502, 503}, // Only retry on these
-	})
+	client, _ := New("test-key",
+		WithBaseURL("https://example.com"),
+		WithRetryOn([]int{502, 503}), // Only retry on these
+	)
 
 	tests := []struct {
 		statusCode int
@@ -471,24 +425,6 @@ func isAPIError(err error, target **apierrors.APIError) bool {
 		return true
 	}
 	return false
-}
-
-// ExampleNewClient demonstrates creating an API client with struct-based configuration.
-func ExampleNewClient() {
-	// Create a client with explicit configuration.
-	client, err := NewClient(Config{
-		BaseURL:    "https://api.vaultsandbox.com",
-		APIKey:     "your-api-key",
-		MaxRetries: 3,
-		RetryDelay: time.Second,
-		Timeout:    30 * time.Second,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Client created for: %s\n", client.BaseURL())
-	// Output: Client created for: https://api.vaultsandbox.com
 }
 
 // ExampleNew demonstrates creating an API client with functional options.
