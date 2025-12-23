@@ -110,9 +110,72 @@ func WithRetryOn(statusCodes []int) Option {
 	}
 }
 
+// PollingConfig holds all polling-related configuration options.
+// The defaults work well for most use cases. Only customize these if you have
+// specific requirements around polling frequency or backoff behavior.
+//
+// Example use case for customization: high-frequency testing scenarios where
+// you need faster polling, or low-priority background checks where you want
+// longer intervals to reduce API calls.
+type PollingConfig struct {
+	// InitialInterval is the starting polling interval.
+	// Default: 2 seconds
+	InitialInterval time.Duration
+
+	// MaxBackoff is the maximum polling interval after backoff.
+	// Default: 30 seconds
+	MaxBackoff time.Duration
+
+	// BackoffMultiplier increases the interval after each poll with no changes.
+	// Default: 1.5
+	BackoffMultiplier float64
+
+	// JitterFactor adds randomness to prevent synchronized polling.
+	// Default: 0.3 (30%)
+	JitterFactor float64
+
+	// SSEConnectionTimeout is how long to wait for SSE before falling back to polling.
+	// Only applies when using StrategyAuto.
+	// Default: 5 seconds
+	SSEConnectionTimeout time.Duration
+}
+
+// WithPollingConfig sets all polling-related options at once.
+// This is the recommended way to customize polling behavior when defaults
+// don't meet your needs. For most use cases, the defaults work well and
+// no configuration is necessary.
+//
+// Example:
+//
+//	client := vaultsandbox.New(apiKey, vaultsandbox.WithPollingConfig(vaultsandbox.PollingConfig{
+//	    InitialInterval: 1 * time.Second,  // Faster initial polling
+//	    MaxBackoff:      10 * time.Second, // Lower max backoff
+//	}))
+func WithPollingConfig(cfg PollingConfig) Option {
+	return func(c *clientConfig) {
+		if cfg.InitialInterval > 0 {
+			c.pollingInitialInterval = cfg.InitialInterval
+		}
+		if cfg.MaxBackoff > 0 {
+			c.pollingMaxBackoff = cfg.MaxBackoff
+		}
+		if cfg.BackoffMultiplier > 0 {
+			c.pollingBackoffMultiplier = cfg.BackoffMultiplier
+		}
+		if cfg.JitterFactor > 0 {
+			c.pollingJitterFactor = cfg.JitterFactor
+		}
+		if cfg.SSEConnectionTimeout > 0 {
+			c.sseConnectionTimeout = cfg.SSEConnectionTimeout
+		}
+	}
+}
+
 // WithPollingInitialInterval sets the initial polling interval.
 // This is the interval used when emails are actively being received.
 // Default: 2 seconds
+//
+// For configuring multiple polling options, consider using WithPollingConfig instead.
 func WithPollingInitialInterval(interval time.Duration) Option {
 	return func(c *clientConfig) {
 		c.pollingInitialInterval = interval
@@ -122,6 +185,8 @@ func WithPollingInitialInterval(interval time.Duration) Option {
 // WithPollingMaxBackoff sets the maximum polling backoff interval.
 // When no new emails arrive, the polling interval increases up to this maximum.
 // Default: 30 seconds
+//
+// For configuring multiple polling options, consider using WithPollingConfig instead.
 func WithPollingMaxBackoff(maxBackoff time.Duration) Option {
 	return func(c *clientConfig) {
 		c.pollingMaxBackoff = maxBackoff
@@ -131,6 +196,8 @@ func WithPollingMaxBackoff(maxBackoff time.Duration) Option {
 // WithPollingBackoffMultiplier sets the backoff multiplier for polling.
 // After each poll with no changes, the interval is multiplied by this factor.
 // Default: 1.5
+//
+// For configuring multiple polling options, consider using WithPollingConfig instead.
 func WithPollingBackoffMultiplier(multiplier float64) Option {
 	return func(c *clientConfig) {
 		c.pollingBackoffMultiplier = multiplier
@@ -141,6 +208,8 @@ func WithPollingBackoffMultiplier(multiplier float64) Option {
 // Random jitter up to this fraction of the interval is added to prevent
 // synchronized polling across multiple clients.
 // Default: 0.3 (30%)
+//
+// For configuring multiple polling options, consider using WithPollingConfig instead.
 func WithPollingJitterFactor(factor float64) Option {
 	return func(c *clientConfig) {
 		c.pollingJitterFactor = factor
@@ -151,6 +220,8 @@ func WithPollingJitterFactor(factor float64) Option {
 // When using StrategyAuto, if the SSE connection is not established within
 // this timeout, the client falls back to polling.
 // Default: 5 seconds
+//
+// For configuring multiple polling options, consider using WithPollingConfig instead.
 func WithSSEConnectionTimeout(timeout time.Duration) Option {
 	return func(c *clientConfig) {
 		c.sseConnectionTimeout = timeout
