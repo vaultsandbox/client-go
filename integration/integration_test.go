@@ -1228,21 +1228,28 @@ func TestIntegration_DeletedInboxDuringWait(t *testing.T) {
 	}
 }
 
-// TestIntegration_MonitorInboxes_EmptySlice verifies MonitorInboxes returns error for empty slice.
-func TestIntegration_MonitorInboxes_EmptySlice(t *testing.T) {
+// TestIntegration_WatchInboxes_EmptySlice verifies WatchInboxes returns closed channel for empty slice.
+func TestIntegration_WatchInboxes_EmptySlice(t *testing.T) {
 	client := newClient(t)
+	ctx := context.Background()
 
-	// Try to monitor empty inboxes slice
-	_, err := client.MonitorInboxes([]*vaultsandbox.Inbox{})
-	if err == nil {
-		t.Error("MonitorInboxes should return error for empty inboxes")
-	} else {
-		t.Logf("MonitorInboxes correctly returned error for empty slice: %v", err)
+	// Watch empty inboxes slice - should return immediately closed channel
+	ch := client.WatchInboxes(ctx)
+
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Error("WatchInboxes channel should be closed for empty inboxes")
+		} else {
+			t.Log("WatchInboxes correctly returned closed channel for empty slice")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("WatchInboxes channel should close immediately for empty slice")
 	}
 }
 
-// TestIntegration_MonitorInboxes_ClosedClient verifies MonitorInboxes fails on closed client.
-func TestIntegration_MonitorInboxes_ClosedClient(t *testing.T) {
+// TestIntegration_WatchInboxes_ClosedClient verifies WatchInboxes on a closed client.
+func TestIntegration_WatchInboxes_ClosedClient(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a client
@@ -1266,14 +1273,26 @@ func TestIntegration_MonitorInboxes_ClosedClient(t *testing.T) {
 	// Close the client
 	client.Close()
 
-	// Try to monitor after close
-	_, err = client.MonitorInboxes([]*vaultsandbox.Inbox{inbox})
-	if err == nil {
-		t.Error("MonitorInboxes should return error on closed client")
-	} else if !errors.Is(err, vaultsandbox.ErrClientClosed) {
-		t.Errorf("MonitorInboxes error = %v, want ErrClientClosed", err)
-	} else {
-		t.Log("MonitorInboxes correctly returned ErrClientClosed")
+	// WatchInboxes returns a channel (doesn't error) but no events will be received
+	// since the delivery strategy is closed
+	watchCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
+	ch := client.WatchInboxes(watchCtx, inbox)
+	if ch == nil {
+		t.Error("WatchInboxes should return a channel even on closed client")
+	}
+
+	// Channel should close when context times out (no events received)
+	select {
+	case event, ok := <-ch:
+		if ok {
+			t.Errorf("unexpected event received on closed client: %v", event)
+		} else {
+			t.Log("WatchInboxes channel closed as expected on closed client")
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Log("WatchInboxes channel did not receive events on closed client (expected)")
 	}
 
 	// Clean up with a new client

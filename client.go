@@ -25,9 +25,6 @@ type ServerInfo struct {
 	DefaultTTL     time.Duration
 }
 
-// emailEventCallback is an internal callback for email events.
-type emailEventCallback func(inbox *Inbox, email *Email)
-
 // Client is the main VaultSandbox client for managing inboxes.
 type Client struct {
 	apiClient      *api.Client
@@ -38,10 +35,10 @@ type Client struct {
 	mu             sync.RWMutex
 	closed         bool
 
-	// Event handling
-	eventCallbacks map[string]map[int]emailEventCallback // inboxHash -> id -> callback
-	nextCallbackID int
-	callbacksMu    sync.RWMutex
+	// Event handling via channel fan-out
+	watchers   map[string][]chan<- *Email // inboxHash -> channels
+	watchersMu sync.RWMutex
+
 	strategyCtx    context.Context
 	strategyCancel context.CancelFunc
 }
@@ -131,7 +128,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		serverInfo:     serverInfo,
 		inboxes:        make(map[string]*Inbox),
 		inboxesByHash:  make(map[string]*Inbox),
-		eventCallbacks: make(map[string]map[int]emailEventCallback),
+		watchers:       make(map[string][]chan<- *Email),
 		strategyCtx:    strategyCtx,
 		strategyCancel: strategyCancel,
 	}
@@ -360,36 +357,77 @@ func (c *Client) ImportInboxFromFile(ctx context.Context, filePath string) (*Inb
 	return c.ImportInbox(ctx, &data)
 }
 
-// MonitorInboxes creates a monitor that watches multiple inboxes for new emails.
-// The returned InboxMonitor can be used to register callbacks for email events.
+// InboxEvent represents an email arriving in a specific inbox.
+type InboxEvent struct {
+	Inbox *Inbox
+	Email *Email
+}
+
+// WatchInboxes returns a channel that receives events from multiple inboxes.
+// The channel closes when the context is cancelled.
 //
 // Example:
 //
-//	monitor := client.MonitorInboxes([]*Inbox{inbox1, inbox2})
-//	monitor.OnEmail(func(inbox *Inbox, email *Email) {
-//	    fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
-//	})
-//	defer monitor.Unsubscribe()
-func (c *Client) MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error) {
-	c.mu.RLock()
-	if c.closed {
-		c.mu.RUnlock()
-		return nil, ErrClientClosed
-	}
-	if c.strategy == nil {
-		c.mu.RUnlock()
-		return nil, &StrategyError{Message: "no delivery strategy available"}
-	}
-	c.mu.RUnlock()
+//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+//	defer cancel()
+//
+//	for event := range client.WatchInboxes(ctx, inbox1, inbox2) {
+//	    fmt.Printf("Email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
+//	}
+func (c *Client) WatchInboxes(ctx context.Context, inboxes ...*Inbox) <-chan *InboxEvent {
+	ch := make(chan *InboxEvent, 16)
 
 	if len(inboxes) == 0 {
-		return nil, fmt.Errorf("at least one inbox is required")
+		close(ch)
+		return ch
 	}
 
-	return newInboxMonitor(c, inboxes), nil
+	// Create internal channels for each inbox and forward to the combined channel
+	type watcherInfo struct {
+		inbox   *Inbox
+		ch      chan *Email
+		cleanup func()
+	}
+	watchers := make([]watcherInfo, len(inboxes))
+
+	for i, inbox := range inboxes {
+		innerCh := make(chan *Email, 16)
+		cleanup := c.addWatcher(inbox.inboxHash, innerCh)
+		watchers[i] = watcherInfo{inbox: inbox, ch: innerCh, cleanup: cleanup}
+	}
+
+	// Forward emails from all inbox channels to the combined channel
+	var wg sync.WaitGroup
+	for _, w := range watchers {
+		w := w
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for email := range w.ch {
+				select {
+				case ch <- &InboxEvent{Inbox: w.inbox, Email: email}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	// Cleanup goroutine
+	go func() {
+		<-ctx.Done()
+		for _, w := range watchers {
+			w.cleanup()
+			close(w.ch)
+		}
+		wg.Wait()
+		close(ch)
+	}()
+
+	return ch
 }
 
-// syncAllInboxes fetches emails for all tracked inboxes and notifies callbacks.
+// syncAllInboxes fetches emails for all tracked inboxes and notifies watchers.
 // This is called after SSE reconnection to catch any emails that arrived
 // during the reconnection window.
 func (c *Client) syncAllInboxes(ctx context.Context) {
@@ -411,7 +449,7 @@ func (c *Client) syncAllInboxes(ctx context.Context) {
 	}
 }
 
-// syncInbox fetches emails for a single inbox and notifies callbacks for each.
+// syncInbox fetches emails for a single inbox and notifies watchers for each.
 func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
 	// Fetch all emails (decrypted)
 	emails, err := inbox.GetEmails(ctx)
@@ -419,31 +457,63 @@ func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
 		return // Silently ignore errors during sync
 	}
 
-	// Notify callbacks for each email
+	// Notify watchers for each email
 	for _, email := range emails {
-		c.notifyEmailCallbacks(inbox, email)
+		c.notifyWatchers(inbox.inboxHash, email)
 	}
 }
 
-// notifyEmailCallbacks calls all registered callbacks for an email.
-// This is used by both SSE event handling and sync.
-func (c *Client) notifyEmailCallbacks(inbox *Inbox, email *Email) {
-	c.callbacksMu.RLock()
-	callbacks := c.eventCallbacks[inbox.inboxHash]
-	if len(callbacks) == 0 {
-		c.callbacksMu.RUnlock()
+// addWatcher registers a channel to receive emails for a specific inbox.
+// Returns a cleanup function that removes the watcher when called.
+func (c *Client) addWatcher(inboxHash string, ch chan<- *Email) func() {
+	c.watchersMu.Lock()
+	c.watchers[inboxHash] = append(c.watchers[inboxHash], ch)
+	c.watchersMu.Unlock()
+
+	return func() {
+		c.removeWatcher(inboxHash, ch)
+	}
+}
+
+// removeWatcher removes a channel from the watchers list.
+func (c *Client) removeWatcher(inboxHash string, ch chan<- *Email) {
+	c.watchersMu.Lock()
+	defer c.watchersMu.Unlock()
+
+	watchers := c.watchers[inboxHash]
+	for i, w := range watchers {
+		if w == ch {
+			// Remove by swapping with last element
+			c.watchers[inboxHash] = append(watchers[:i], watchers[i+1:]...)
+			break
+		}
+	}
+	// Clean up empty slices
+	if len(c.watchers[inboxHash]) == 0 {
+		delete(c.watchers, inboxHash)
+	}
+}
+
+// notifyWatchers sends an email to all registered watchers for an inbox.
+// Uses non-blocking sends to avoid blocking the event loop.
+func (c *Client) notifyWatchers(inboxHash string, email *Email) {
+	c.watchersMu.RLock()
+	watchers := c.watchers[inboxHash]
+	if len(watchers) == 0 {
+		c.watchersMu.RUnlock()
 		return
 	}
-	// Copy callbacks to slice for iteration outside lock
-	callbacksCopy := make([]emailEventCallback, 0, len(callbacks))
-	for _, cb := range callbacks {
-		callbacksCopy = append(callbacksCopy, cb)
-	}
-	c.callbacksMu.RUnlock()
+	// Copy to avoid holding lock during sends
+	watchersCopy := make([]chan<- *Email, len(watchers))
+	copy(watchersCopy, watchers)
+	c.watchersMu.RUnlock()
 
-	// Call each callback
-	for _, cb := range callbacksCopy {
-		go cb(inbox, email)
+	for _, ch := range watchersCopy {
+		select {
+		case ch <- email:
+		default:
+			// Non-blocking: drop if channel is full
+		}
 	}
 }
 
@@ -471,43 +541,10 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 		return err
 	}
 
-	// Notify all callbacks
-	c.notifyEmailCallbacks(inbox, email)
+	// Notify all watchers
+	c.notifyWatchers(inbox.inboxHash, email)
 
 	return nil
-}
-
-// registerEmailCallback registers a callback for email events on a specific inbox.
-// Returns a function that unregisters the callback when called.
-func (c *Client) registerEmailCallback(inboxHash string, callback emailEventCallback) func() {
-	c.callbacksMu.Lock()
-	defer c.callbacksMu.Unlock()
-
-	if c.eventCallbacks[inboxHash] == nil {
-		c.eventCallbacks[inboxHash] = make(map[int]emailEventCallback)
-	}
-
-	id := c.nextCallbackID
-	c.nextCallbackID++
-	c.eventCallbacks[inboxHash][id] = callback
-
-	return func() {
-		c.unregisterEmailCallback(inboxHash, id)
-	}
-}
-
-// unregisterEmailCallback removes a callback by its ID.
-func (c *Client) unregisterEmailCallback(inboxHash string, id int) {
-	c.callbacksMu.Lock()
-	defer c.callbacksMu.Unlock()
-
-	if callbacks, ok := c.eventCallbacks[inboxHash]; ok {
-		delete(callbacks, id)
-		// Clean up empty maps to avoid memory accumulation
-		if len(callbacks) == 0 {
-			delete(c.eventCallbacks, inboxHash)
-		}
-	}
 }
 
 // Close closes the client and releases resources.
@@ -533,12 +570,12 @@ func (c *Client) Close() error {
 		}
 	}
 
-	// Clear inboxes and callbacks
+	// Clear inboxes and watchers
 	c.inboxes = make(map[string]*Inbox)
 	c.inboxesByHash = make(map[string]*Inbox)
-	c.callbacksMu.Lock()
-	c.eventCallbacks = make(map[string]map[int]emailEventCallback)
-	c.callbacksMu.Unlock()
+	c.watchersMu.Lock()
+	c.watchers = make(map[string][]chan<- *Email)
+	c.watchersMu.Unlock()
 
 	return nil
 }

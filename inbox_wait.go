@@ -2,11 +2,32 @@ package vaultsandbox
 
 import (
 	"context"
-	"sync"
 )
 
-// InboxEmailCallback is called when a new email arrives in the inbox.
-type InboxEmailCallback func(email *Email)
+// Watch returns a channel that receives emails as they arrive.
+// The channel closes when the context is cancelled.
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+//	defer cancel()
+//
+//	for email := range inbox.Watch(ctx) {
+//	    fmt.Printf("New email: %s\n", email.Subject)
+//	}
+func (i *Inbox) Watch(ctx context.Context) <-chan *Email {
+	ch := make(chan *Email, 16)
+
+	cleanup := i.client.addWatcher(i.inboxHash, ch)
+
+	go func() {
+		<-ctx.Done()
+		cleanup()
+		close(ch)
+	}()
+
+	return ch
+}
 
 // WaitForEmail waits for an email matching the given criteria.
 // It uses the client's callback infrastructure to receive instant notifications
@@ -23,37 +44,28 @@ func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, e
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
 
-	resultCh := make(chan *Email, 1)
-
-	// 1. Subscribe FIRST to avoid race condition
-	sub := i.OnNewEmail(func(email *Email) {
-		if cfg.Matches(email) {
-			select {
-			case resultCh <- email:
-			default: // already found
-			}
-		}
-	})
-	defer sub.Unsubscribe()
+	// 1. Start watching FIRST to avoid race condition
+	emails := i.Watch(ctx)
 
 	// 2. Check existing emails (handles already-arrived case)
-	emails, err := i.GetEmails(ctx)
+	existing, err := i.GetEmails(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, e := range emails {
+	for _, e := range existing {
 		if cfg.Matches(e) {
 			return e, nil
 		}
 	}
 
-	// 3. Wait for callback or timeout
-	select {
-	case email := <-resultCh:
-		return email, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	// 3. Watch for new emails
+	for email := range emails {
+		if cfg.Matches(email) {
+			return email, nil
+		}
 	}
+
+	return nil, ctx.Err()
 }
 
 // WaitForEmailCount waits until at least count matching emails are found.
@@ -71,97 +83,45 @@ func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOp
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
 
-	// Use a mutex to protect concurrent access to the results slice
-	var mu sync.Mutex
+	// Track seen email IDs to avoid duplicates
+	seen := make(map[string]struct{})
 	var results []*Email
-	doneCh := make(chan struct{})
 
-	// 1. Subscribe FIRST to avoid race condition
-	sub := i.OnNewEmail(func(email *Email) {
-		if cfg.Matches(email) {
-			mu.Lock()
-			// Check if we already have this email (by ID)
-			for _, e := range results {
-				if e.ID == email.ID {
-					mu.Unlock()
-					return
-				}
-			}
-			results = append(results, email)
-			if len(results) >= count {
-				select {
-				case doneCh <- struct{}{}:
-				default:
-				}
-			}
-			mu.Unlock()
+	// Helper to add email if not seen
+	addIfNew := func(e *Email) bool {
+		if _, ok := seen[e.ID]; ok {
+			return false
 		}
-	})
-	defer sub.Unsubscribe()
+		if cfg.Matches(e) {
+			seen[e.ID] = struct{}{}
+			results = append(results, e)
+			return true
+		}
+		return false
+	}
+
+	// 1. Start watching FIRST to avoid race condition
+	emails := i.Watch(ctx)
 
 	// 2. Check existing emails (handles already-arrived case)
-	emails, err := i.GetEmails(ctx)
+	existing, err := i.GetEmails(ctx)
 	if err != nil {
 		return nil, err
 	}
-	mu.Lock()
-	for _, e := range emails {
-		if cfg.Matches(e) {
-			results = append(results, e)
+	for _, e := range existing {
+		addIfNew(e)
+		if len(results) >= count {
+			return results[:count], nil
 		}
 	}
-	if len(results) >= count {
-		matched := results[:count]
-		mu.Unlock()
-		return matched, nil
-	}
-	mu.Unlock()
 
-	// 3. Wait for callbacks or timeout
-	for {
-		select {
-		case <-doneCh:
-			mu.Lock()
-			if len(results) >= count {
-				matched := results[:count]
-				mu.Unlock()
-				return matched, nil
-			}
-			mu.Unlock()
-		case <-ctx.Done():
-			return nil, ctx.Err()
+	// 3. Watch for new emails
+	for email := range emails {
+		addIfNew(email)
+		if len(results) >= count {
+			return results[:count], nil
 		}
 	}
-}
 
-// OnNewEmail subscribes to new email notifications for this inbox.
-// The callback is invoked whenever a new email arrives.
-// Returns a Subscription that can be used to unsubscribe.
-//
-// This method uses the client's delivery strategy (SSE, polling, or auto)
-// for real-time email notifications. With SSE enabled, emails are delivered
-// instantly as push notifications.
-//
-// Example:
-//
-//	subscription := inbox.OnNewEmail(func(email *Email) {
-//	    fmt.Printf("New email: %s\n", email.Subject)
-//	})
-//	defer subscription.Unsubscribe()
-func (i *Inbox) OnNewEmail(callback InboxEmailCallback) Subscription {
-	unsub := i.client.registerEmailCallback(i.inboxHash, func(inbox *Inbox, email *Email) {
-		callback(email)
-	})
-
-	return &inboxEmailSubscription{unsubscribe: unsub}
-}
-
-// inboxEmailSubscription implements Subscription for single inbox monitoring.
-type inboxEmailSubscription struct {
-	unsubscribe func()
-	once        sync.Once
-}
-
-func (s *inboxEmailSubscription) Unsubscribe() {
-	s.once.Do(s.unsubscribe)
+	return nil, ctx.Err()
 }

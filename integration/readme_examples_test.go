@@ -523,7 +523,7 @@ func TestREADME_WaitForEmailCount(t *testing.T) {
 }
 
 // ============================================================================
-// README Real-time Monitoring Example (lines 404-453)
+// README Real-time Monitoring Example (channel-based Watch API)
 // ============================================================================
 
 func TestREADME_RealTimeMonitoring(t *testing.T) {
@@ -540,24 +540,29 @@ func TestREADME_RealTimeMonitoring(t *testing.T) {
 
 	t.Logf("Watching for emails at: %s", inbox.EmailAddress())
 
+	// README example: Watch for new emails using channels
+	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	emails := inbox.Watch(watchCtx)
+
 	// Track received emails
 	var received []*vaultsandbox.Email
-	var mu sync.Mutex
 	done := make(chan struct{})
 
-	// README example: Subscribe to new emails
-	subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-		mu.Lock()
-		received = append(received, email)
-		count := len(received)
-		mu.Unlock()
+	// Process emails in a goroutine
+	go func() {
+		for email := range emails {
+			received = append(received, email)
+			t.Logf("New email received: %q", email.Subject)
 
-		t.Logf("New email received: %q", email.Subject)
-
-		if count >= 2 {
-			close(done)
+			if len(received) >= 2 {
+				cancel() // Stop watching
+				close(done)
+				return
+			}
 		}
-	})
+	}()
 
 	// Send emails
 	sendTestEmail(t, inbox.EmailAddress(), "Monitor Test 1", "First email")
@@ -572,34 +577,28 @@ func TestREADME_RealTimeMonitoring(t *testing.T) {
 		t.Log("Timeout waiting for emails (may have already been received)")
 	}
 
-	// README example: Stop listening for emails
-	subscription.Unsubscribe()
 	t.Log("Stopped monitoring")
 
 	// Verify we received emails
-	mu.Lock()
-	count := len(received)
-	mu.Unlock()
-
-	if count < 1 {
-		// It's possible emails were received before subscription was active
+	if len(received) < 1 {
+		// It's possible emails were received before Watch was active
 		// Check inbox directly
-		emails, err := inbox.GetEmails(ctx)
+		allEmails, err := inbox.GetEmails(ctx)
 		if err != nil {
 			t.Fatalf("GetEmails() error = %v", err)
 		}
-		if len(emails) < 2 {
-			t.Errorf("expected at least 2 emails, got %d via subscription and %d in inbox",
-				count, len(emails))
+		if len(allEmails) < 2 {
+			t.Errorf("expected at least 2 emails, got %d via Watch and %d in inbox",
+				len(received), len(allEmails))
 		}
 	}
 }
 
 // ============================================================================
-// README InboxMonitor Example (lines 503-522)
+// README WatchInboxes Example (channel-based multi-inbox watching)
 // ============================================================================
 
-func TestREADME_InboxMonitor(t *testing.T) {
+func TestREADME_WatchInboxes(t *testing.T) {
 	skipIfNoSMTP(t)
 
 	client := newClient(t)
@@ -618,34 +617,40 @@ func TestREADME_InboxMonitor(t *testing.T) {
 	}
 	defer inbox2.Delete(ctx)
 
-	// README example: Monitor multiple inboxes
-	monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Logf("Watching inboxes: %s, %s", inbox1.EmailAddress(), inbox2.EmailAddress())
 
-	t.Logf("Monitoring inboxes: %s, %s", inbox1.EmailAddress(), inbox2.EmailAddress())
+	// README example: Watch multiple inboxes using channels
+	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	events := client.WatchInboxes(watchCtx, inbox1, inbox2)
 
 	// Track which inboxes received emails
 	var receivedEmails sync.Map
 	done := make(chan struct{})
 	var closeOnce sync.Once
 
-	// README example: Subscribe to email events
-	subscription := monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-		t.Logf("New email in %s: %s", inbox.EmailAddress(), email.Subject)
-		receivedEmails.Store(inbox.EmailAddress(), email)
+	// Process events in a goroutine
+	go func() {
+		for event := range events {
+			t.Logf("New email in %s: %s", event.Inbox.EmailAddress(), event.Email.Subject)
+			receivedEmails.Store(event.Inbox.EmailAddress(), event.Email)
 
-		// Check if both inboxes received emails
-		count := 0
-		receivedEmails.Range(func(_, _ any) bool {
-			count++
-			return true
-		})
-		if count >= 2 {
-			closeOnce.Do(func() { close(done) })
+			// Check if both inboxes received emails
+			count := 0
+			receivedEmails.Range(func(_, _ any) bool {
+				count++
+				return true
+			})
+			if count >= 2 {
+				closeOnce.Do(func() {
+					cancel() // Stop watching
+					close(done)
+				})
+				return
+			}
 		}
-	})
+	}()
 
 	// Send emails to both inboxes
 	sendTestEmail(t, inbox1.EmailAddress(), "Multi-inbox Test 1", "Email to inbox 1")
@@ -659,10 +664,6 @@ func TestREADME_InboxMonitor(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Log("Timeout (checking inboxes directly)")
 	}
-
-	// Stop monitoring
-	subscription.Unsubscribe()
-	monitor.Unsubscribe()
 
 	// Verify emails were received
 	emails1, _ := inbox1.GetEmails(ctx)
