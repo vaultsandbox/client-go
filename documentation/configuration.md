@@ -245,6 +245,37 @@ vaultsandbox.WithSSEConnectionTimeout(10 * time.Second)  // More time for SSE
 vaultsandbox.WithSSEConnectionTimeout(2 * time.Second)   // Quick fallback
 ```
 
+#### WithPollingConfig
+
+**Signature**: `WithPollingConfig(cfg PollingConfig) Option`
+
+**Description**: Sets all polling-related options at once. This is the recommended way to customize polling behavior when you need to change multiple settings. Zero values are ignored, so you only need to specify the fields you want to change.
+
+**PollingConfig struct**:
+
+```go
+type PollingConfig struct {
+	InitialInterval      time.Duration // Default: 2 * time.Second
+	MaxBackoff           time.Duration // Default: 30 * time.Second
+	BackoffMultiplier    float64       // Default: 1.5
+	JitterFactor         float64       // Default: 0.3 (30%)
+	SSEConnectionTimeout time.Duration // Default: 5 * time.Second
+}
+```
+
+**Example**:
+
+```go
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithPollingConfig(vaultsandbox.PollingConfig{
+		InitialInterval: 1 * time.Second,   // Faster initial polling
+		MaxBackoff:      10 * time.Second,  // Lower max backoff
+	}),
+)
+```
+
+**When to use**: Use `WithPollingConfig` when you need to customize multiple polling settings. For changing a single setting, use the individual options like `WithPollingInitialInterval`.
+
 ## Inbox Options
 
 Options passed to `CreateInbox()`.

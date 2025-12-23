@@ -9,6 +9,7 @@ The official Go SDK for VaultSandbox Gateway. It handles quantum-safe encryption
 
 - **Automatic Encryption**: ML-KEM-768 key encapsulation + AES-256-GCM encryption handled transparently
 - **Real-Time Delivery**: SSE-based email delivery with smart polling fallback
+- **Flexible Waiting**: Wait for single emails, multiple emails, or watch via channels
 - **Email Authentication**: Built-in SPF/DKIM/DMARC validation helpers
 - **Full Email Access**: Decrypted content, headers, links, and attachments
 - **Idiomatic Go**: Context-based cancellation, functional options, and proper error handling
