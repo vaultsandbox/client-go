@@ -408,10 +408,8 @@ func (c *Client) WatchInboxes(ctx context.Context, inboxes ...*Inbox) <-chan *In
 	for _, inbox := range inboxes {
 		inbox := inbox
 		unsub := c.subs.subscribe(inbox.inboxHash, func(email *Email) {
-			select {
-			case ch <- &InboxEvent{Inbox: inbox, Email: email}:
-			default:
-			}
+			// Spawn goroutine to guarantee delivery without blocking event source
+			go func(e *Email) { ch <- &InboxEvent{Inbox: inbox, Email: e} }(email)
 		})
 		unsubscribes = append(unsubscribes, unsub)
 	}

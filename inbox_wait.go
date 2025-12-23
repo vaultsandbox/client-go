@@ -26,13 +26,11 @@ import (
 func (i *Inbox) Watch(ctx context.Context) <-chan *Email {
 	ch := make(chan *Email, 16)
 
-	// Subscribe with callback that sends to channel
+	// Subscribe with callback that sends to channel.
+	// We spawn a goroutine for each send to guarantee delivery without
+	// blocking the event source. Given low volume, overhead is negligible.
 	unsubscribe := i.client.subs.subscribe(i.inboxHash, func(email *Email) {
-		select {
-		case ch <- email:
-		default:
-			// Buffer full, drop (same behavior as before)
-		}
+		go func(e *Email) { ch <- e }(email)
 	})
 
 	// Cleanup goroutine: unsubscribe when context is cancelled.
