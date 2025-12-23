@@ -65,9 +65,9 @@ type Strategy interface {
 
 ## Priority 3: Remove Wrapper Functions
 
-### 3.1 Remove SSE delegating functions
+### 3.1 Remove SSE WaitForEmail wrappers
 
-**Problem**: 4 SSE functions that just call polling versions (`internal/delivery/sse.go:349-387`):
+**Problem**: 4 SSE-prefixed functions that just delegate to the generic versions (`internal/delivery/sse.go:349-375`):
 ```go
 func SSEWaitForEmail[T any](...) { return WaitForEmail(...) }
 func SSEWaitForEmailWithSync[T any](...) { return WaitForEmailWithSync(...) }
@@ -75,7 +75,9 @@ func SSEWaitForEmailCount[T any](...) { return WaitForEmailCount(...) }
 func SSEWaitForEmailCountWithSync[T any](...) { return WaitForEmailCountWithSync(...) }
 ```
 
-**Action**: Delete these functions and update any callers to use the polling versions directly.
+**Note**: The `SSEStrategy` itself (lines 47-347) is legitimate - it uses real SSE via `OpenEventStream()`. Only these wrapper functions are redundant because `WaitForEmail` is strategy-agnostic.
+
+**Action**: Delete these wrapper functions and update any callers to use `WaitForEmail` directly.
 
 **Files to modify**:
 - `internal/delivery/sse.go` - delete lines 349-387
