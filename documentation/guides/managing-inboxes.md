@@ -534,33 +534,27 @@ if email.AuthResults != nil {
 ### Subscribe to Single Inbox
 
 ```go
-// Subscribe to new emails on a single inbox
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-	fmt.Printf("New email: %s from %s\n", email.Subject, email.From)
-})
-defer subscription.Unsubscribe()
+// Watch for new emails on a single inbox
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+defer cancel()
 
-// Keep running to receive notifications
-time.Sleep(10 * time.Minute)
+ch := inbox.Watch(ctx)
+for email := range ch {
+	fmt.Printf("New email: %s from %s\n", email.Subject, email.From)
+}
 ```
 
 ### Monitor Multiple Inboxes
 
 ```go
-// Create a monitor for multiple inboxes
-monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2, inbox3})
-if err != nil {
-	log.Fatal(err)
+// Watch multiple inboxes for new emails
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+ch := client.WatchInboxes(ctx, inbox1, inbox2, inbox3)
+for event := range ch {
+	fmt.Printf("New email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
 }
-defer monitor.Unsubscribe()
-
-// Register callback for new emails
-monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-	fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
-})
-
-// Keep running to receive notifications
-select {}
 ```
 
 ## Export and Import Inboxes

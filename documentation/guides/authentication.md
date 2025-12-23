@@ -44,13 +44,13 @@ if validation.Passed {
 auth := email.AuthResults
 
 if auth.SPF != nil {
-	fmt.Printf("SPF: %s\n", auth.SPF.Status)
+	fmt.Printf("SPF: %s (IP: %s)\n", auth.SPF.Status, auth.SPF.IP)
 }
 if len(auth.DKIM) > 0 {
 	fmt.Printf("DKIM: %s\n", auth.DKIM[0].Status)
 }
 if auth.DMARC != nil {
-	fmt.Printf("DMARC: %s\n", auth.DMARC.Status)
+	fmt.Printf("DMARC: %s (aligned: %v)\n", auth.DMARC.Status, auth.DMARC.Aligned)
 }
 if auth.ReverseDNS != nil {
 	fmt.Printf("Reverse DNS: %s\n", auth.ReverseDNS.Status)
@@ -97,7 +97,7 @@ func TestSPFValidationDetails(t *testing.T) {
 			t.Errorf("expected domain example.com, got %s", spf.Domain)
 		}
 
-		t.Logf("SPF %s for %s", spf.Status, spf.Domain)
+		t.Logf("SPF %s for %s from IP %s", spf.Status, spf.Domain, spf.IP)
 		t.Logf("Info: %s", spf.Info)
 	}
 }
@@ -253,6 +253,10 @@ func TestDMARCPolicyIsEnforced(t *testing.T) {
 	if dmarc != nil {
 		t.Logf("DMARC status: %s", dmarc.Status)
 		t.Logf("DMARC policy: %s", dmarc.Policy)
+		t.Logf("DMARC aligned: %v", dmarc.Aligned)
+		if dmarc.Info != "" {
+			t.Logf("DMARC info: %s", dmarc.Info)
+		}
 
 		// Policy should be restrictive in production
 		if dmarc.Policy != "quarantine" && dmarc.Policy != "reject" {
@@ -309,6 +313,9 @@ func TestServerHasValidReverseDNS(t *testing.T) {
 
 		t.Logf("Reverse DNS: %s -> %s", rdns.IP, rdns.Hostname)
 		t.Logf("Status: %s", rdns.Status)
+		if rdns.Info != "" {
+			t.Logf("Info: %s", rdns.Info)
+		}
 	}
 }
 ```
@@ -504,6 +511,13 @@ import (
 	"github.com/vaultsandbox/client-go/authresults"
 )
 
+// Available sentinel errors:
+// - authresults.ErrSPFFailed
+// - authresults.ErrDKIMFailed
+// - authresults.ErrDMARCFailed
+// - authresults.ErrReverseDNSFailed
+// - authresults.ErrNoAuthResults
+
 if err := authresults.ValidateSPF(email.AuthResults); err != nil {
 	switch {
 	case errors.Is(err, authresults.ErrSPFFailed):
@@ -512,6 +526,33 @@ if err := authresults.ValidateSPF(email.AuthResults); err != nil {
 		fmt.Println("No SPF results available")
 	default:
 		fmt.Printf("unexpected error: %v\n", err)
+	}
+}
+
+if err := authresults.ValidateDKIM(email.AuthResults); err != nil {
+	switch {
+	case errors.Is(err, authresults.ErrDKIMFailed):
+		fmt.Println("DKIM check failed - verify DKIM signing")
+	case errors.Is(err, authresults.ErrNoAuthResults):
+		fmt.Println("No DKIM results available")
+	}
+}
+
+if err := authresults.ValidateDMARC(email.AuthResults); err != nil {
+	switch {
+	case errors.Is(err, authresults.ErrDMARCFailed):
+		fmt.Println("DMARC check failed - check alignment")
+	case errors.Is(err, authresults.ErrNoAuthResults):
+		fmt.Println("No DMARC results available")
+	}
+}
+
+if err := authresults.ValidateReverseDNS(email.AuthResults); err != nil {
+	switch {
+	case errors.Is(err, authresults.ErrReverseDNSFailed):
+		fmt.Println("Reverse DNS check failed - configure PTR record")
+	case errors.Is(err, authresults.ErrNoAuthResults):
+		fmt.Println("No reverse DNS results available")
 	}
 }
 ```
@@ -533,6 +574,7 @@ func logAuthenticationDetails(email *vaultsandbox.Email) {
 		fmt.Println("SPF:")
 		fmt.Printf("  Status: %s\n", auth.SPF.Status)
 		fmt.Printf("  Domain: %s\n", auth.SPF.Domain)
+		fmt.Printf("  IP: %s\n", auth.SPF.IP)
 		fmt.Printf("  Info: %s\n", auth.SPF.Info)
 	} else {
 		fmt.Println("SPF: No result")
@@ -561,6 +603,10 @@ func logAuthenticationDetails(email *vaultsandbox.Email) {
 		fmt.Printf("  Status: %s\n", auth.DMARC.Status)
 		fmt.Printf("  Domain: %s\n", auth.DMARC.Domain)
 		fmt.Printf("  Policy: %s\n", auth.DMARC.Policy)
+		fmt.Printf("  Aligned: %v\n", auth.DMARC.Aligned)
+		if auth.DMARC.Info != "" {
+			fmt.Printf("  Info: %s\n", auth.DMARC.Info)
+		}
 	} else {
 		fmt.Println()
 		fmt.Println("DMARC: No result")
@@ -573,6 +619,9 @@ func logAuthenticationDetails(email *vaultsandbox.Email) {
 		fmt.Printf("  Status: %s\n", auth.ReverseDNS.Status)
 		fmt.Printf("  IP: %s\n", auth.ReverseDNS.IP)
 		fmt.Printf("  Hostname: %s\n", auth.ReverseDNS.Hostname)
+		if auth.ReverseDNS.Info != "" {
+			fmt.Printf("  Info: %s\n", auth.ReverseDNS.Info)
+		}
 	}
 
 	// Validation Summary

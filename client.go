@@ -192,6 +192,10 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 	inbox := newInboxFromResult(resp, c)
 
 	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, ErrClientClosed
+	}
 	c.inboxes[inbox.emailAddress] = inbox
 	c.inboxesByHash[inbox.inboxHash] = inbox
 	c.mu.Unlock()
@@ -236,6 +240,10 @@ func (c *Client) ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, 
 	}
 
 	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, ErrClientClosed
+	}
 	c.inboxes[inbox.emailAddress] = inbox
 	c.inboxesByHash[inbox.inboxHash] = inbox
 	c.mu.Unlock()

@@ -104,17 +104,17 @@ func (a *AutoStrategy) fallbackToPolling() {
 		return // Already switched
 	}
 
-	// Stop SSE
-	a.sse.Stop()
-
 	// Get current inboxes (including any added after Start)
 	currentInboxes := make([]InboxInfo, len(a.inboxes))
 	copy(currentInboxes, a.inboxes)
 
-	// Start polling
+	// Start polling first, before stopping SSE
 	if err := a.polling.Start(a.ctx, currentInboxes, a.handler); err != nil {
-		return // Keep SSE on polling start failure
+		return // Keep SSE running on polling start failure
 	}
+
+	// Only stop SSE after polling successfully started
+	a.sse.Stop()
 
 	// Register reconnect handler on polling
 	if a.onReconnect != nil {
