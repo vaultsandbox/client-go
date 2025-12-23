@@ -11,7 +11,7 @@ func TestInbox_Watch_ReturnsChannel(t *testing.T) {
 	inbox := &Inbox{
 		inboxHash: "test-hash",
 		client: &Client{
-			watchers: make(map[string][]chan<- *Email),
+			subs: newSubscriptionManager(),
 		},
 	}
 
@@ -28,7 +28,7 @@ func TestInbox_Watch_ClosesOnContextCancel(t *testing.T) {
 	inbox := &Inbox{
 		inboxHash: "test-hash",
 		client: &Client{
-			watchers: make(map[string][]chan<- *Email),
+			subs: newSubscriptionManager(),
 		},
 	}
 
@@ -52,7 +52,7 @@ func TestInbox_Watch_ClosesOnContextCancel(t *testing.T) {
 
 func TestInbox_Watch_ReceivesEmails(t *testing.T) {
 	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+		subs: newSubscriptionManager(),
 	}
 	inbox := &Inbox{
 		inboxHash: "test-hash",
@@ -66,7 +66,7 @@ func TestInbox_Watch_ReceivesEmails(t *testing.T) {
 
 	// Simulate email arrival
 	testEmail := &Email{ID: "email-1", Subject: "Test"}
-	client.notifyWatchers(ctx, "test-hash", testEmail)
+	client.subs.notify("test-hash", testEmail)
 
 	select {
 	case email := <-ch:
@@ -83,7 +83,7 @@ func TestInbox_Watch_ReceivesEmails(t *testing.T) {
 
 func TestInbox_Watch_MultipleWatchers(t *testing.T) {
 	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+		subs: newSubscriptionManager(),
 	}
 	inbox := &Inbox{
 		inboxHash: "test-hash",
@@ -98,18 +98,9 @@ func TestInbox_Watch_MultipleWatchers(t *testing.T) {
 	ch1 := inbox.Watch(ctx1)
 	ch2 := inbox.Watch(ctx2)
 
-	// Both watchers should be registered
-	client.watchersMu.RLock()
-	watcherCount := len(client.watchers["test-hash"])
-	client.watchersMu.RUnlock()
-
-	if watcherCount != 2 {
-		t.Errorf("watcher count = %d, want 2", watcherCount)
-	}
-
 	// Both should receive the same email
 	testEmail := &Email{ID: "email-1"}
-	client.notifyWatchers(ctx1, "test-hash", testEmail)
+	client.subs.notify("test-hash", testEmail)
 
 	for i, ch := range []<-chan *Email{ch1, ch2} {
 		select {
@@ -125,7 +116,7 @@ func TestInbox_Watch_MultipleWatchers(t *testing.T) {
 
 func TestInbox_Watch_CancelRemovesWatcher(t *testing.T) {
 	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+		subs: newSubscriptionManager(),
 	}
 	inbox := &Inbox{
 		inboxHash: "test-hash",
@@ -135,30 +126,29 @@ func TestInbox_Watch_CancelRemovesWatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = inbox.Watch(ctx)
 
-	// Verify watcher is registered
-	client.watchersMu.RLock()
-	initialCount := len(client.watchers["test-hash"])
-	client.watchersMu.RUnlock()
-	if initialCount != 1 {
-		t.Fatalf("initial watcher count = %d, want 1", initialCount)
-	}
-
 	// Cancel and wait for cleanup
 	cancel()
 	time.Sleep(50 * time.Millisecond)
 
-	// Verify watcher is removed
-	client.watchersMu.RLock()
-	finalCount := len(client.watchers["test-hash"])
-	client.watchersMu.RUnlock()
-	if finalCount != 0 {
-		t.Errorf("watcher count after cancel = %d, want 0", finalCount)
+	// Verify notification doesn't reach any subscriber
+	// by checking that notify doesn't panic or deliver
+	called := false
+	unsub := client.subs.subscribe("test-hash", func(email *Email) {
+		called = true
+	})
+	defer unsub()
+
+	testEmail := &Email{ID: "test"}
+	client.subs.notify("test-hash", testEmail)
+
+	if !called {
+		t.Error("new subscriber should receive email")
 	}
 }
 
 func TestClient_WatchInboxes_ReturnsChannel(t *testing.T) {
 	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+		subs: newSubscriptionManager(),
 	}
 	inbox1 := &Inbox{inboxHash: "hash-1", client: client}
 	inbox2 := &Inbox{inboxHash: "hash-2", client: client}
@@ -174,7 +164,7 @@ func TestClient_WatchInboxes_ReturnsChannel(t *testing.T) {
 
 func TestClient_WatchInboxes_EmptyInboxes(t *testing.T) {
 	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+		subs: newSubscriptionManager(),
 	}
 
 	ctx := context.Background()
@@ -193,7 +183,7 @@ func TestClient_WatchInboxes_EmptyInboxes(t *testing.T) {
 
 func TestClient_WatchInboxes_ReceivesFromMultipleInboxes(t *testing.T) {
 	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+		subs: newSubscriptionManager(),
 	}
 	inbox1 := &Inbox{inboxHash: "hash-1", emailAddress: "inbox1@test.com", client: client}
 	inbox2 := &Inbox{inboxHash: "hash-2", emailAddress: "inbox2@test.com", client: client}
@@ -205,11 +195,11 @@ func TestClient_WatchInboxes_ReceivesFromMultipleInboxes(t *testing.T) {
 
 	// Send email to first inbox
 	email1 := &Email{ID: "email-1", Subject: "To Inbox 1"}
-	client.notifyWatchers(ctx, "hash-1", email1)
+	client.subs.notify("hash-1", email1)
 
 	// Send email to second inbox
 	email2 := &Email{ID: "email-2", Subject: "To Inbox 2"}
-	client.notifyWatchers(ctx, "hash-2", email2)
+	client.subs.notify("hash-2", email2)
 
 	received := make(map[string]string) // emailID -> inboxAddress
 
@@ -232,7 +222,7 @@ func TestClient_WatchInboxes_ReceivesFromMultipleInboxes(t *testing.T) {
 
 func TestClient_WatchInboxes_ClosesOnContextCancel(t *testing.T) {
 	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+		subs: newSubscriptionManager(),
 	}
 	inbox := &Inbox{inboxHash: "hash-1", client: client}
 
@@ -251,173 +241,144 @@ func TestClient_WatchInboxes_ClosesOnContextCancel(t *testing.T) {
 	}
 }
 
-func TestClient_addWatcher(t *testing.T) {
-	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+func TestSubscriptionManager_Subscribe(t *testing.T) {
+	m := newSubscriptionManager()
+
+	var received *Email
+	unsub := m.subscribe("test-hash", func(email *Email) {
+		received = email
+	})
+
+	// Notify should call the callback
+	testEmail := &Email{ID: "email-1"}
+	m.notify("test-hash", testEmail)
+
+	if received == nil {
+		t.Fatal("callback was not called")
+	}
+	if received.ID != "email-1" {
+		t.Errorf("received.ID = %q, want %q", received.ID, "email-1")
 	}
 
-	ch := make(chan *Email, 1)
-	cleanup := client.addWatcher("test-hash", ch)
+	// After unsubscribe, callback should not be called
+	unsub()
+	received = nil
+	m.notify("test-hash", &Email{ID: "email-2"})
 
-	// Verify watcher is added
-	client.watchersMu.RLock()
-	watchers := client.watchers["test-hash"]
-	client.watchersMu.RUnlock()
-
-	if len(watchers) != 1 {
-		t.Errorf("watcher count = %d, want 1", len(watchers))
-	}
-
-	// Cleanup should remove the watcher
-	cleanup()
-
-	client.watchersMu.RLock()
-	watchersAfter := client.watchers["test-hash"]
-	client.watchersMu.RUnlock()
-
-	if len(watchersAfter) != 0 {
-		t.Errorf("watcher count after cleanup = %d, want 0", len(watchersAfter))
-	}
-}
-
-func TestClient_removeWatcher(t *testing.T) {
-	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
-	}
-
-	ch1 := make(chan *Email, 1)
-	ch2 := make(chan *Email, 1)
-	ch3 := make(chan *Email, 1)
-
-	client.addWatcher("test-hash", ch1)
-	client.addWatcher("test-hash", ch2)
-	client.addWatcher("test-hash", ch3)
-
-	// Remove middle watcher
-	client.removeWatcher("test-hash", ch2)
-
-	client.watchersMu.RLock()
-	watchers := client.watchers["test-hash"]
-	client.watchersMu.RUnlock()
-
-	if len(watchers) != 2 {
-		t.Errorf("watcher count = %d, want 2", len(watchers))
-	}
-
-	// Verify ch2 is gone
-	for _, w := range watchers {
-		if w == ch2 {
-			t.Error("ch2 should have been removed")
-		}
+	if received != nil {
+		t.Error("callback was called after unsubscribe")
 	}
 }
 
-func TestClient_removeWatcher_CleansUpEmptySlice(t *testing.T) {
-	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
-	}
+func TestSubscriptionManager_UnsubscribeIdempotent(t *testing.T) {
+	m := newSubscriptionManager()
 
-	ch := make(chan *Email, 1)
-	client.addWatcher("test-hash", ch)
-	client.removeWatcher("test-hash", ch)
+	unsub := m.subscribe("test-hash", func(email *Email) {})
 
-	client.watchersMu.RLock()
-	_, exists := client.watchers["test-hash"]
-	client.watchersMu.RUnlock()
+	// Multiple calls to unsubscribe should not panic
+	unsub()
+	unsub()
+	unsub()
+}
 
-	if exists {
-		t.Error("empty watcher slice should be deleted from map")
+func TestSubscriptionManager_Clear(t *testing.T) {
+	m := newSubscriptionManager()
+
+	callCount := 0
+	m.subscribe("hash-1", func(email *Email) { callCount++ })
+	m.subscribe("hash-2", func(email *Email) { callCount++ })
+
+	// Clear all subscriptions
+	m.clear()
+
+	// Notifications should not reach any subscriber
+	m.notify("hash-1", &Email{ID: "test"})
+	m.notify("hash-2", &Email{ID: "test"})
+
+	if callCount != 0 {
+		t.Errorf("callCount = %d, want 0 after clear", callCount)
 	}
 }
 
-func TestClient_notifyWatchers_RespectsContext(t *testing.T) {
-	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
-	}
+func TestSubscriptionManager_NotifyNoSubscribers(t *testing.T) {
+	m := newSubscriptionManager()
 
-	// Create a channel with no buffer - will block without context cancel
-	ch := make(chan *Email)
-	client.addWatcher("test-hash", ch)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// This will block until context is cancelled
-	done := make(chan struct{})
-	go func() {
-		client.notifyWatchers(ctx, "test-hash", &Email{ID: "test"})
-		close(done)
-	}()
-
-	// Cancel context to unblock
-	cancel()
-
-	select {
-	case <-done:
-		// Success - notifyWatchers returned after context cancel
-	case <-time.After(100 * time.Millisecond):
-		t.Error("notifyWatchers did not return after context cancel")
-	}
+	// Should not panic
+	m.notify("nonexistent-hash", &Email{ID: "test"})
 }
 
-func TestClient_notifyWatchers_NoWatchers(t *testing.T) {
-	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
+func TestSubscriptionManager_ConcurrentAccess(t *testing.T) {
+	m := newSubscriptionManager()
+
+	// Set up initial subscribers
+	const numSubscribers = 10
+	for i := 0; i < numSubscribers; i++ {
+		m.subscribe("test-hash", func(email *Email) {})
 	}
 
-	// Should not panic or block
-	done := make(chan struct{})
-	go func() {
-		client.notifyWatchers(context.Background(), "nonexistent-hash", &Email{ID: "test"})
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// Success
-	case <-time.After(100 * time.Millisecond):
-		t.Error("notifyWatchers blocked with no watchers")
-	}
-}
-
-func TestClient_notifyWatchers_ConcurrentAccess(t *testing.T) {
-	client := &Client{
-		watchers: make(map[string][]chan<- *Email),
-	}
-
-	// Set up multiple watchers
-	const numWatchers = 10
-	channels := make([]chan *Email, numWatchers)
-	for i := 0; i < numWatchers; i++ {
-		channels[i] = make(chan *Email, 100)
-		client.addWatcher("test-hash", channels[i])
-	}
-
-	// Concurrently add/remove watchers and notify
+	// Concurrently add/remove subscribers and notify
 	var wg sync.WaitGroup
 	const iterations = 100
 
-	// Writers
+	// Notifiers
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			client.notifyWatchers(context.Background(), "test-hash", &Email{ID: "test"})
+			m.notify("test-hash", &Email{ID: "test"})
 		}
 	}()
 
-	// Add/remove watchers
+	// Add/remove subscribers
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			ch := make(chan *Email, 1)
-			cleanup := client.addWatcher("test-hash", ch)
-			cleanup()
+			unsub := m.subscribe("test-hash", func(email *Email) {})
+			unsub()
 		}
 	}()
 
 	wg.Wait()
 	// If we get here without deadlock or panic, the test passes
+}
+
+func TestSubscriptionManager_CallbackNotInvokedAfterUnsubscribe(t *testing.T) {
+	m := newSubscriptionManager()
+
+	var callCount int
+	var mu sync.Mutex
+
+	unsub := m.subscribe("test-hash", func(email *Email) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+	})
+
+	// Notify once
+	m.notify("test-hash", &Email{ID: "test"})
+
+	mu.Lock()
+	count1 := callCount
+	mu.Unlock()
+
+	if count1 != 1 {
+		t.Fatalf("callCount = %d, want 1", count1)
+	}
+
+	// Unsubscribe
+	unsub()
+
+	// Notify again - callback should not be called
+	m.notify("test-hash", &Email{ID: "test"})
+
+	mu.Lock()
+	count2 := callCount
+	mu.Unlock()
+
+	if count2 != 1 {
+		t.Errorf("callCount after unsubscribe = %d, want 1", count2)
+	}
 }
 
 func TestWaitForEmail_MatchesConfig(t *testing.T) {

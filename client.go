@@ -35,9 +35,8 @@ type Client struct {
 	mu             sync.RWMutex
 	closed         bool
 
-	// Event handling via channel fan-out
-	watchers   map[string][]chan<- *Email // inboxHash -> channels
-	watchersMu sync.RWMutex
+	// Subscription manager for email notifications
+	subs *subscriptionManager
 
 	strategyCtx    context.Context
 	strategyCancel context.CancelFunc
@@ -157,7 +156,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		serverInfo:     serverInfo,
 		inboxes:        make(map[string]*Inbox),
 		inboxesByHash:  make(map[string]*Inbox),
-		watchers:       make(map[string][]chan<- *Email),
+		subs:           newSubscriptionManager(),
 		strategyCtx:    strategyCtx,
 		strategyCancel: strategyCancel,
 		deliveryCfg:    deliveryCfg,
@@ -488,45 +487,26 @@ func (c *Client) WatchInboxes(ctx context.Context, inboxes ...*Inbox) <-chan *In
 		return ch
 	}
 
-	// Create internal channels for each inbox and forward to the combined channel
-	type watcherInfo struct {
-		inbox   *Inbox
-		ch      chan *Email
-		cleanup func()
-	}
-	watchers := make([]watcherInfo, len(inboxes))
+	// Track unsubscribe functions
+	unsubscribes := make([]func(), 0, len(inboxes))
 
-	for i, inbox := range inboxes {
-		innerCh := make(chan *Email, 16)
-		cleanup := c.addWatcher(inbox.inboxHash, innerCh)
-		watchers[i] = watcherInfo{inbox: inbox, ch: innerCh, cleanup: cleanup}
-	}
-
-	// Forward emails from all inbox channels to the combined channel
-	var wg sync.WaitGroup
-	for _, w := range watchers {
-		w := w
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for email := range w.ch {
-				select {
-				case ch <- &InboxEvent{Inbox: w.inbox, Email: email}:
-				case <-ctx.Done():
-					return
-				}
+	for _, inbox := range inboxes {
+		inbox := inbox
+		unsub := c.subs.subscribe(inbox.inboxHash, func(email *Email) {
+			select {
+			case ch <- &InboxEvent{Inbox: inbox, Email: email}:
+			default:
 			}
-		}()
+		})
+		unsubscribes = append(unsubscribes, unsub)
 	}
 
 	// Cleanup goroutine
 	go func() {
 		<-ctx.Done()
-		for _, w := range watchers {
-			w.cleanup()
-			close(w.ch)
+		for _, unsub := range unsubscribes {
+			unsub()
 		}
-		wg.Wait()
 		close(ch)
 	}()
 
@@ -555,7 +535,7 @@ func (c *Client) syncAllInboxes(ctx context.Context) {
 	}
 }
 
-// syncInbox fetches emails for a single inbox and notifies watchers for each.
+// syncInbox fetches emails for a single inbox and notifies subscribers for each.
 func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
 	// Fetch all emails (decrypted)
 	emails, err := inbox.GetEmails(ctx)
@@ -563,63 +543,9 @@ func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
 		return // Silently ignore errors during sync
 	}
 
-	// Notify watchers for each email
+	// Notify subscribers for each email
 	for _, email := range emails {
-		c.notifyWatchers(ctx, inbox.inboxHash, email)
-	}
-}
-
-// addWatcher registers a channel to receive emails for a specific inbox.
-// Returns a cleanup function that removes the watcher when called.
-func (c *Client) addWatcher(inboxHash string, ch chan<- *Email) func() {
-	c.watchersMu.Lock()
-	c.watchers[inboxHash] = append(c.watchers[inboxHash], ch)
-	c.watchersMu.Unlock()
-
-	return func() {
-		c.removeWatcher(inboxHash, ch)
-	}
-}
-
-// removeWatcher removes a channel from the watchers list.
-func (c *Client) removeWatcher(inboxHash string, ch chan<- *Email) {
-	c.watchersMu.Lock()
-	defer c.watchersMu.Unlock()
-
-	watchers := c.watchers[inboxHash]
-	for i, w := range watchers {
-		if w == ch {
-			// Remove by swapping with last element
-			c.watchers[inboxHash] = append(watchers[:i], watchers[i+1:]...)
-			break
-		}
-	}
-	// Clean up empty slices
-	if len(c.watchers[inboxHash]) == 0 {
-		delete(c.watchers, inboxHash)
-	}
-}
-
-// notifyWatchers sends an email to all registered watchers for an inbox.
-// Blocks until each watcher receives the email or context is cancelled.
-func (c *Client) notifyWatchers(ctx context.Context, inboxHash string, email *Email) {
-	c.watchersMu.RLock()
-	watchers := c.watchers[inboxHash]
-	if len(watchers) == 0 {
-		c.watchersMu.RUnlock()
-		return
-	}
-	// Copy to avoid holding lock during sends
-	watchersCopy := make([]chan<- *Email, len(watchers))
-	copy(watchersCopy, watchers)
-	c.watchersMu.RUnlock()
-
-	for _, ch := range watchersCopy {
-		select {
-		case ch <- email:
-		case <-ctx.Done():
-			return
-		}
+		c.subs.notify(inbox.inboxHash, email)
 	}
 }
 
@@ -647,8 +573,8 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 		return err
 	}
 
-	// Notify all watchers
-	c.notifyWatchers(ctx, inbox.inboxHash, email)
+	// Notify all subscribers
+	c.subs.notify(inbox.inboxHash, email)
 
 	return nil
 }
@@ -676,12 +602,10 @@ func (c *Client) Close() error {
 		}
 	}
 
-	// Clear inboxes and watchers
+	// Clear inboxes and subscriptions
 	c.inboxes = make(map[string]*Inbox)
 	c.inboxesByHash = make(map[string]*Inbox)
-	c.watchersMu.Lock()
-	c.watchers = make(map[string][]chan<- *Email)
-	c.watchersMu.Unlock()
+	c.subs.clear()
 
 	return nil
 }

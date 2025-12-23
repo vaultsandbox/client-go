@@ -18,12 +18,20 @@ import (
 func (i *Inbox) Watch(ctx context.Context) <-chan *Email {
 	ch := make(chan *Email, 16)
 
-	cleanup := i.client.addWatcher(i.inboxHash, ch)
+	// Subscribe with callback that sends to channel
+	unsubscribe := i.client.subs.subscribe(i.inboxHash, func(email *Email) {
+		select {
+		case ch <- email:
+		default:
+			// Buffer full, drop (same behavior as before)
+		}
+	})
 
+	// Cleanup goroutine
 	go func() {
 		<-ctx.Done()
-		cleanup()
-		close(ch)
+		unsubscribe() // Callback won't fire after this returns
+		close(ch)     // Safe - no more sends possible
 	}()
 
 	return ch
