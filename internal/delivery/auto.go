@@ -54,6 +54,19 @@ func (a *AutoStrategy) Name() string {
 func (a *AutoStrategy) Start(ctx context.Context, inboxes []InboxInfo, handler EventHandler) error {
 	a.handler = handler
 
+	// If no inboxes, start SSE without waiting for connection.
+	// SSE won't attempt to connect until an inbox is added, so there's
+	// nothing to wait for. This avoids blocking for AutoSSETimeout
+	// on every client creation.
+	if len(inboxes) == 0 {
+		sse := NewSSEStrategy(a.cfg)
+		if err := sse.Start(ctx, inboxes, handler); err != nil {
+			return a.startPolling(ctx, inboxes, handler)
+		}
+		a.current = sse
+		return nil
+	}
+
 	// Try SSE first with timeout
 	sse := NewSSEStrategy(a.cfg)
 	err := sse.Start(ctx, inboxes, handler)

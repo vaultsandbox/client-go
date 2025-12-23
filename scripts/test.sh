@@ -68,7 +68,7 @@ if [ "$INTEGRATION" = true ]; then
         exit 1
     fi
     echo "Using API URL: $VAULTSANDBOX_URL"
-    CMD="$CMD -tags=integration -timeout 120s"
+    CMD="$CMD -tags=integration -timeout 10m"
 fi
 
 CMD="$CMD ./..."
