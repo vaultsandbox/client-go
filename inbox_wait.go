@@ -2,6 +2,7 @@ package vaultsandbox
 
 import (
 	"context"
+	"fmt"
 )
 
 // Watch returns a channel that receives emails as they arrive.
@@ -79,6 +80,13 @@ func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, e
 // It uses the client's callback infrastructure to receive instant notifications
 // when SSE is active, or receives events when the polling handler fires.
 func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOption) ([]*Email, error) {
+	if count < 0 {
+		return nil, fmt.Errorf("count must be non-negative, got %d", count)
+	}
+	if count == 0 {
+		return []*Email{}, nil
+	}
+
 	cfg := &waitConfig{
 		timeout: defaultWaitTimeout,
 	}
