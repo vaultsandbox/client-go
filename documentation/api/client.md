@@ -5,6 +5,17 @@ description: Complete API reference for the VaultSandbox Client
 
 The `Client` is the main entry point for interacting with the VaultSandbox Gateway. It handles authentication, inbox creation, and provides utility methods for managing inboxes.
 
+## Constants
+
+TTL (time-to-live) constants for inbox creation:
+
+```go
+const (
+    MinTTL = 60 * time.Second      // Minimum TTL: 1 minute
+    MaxTTL = 604800 * time.Second  // Maximum TTL: 7 days
+)
+```
+
 ## Constructor
 
 ```go
@@ -37,6 +48,38 @@ WithRetryOn(statusCodes []int) Option
 | `WithTimeout`         | `time.Duration`     | `60s`                              | Request timeout                            |
 | `WithRetries`         | `int`               | `3`                                | Maximum retry attempts for HTTP requests   |
 | `WithRetryOn`         | `[]int`             | `[408, 429, 500, 502, 503, 504]`   | HTTP status codes that trigger a retry     |
+
+#### Polling Configuration Options
+
+For advanced control over polling behavior, use `WithPollingConfig` or individual polling options:
+
+```go
+// Polling configuration struct
+type PollingConfig struct {
+    InitialInterval      time.Duration // Starting polling interval (default: 2s)
+    MaxBackoff           time.Duration // Maximum polling interval (default: 30s)
+    BackoffMultiplier    float64       // Interval multiplier after no changes (default: 1.5)
+    JitterFactor         float64       // Randomness factor to prevent synchronized polling (default: 0.3)
+    SSEConnectionTimeout time.Duration // Timeout for SSE before falling back to polling (default: 5s)
+}
+
+// Available polling options
+WithPollingConfig(cfg PollingConfig) Option
+WithPollingInitialInterval(interval time.Duration) Option
+WithPollingMaxBackoff(maxBackoff time.Duration) Option
+WithPollingBackoffMultiplier(multiplier float64) Option
+WithPollingJitterFactor(factor float64) Option
+WithSSEConnectionTimeout(timeout time.Duration) Option
+```
+
+| Option                       | Type            | Default | Description                                              |
+| ---------------------------- | --------------- | ------- | -------------------------------------------------------- |
+| `WithPollingConfig`          | `PollingConfig` | -       | Set all polling options at once                          |
+| `WithPollingInitialInterval` | `time.Duration` | `2s`    | Starting polling interval                                |
+| `WithPollingMaxBackoff`      | `time.Duration` | `30s`   | Maximum polling interval after backoff                   |
+| `WithPollingBackoffMultiplier` | `float64`     | `1.5`   | Multiplier for interval after each poll with no changes  |
+| `WithPollingJitterFactor`    | `float64`       | `0.3`   | Random jitter factor (30%) to prevent synchronized polling |
+| `WithSSEConnectionTimeout`   | `time.Duration` | `5s`    | Timeout for SSE connection in auto mode before fallback  |
 
 #### Delivery Strategies
 
@@ -575,6 +618,105 @@ func TestMain(m *testing.M) {
 
     client.Close()
     os.Exit(code)
+}
+```
+
+## Errors
+
+The client package exports sentinel errors for use with `errors.Is()` checks, as well as error types for detailed error handling.
+
+### Sentinel Errors
+
+```go
+var (
+    ErrMissingAPIKey      error // No API key provided
+    ErrClientClosed       error // Operations attempted on a closed client
+    ErrUnauthorized       error // Invalid or expired API key
+    ErrInboxNotFound      error // Inbox not found
+    ErrEmailNotFound      error // Email not found
+    ErrInboxAlreadyExists error // Inbox already exists (import conflict)
+    ErrInvalidImportData  error // Invalid or corrupted import data
+    ErrDecryptionFailed   error // Email decryption failed
+    ErrSignatureInvalid   error // Signature verification failed
+    ErrRateLimited        error // API rate limit exceeded
+)
+```
+
+#### Example
+
+```go
+inbox, err := client.CreateInbox(ctx)
+if errors.Is(err, vaultsandbox.ErrUnauthorized) {
+    log.Fatal("Invalid API key")
+}
+if errors.Is(err, vaultsandbox.ErrRateLimited) {
+    log.Println("Rate limited, retrying...")
+}
+```
+
+### Error Types
+
+#### APIError
+
+Represents an HTTP error from the VaultSandbox API.
+
+```go
+type APIError struct {
+    StatusCode int    // HTTP status code
+    Message    string // Error message from server
+    RequestID  string // Request ID for support
+}
+```
+
+#### NetworkError
+
+Represents a network-level failure.
+
+```go
+type NetworkError struct {
+    Err error // Underlying network error
+}
+```
+
+#### SignatureVerificationError
+
+Indicates signature verification failed, including potential server key mismatch (MITM detection).
+
+```go
+type SignatureVerificationError struct {
+    Message string
+}
+```
+
+### ResourceType
+
+Used to identify which resource type an error relates to:
+
+```go
+type ResourceType string
+
+const (
+    ResourceUnknown ResourceType = ""      // Resource type not specified
+    ResourceInbox   ResourceType = "inbox" // Error relates to an inbox
+    ResourceEmail   ResourceType = "email" // Error relates to an email
+)
+```
+
+#### Example: Type Assertions
+
+```go
+email, err := inbox.GetEmail(ctx, emailID)
+if err != nil {
+    var apiErr *vaultsandbox.APIError
+    if errors.As(err, &apiErr) {
+        log.Printf("API error %d: %s (request: %s)",
+            apiErr.StatusCode, apiErr.Message, apiErr.RequestID)
+    }
+
+    var netErr *vaultsandbox.NetworkError
+    if errors.As(err, &netErr) {
+        log.Printf("Network error: %v", netErr.Err)
+    }
 }
 ```
 

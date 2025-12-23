@@ -420,8 +420,7 @@ func (c *Client) CheckKey(ctx context.Context) error {
 	return c.apiClient.CheckKey(ctx)
 }
 
-// ExportInboxToFile exports an inbox to a JSON file.
-// The inbox can be specified by its email address or by passing an *Inbox directly.
+// ExportInboxToFile exports an inbox to a JSON file with secure permissions (0600).
 func (c *Client) ExportInboxToFile(inbox *Inbox, filePath string) error {
 	if inbox == nil {
 		return fmt.Errorf("inbox is nil")

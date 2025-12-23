@@ -245,12 +245,12 @@ client, err := vaultsandbox.New(
 
 The polling strategy uses these configuration values (defined in the `delivery` package):
 
-| Constant                   | Value | Description                                |
-| -------------------------- | ----- | ------------------------------------------ |
-| `PollingInitialInterval`   | 2s    | Starting interval between polls            |
-| `PollingMaxBackoff`        | 30s   | Maximum interval between polls             |
-| `PollingBackoffMultiplier` | 1.5   | Multiplier for adaptive backoff            |
-| `PollingJitterFactor`      | 0.3   | Random jitter to prevent thundering herd   |
+| Constant                          | Value | Description                                |
+| --------------------------------- | ----- | ------------------------------------------ |
+| `DefaultPollingInitialInterval`   | 2s    | Starting interval between polls            |
+| `DefaultPollingMaxBackoff`        | 30s   | Maximum interval between polls             |
+| `DefaultPollingBackoffMultiplier` | 1.5   | Multiplier for adaptive backoff            |
+| `DefaultPollingJitterFactor`      | 0.3   | Random jitter to prevent thundering herd   |
 
 ### Adaptive Backoff
 
