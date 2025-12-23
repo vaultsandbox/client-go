@@ -40,12 +40,6 @@ type Client struct {
 
 	strategyCtx    context.Context
 	strategyCancel context.CancelFunc
-
-	// Auto mode fallback support
-	deliveryCfg      delivery.Config  // Stored config for creating fallback strategies
-	autoMode         bool             // True if using auto mode
-	autoChecked      bool             // True if auto mode SSE check has been performed
-	sseTimeout       time.Duration    // Timeout for SSE connection in auto mode
 }
 
 // buildAPIClient creates and configures an API client from the given config.
@@ -76,7 +70,6 @@ func buildAPIClient(apiKey string, cfg *clientConfig) (*api.Client, error) {
 }
 
 // createDeliveryStrategy creates a delivery strategy based on the config.
-// For StrategyAuto, it returns an SSE strategy that will be tested for connectivity.
 func createDeliveryStrategy(cfg *clientConfig, apiClient *api.Client) delivery.Strategy {
 	deliveryCfg := delivery.Config{
 		APIClient:                apiClient,
@@ -92,8 +85,7 @@ func createDeliveryStrategy(cfg *clientConfig, apiClient *api.Client) delivery.S
 	case StrategyPolling:
 		return delivery.NewPollingStrategy(deliveryCfg)
 	default:
-		// For auto mode, start with SSE - fallback is handled in New()
-		return delivery.NewSSEStrategy(deliveryCfg)
+		return delivery.NewAutoStrategy(deliveryCfg)
 	}
 }
 
@@ -132,21 +124,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("fetch server info: %w", err)
 	}
 
-	deliveryCfg := delivery.Config{
-		APIClient:                apiClient,
-		PollingInitialInterval:   cfg.pollingInitialInterval,
-		PollingMaxBackoff:        cfg.pollingMaxBackoff,
-		PollingBackoffMultiplier: cfg.pollingBackoffMultiplier,
-		PollingJitterFactor:      cfg.pollingJitterFactor,
-		SSEConnectionTimeout:     cfg.sseConnectionTimeout,
-	}
 	strategy := createDeliveryStrategy(cfg, apiClient)
-
-	// Determine SSE connection timeout for auto mode
-	sseTimeout := cfg.sseConnectionTimeout
-	if sseTimeout == 0 {
-		sseTimeout = delivery.DefaultSSEConnectionTimeout
-	}
 
 	strategyCtx, strategyCancel := context.WithCancel(context.Background())
 
@@ -159,9 +137,6 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		subs:           newSubscriptionManager(),
 		strategyCtx:    strategyCtx,
 		strategyCancel: strategyCancel,
-		deliveryCfg:    deliveryCfg,
-		autoMode:       cfg.deliveryStrategy == StrategyAuto,
-		sseTimeout:     sseTimeout,
 	}
 
 	// Start the strategy with an event handler
@@ -219,7 +194,6 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 	c.mu.Lock()
 	c.inboxes[inbox.emailAddress] = inbox
 	c.inboxesByHash[inbox.inboxHash] = inbox
-	isFirstInbox := len(c.inboxes) == 1
 	c.mu.Unlock()
 
 	// Add to delivery strategy
@@ -228,75 +202,7 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 		EmailAddress: inbox.emailAddress,
 	})
 
-	// Handle auto mode: check SSE connection on first inbox
-	if c.autoMode && isFirstInbox && !c.autoChecked {
-		c.checkAutoModeConnection()
-	}
-
 	return inbox, nil
-}
-
-// checkAutoModeConnection checks if the SSE connection is established in auto mode.
-// If SSE doesn't connect within the timeout, falls back to polling.
-func (c *Client) checkAutoModeConnection() {
-	c.mu.Lock()
-	if c.autoChecked {
-		c.mu.Unlock()
-		return
-	}
-	c.autoChecked = true
-	c.mu.Unlock()
-
-	// Try to get the SSE strategy's Connected channel
-	sseStrategy, ok := c.strategy.(*delivery.SSEStrategy)
-	if !ok {
-		// Not an SSE strategy, nothing to check
-		return
-	}
-
-	// Wait for SSE connection with timeout
-	select {
-	case <-sseStrategy.Connected():
-		// SSE connected successfully, keep using it
-		return
-	case <-time.After(c.sseTimeout):
-		// SSE didn't connect in time, fall back to polling
-		c.fallbackToPolling()
-	case <-c.strategyCtx.Done():
-		// Context canceled, don't switch
-		return
-	}
-}
-
-// fallbackToPolling switches from SSE to polling strategy.
-func (c *Client) fallbackToPolling() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Stop current strategy
-	if c.strategy != nil {
-		c.strategy.Stop()
-	}
-
-	// Collect current inboxes to re-add to new strategy
-	inboxInfos := make([]delivery.InboxInfo, 0, len(c.inboxes))
-	for _, inbox := range c.inboxes {
-		inboxInfos = append(inboxInfos, delivery.InboxInfo{
-			Hash:         inbox.inboxHash,
-			EmailAddress: inbox.emailAddress,
-		})
-	}
-
-	// Create and start polling strategy
-	pollingStrategy := delivery.NewPollingStrategy(c.deliveryCfg)
-	if err := pollingStrategy.Start(c.strategyCtx, inboxInfos, c.handleSSEEvent); err != nil {
-		// Polling failed to start - this is unusual, keep SSE
-		return
-	}
-
-	// Switch to polling
-	c.strategy = pollingStrategy
-	c.strategy.OnReconnect(c.syncAllInboxes)
 }
 
 // ImportInbox imports a previously exported inbox.
@@ -332,7 +238,6 @@ func (c *Client) ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, 
 	c.mu.Lock()
 	c.inboxes[inbox.emailAddress] = inbox
 	c.inboxesByHash[inbox.inboxHash] = inbox
-	isFirstInbox := len(c.inboxes) == 1
 	c.mu.Unlock()
 
 	// Add to delivery strategy
@@ -340,11 +245,6 @@ func (c *Client) ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, 
 		Hash:         inbox.inboxHash,
 		EmailAddress: inbox.emailAddress,
 	})
-
-	// Handle auto mode: check SSE connection on first inbox
-	if c.autoMode && isFirstInbox && !c.autoChecked {
-		c.checkAutoModeConnection()
-	}
 
 	return inbox, nil
 }
