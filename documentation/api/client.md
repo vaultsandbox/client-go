@@ -260,22 +260,31 @@ func TestMain(m *testing.M) {
 
 ---
 
-### MonitorInboxes
+### WatchInboxes
 
-Monitors multiple inboxes simultaneously and invokes callbacks when new emails arrive.
+Returns a channel that receives events from multiple inboxes. The channel closes when the context is cancelled.
 
 ```go
-func (c *Client) MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error)
+func (c *Client) WatchInboxes(ctx context.Context, inboxes ...*Inbox) <-chan *InboxEvent
 ```
 
 #### Parameters
 
-- `inboxes`: Slice of inbox instances to monitor
+- `ctx`: Context for cancellation - when cancelled, the channel closes and all watchers are cleaned up
+- `inboxes`: Variadic list of inbox instances to watch
 
 #### Returns
 
-- `*InboxMonitor` - Monitor for managing email callbacks
-- `error` - Any error that occurred
+- `<-chan *InboxEvent` - Receive-only channel of inbox events
+
+#### InboxEvent Type
+
+```go
+type InboxEvent struct {
+    Inbox *Inbox  // The inbox that received the email
+    Email *Email  // The received email
+}
+```
 
 #### Example
 
@@ -283,23 +292,22 @@ func (c *Client) MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error)
 inbox1, _ := client.CreateInbox(ctx)
 inbox2, _ := client.CreateInbox(ctx)
 
-monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-if err != nil {
-    log.Fatal(err)
+watchCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+defer cancel()
+
+for event := range client.WatchInboxes(watchCtx, inbox1, inbox2) {
+    fmt.Printf("New email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
 }
-
-sub := monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-    fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
-})
-
-// Later, stop monitoring
-sub.Unsubscribe()
-
-// Or stop all monitoring
-monitor.Unsubscribe()
 ```
 
-See [InboxMonitor API](/api/inbox-go#inboxmonitor) for more details.
+#### Behavior
+
+- Returns immediately closed channel if no inboxes provided
+- Channel has buffer size of 16
+- Non-blocking sends: if channel buffer is full, events may be dropped
+- All internal goroutines and watchers are cleaned up when context is cancelled
+
+See [Real-time Monitoring Guide](/client-go/guides/real-time/) for more details.
 
 ---
 
@@ -508,11 +516,13 @@ if err != nil {
 
 fmt.Printf("Imported inbox: %s\n", inbox.EmailAddress())
 
-// Subscribe to new emails
-sub := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+// Watch for new emails
+watchCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+defer cancel()
+
+for email := range inbox.Watch(watchCtx) {
     fmt.Printf("New email: %s\n", email.Subject)
-})
-defer sub.Unsubscribe()
+}
 ```
 
 #### Use Cases

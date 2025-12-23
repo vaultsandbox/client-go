@@ -403,7 +403,7 @@ func TestMultipleNotificationEmails(t *testing.T) {
 
 ### Real-time Monitoring
 
-For scenarios where you need to process emails as they arrive without blocking, you can use the `OnNewEmail` subscription.
+For scenarios where you need to process emails as they arrive, use the channel-based `Watch()` method. Context cancellation controls the lifecycle.
 
 ```go
 package main
@@ -437,19 +437,23 @@ func main() {
 
     fmt.Printf("Watching for emails at: %s\n", inbox.EmailAddress())
 
-    // Subscribe to new emails
-    subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-        fmt.Printf("New email received: %q\n", email.Subject)
-        // Process the email here...
-    })
+    // Create cancellable context for watching
+    watchCtx, cancel := context.WithCancel(ctx)
 
-    // Wait for interrupt signal
+    // Handle interrupt signal
     sigChan := make(chan os.Signal, 1)
     signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-    <-sigChan
+    go func() {
+        <-sigChan
+        cancel() // Stop watching on interrupt
+    }()
 
-    // Stop listening for emails
-    subscription.Unsubscribe()
+    // Watch for new emails via channel
+    for email := range inbox.Watch(watchCtx) {
+        fmt.Printf("New email received: %q\n", email.Subject)
+        // Process the email here...
+    }
+
     fmt.Println("Stopped monitoring")
 }
 ```
@@ -485,21 +489,23 @@ func New(apiKey string, opts ...Option) (*Client, error)
 - `Inboxes() []*Inbox` — Gets all managed inboxes
 - `ServerInfo() *ServerInfo` — Gets server information
 - `CheckKey(ctx) error` — Validates API key
-- `MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error)` — Monitors multiple inboxes and calls registered callbacks when a new email arrives in any of them
+- `WatchInboxes(ctx, inboxes ...*Inbox) <-chan *InboxEvent` — Returns a channel that receives events from multiple inboxes; closes when context is cancelled
 - `ExportInboxToFile(inbox *Inbox, filePath string) error` — Exports an inbox to a JSON file
 - `ImportInboxFromFile(ctx, filePath string) (*Inbox, error)` — Imports an inbox from a JSON file
 - `Close() error` — Closes the client, terminates any active SSE or polling connections, and cleans up resources
 
 **Inbox Import/Export:** For advanced use cases like test reproducibility or sharing inboxes between environments, you can export an inbox (including its encryption keys) to a JSON file and import it later. This allows you to persist inboxes across test runs or share them with other tools.
 
-### InboxMonitor
+### InboxEvent
 
-An event handler for monitoring multiple inboxes simultaneously. Returned by `Client.MonitorInboxes()`.
+Event struct returned when watching multiple inboxes via `Client.WatchInboxes()`.
 
-#### Methods
-
-- `OnEmail(callback func(inbox *Inbox, email *Email)) Subscription` — Subscribe to email events
-- `Unsubscribe()` — Unsubscribe from all inboxes and stop monitoring
+```go
+type InboxEvent struct {
+    Inbox *Inbox  // The inbox that received the email
+    Email *Email  // The received email
+}
+```
 
 #### Example
 
@@ -507,20 +513,15 @@ An event handler for monitoring multiple inboxes simultaneously. Returned by `Cl
 inbox1, _ := client.CreateInbox(ctx)
 inbox2, _ := client.CreateInbox(ctx)
 
-monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-if err != nil {
-    log.Fatal(err)
-}
+fmt.Printf("Watching inboxes: %s, %s\n", inbox1.EmailAddress(), inbox2.EmailAddress())
 
-fmt.Printf("Monitoring inboxes: %s, %s\n", inbox1.EmailAddress(), inbox2.EmailAddress())
+watchCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+defer cancel()
 
-subscription := monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-    fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
+for event := range client.WatchInboxes(watchCtx, inbox1, inbox2) {
+    fmt.Printf("New email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
     // Further processing...
-})
-
-// Later, to stop monitoring all inboxes:
-// monitor.Unsubscribe()
+}
 ```
 
 ### Inbox
@@ -540,7 +541,7 @@ Represents a single email inbox.
 - `GetEmail(ctx, emailID string) (*Email, error)` — Gets a specific email
 - `WaitForEmail(ctx, opts ...WaitOption) (*Email, error)` — Waits for an email matching criteria
 - `WaitForEmailCount(ctx, count int, opts ...WaitOption) ([]*Email, error)` — Waits until the inbox has at least the specified number of emails
-- `OnNewEmail(callback func(*Email)) Subscription` — Subscribes to new emails in real-time. Returns a subscription with an `Unsubscribe()` method
+- `Watch(ctx) <-chan *Email` — Returns a channel that receives emails as they arrive; closes when context is cancelled
 - `GetSyncStatus(ctx) (*SyncStatus, error)` — Gets inbox sync status
 - `GetRawEmail(ctx, emailID string) (string, error)` — Gets the raw, decrypted source of a specific email
 - `MarkEmailAsRead(ctx, emailID string) error` — Marks email as read
@@ -679,18 +680,13 @@ The following sentinel errors may be returned:
 - **`ErrInvalidImportData`** — Imported inbox data fails validation
 - **`ErrDecryptionFailed`** — Client fails to decrypt an email
 - **`ErrSignatureInvalid`** — Cryptographic signature verification failed (potential MITM)
-- **`ErrSSEConnection`** — Server-Sent Events connection error
-- **`ErrInboxExpired`** — Inbox has expired
 - **`ErrRateLimited`** — API rate limit exceeded (HTTP 429)
 
 **Error Structs:**
 
 - **`APIError`** — HTTP API errors with `StatusCode`, `Message`, `RequestID`, and `ResourceType` fields
 - **`NetworkError`** — Network-level failures with `Err`, `URL`, and `Attempt` fields
-- **`TimeoutError`** — Operation timeouts with `Operation` and `Timeout` fields
-- **`DecryptionError`** — Decryption failures with `Stage` and `Message` fields
-- **`SignatureVerificationError`** — Signature failures
-- **`SSEError`** — SSE connection failures with `Attempts` field
+- **`SignatureVerificationError`** — Signature/key mismatch failures with `Message` and `IsKeyMismatch` fields
 
 ### Example
 
@@ -727,15 +723,13 @@ func main() {
 
     fmt.Printf("Send email to: %s\n", inbox.EmailAddress())
 
-    // This might return a TimeoutError
     email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(5*time.Second))
     if err != nil {
-        var timeoutErr *vaultsandbox.TimeoutError
         var apiErr *vaultsandbox.APIError
 
         switch {
-        case errors.As(err, &timeoutErr):
-            fmt.Printf("Timed out waiting for email: %s\n", timeoutErr.Error())
+        case errors.Is(err, context.DeadlineExceeded):
+            fmt.Println("Timed out waiting for email")
         case errors.As(err, &apiErr):
             fmt.Printf("API Error (%d): %s\n", apiErr.StatusCode, apiErr.Message)
         case errors.Is(err, vaultsandbox.ErrSignatureInvalid):

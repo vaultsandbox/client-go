@@ -158,22 +158,17 @@ func main() {
     }
     defer inbox.Delete(ctx)
 
-    // Real-time subscription (uses SSE)
-    subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+    // Create cancellable context for watching
+    watchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+    defer cancel()
+
+    // Real-time watching (uses SSE)
+    for email := range inbox.Watch(watchCtx) {
         fmt.Printf("Instant notification: %s\n", email.Subject)
-    })
-    defer subscription.Unsubscribe()
-
-    // Waiting also uses SSE (faster than polling)
-    email, err := inbox.WaitForEmail(ctx,
-        vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Welcome`)),
-        vaultsandbox.WithWaitTimeout(10*time.Second),
-    )
-    if err != nil {
-        panic(err)
+        if strings.Contains(email.Subject, "Welcome") {
+            break
+        }
     }
-
-    fmt.Printf("Received: %s\n", email.Subject)
 }
 ```
 
@@ -202,13 +197,24 @@ When using SSE, the SDK automatically handles adding new inboxes after the conne
 This means you can safely add inboxes dynamically without any manual intervention:
 
 ```go
-// Create initial inbox and start listening
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+// Create initial inbox and start watching
 inbox1, _ := client.CreateInbox(ctx)
-subscription := inbox1.OnNewEmail(handler)
+go func() {
+    for email := range inbox1.Watch(ctx) {
+        handler(email)
+    }
+}()
 
 // Later, add another inbox - events start flowing automatically
 inbox2, _ := client.CreateInbox(ctx)
-subscription2 := inbox2.OnNewEmail(handler)
+go func() {
+    for email := range inbox2.Watch(ctx) {
+        handler(email)
+    }
+}()
 
 // Both inboxes now receive real-time events
 ```
@@ -297,22 +303,17 @@ func main() {
     }
     defer inbox.Delete(ctx)
 
-    // Polling-based subscription
-    subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+    // Create cancellable context for watching
+    watchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+    defer cancel()
+
+    // Polling-based watching
+    for email := range inbox.Watch(watchCtx) {
         fmt.Printf("Polled notification: %s\n", email.Subject)
-    })
-    defer subscription.Unsubscribe()
-
-    // Waiting uses polling
-    email, err := inbox.WaitForEmail(ctx,
-        vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Welcome`)),
-        vaultsandbox.WithWaitTimeout(10*time.Second),
-    )
-    if err != nil {
-        panic(err)
+        if strings.Contains(email.Subject, "Welcome") {
+            break
+        }
     }
-
-    fmt.Printf("Received: %s\n", email.Subject)
 }
 ```
 
@@ -563,21 +564,22 @@ client, err := vaultsandbox.New(
 )
 if err != nil {
     // Handle initialization error
-    if errors.Is(err, vaultsandbox.ErrSSEConnection) {
-        fmt.Println("SSE not available, but auto strategy fell back to polling")
+    var netErr *vaultsandbox.NetworkError
+    if errors.As(err, &netErr) {
+        fmt.Printf("Network error: %v\n", netErr.Err)
     }
 }
 
-// For explicit SSE strategy, handle potential errors
+// For explicit SSE strategy, the SDK will fall back to polling on failure
 client, err = vaultsandbox.New(
     os.Getenv("VAULTSANDBOX_API_KEY"),
     vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE),
 )
 if err != nil {
-    var sseErr *vaultsandbox.SSEError
-    if errors.As(err, &sseErr) {
-        fmt.Printf("SSE failed after %d attempts: %v\n", sseErr.Attempts, sseErr.Err)
-        // Consider falling back to polling manually
+    var netErr *vaultsandbox.NetworkError
+    if errors.As(err, &netErr) {
+        fmt.Printf("Connection failed: %v\n", netErr.Err)
+        // Consider using polling strategy
     }
 }
 ```
@@ -687,13 +689,17 @@ Always close clients and unsubscribe from subscriptions:
 client, _ := vaultsandbox.New(os.Getenv("VAULTSANDBOX_API_KEY"))
 defer client.Close()
 
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
 inbox, _ := client.CreateInbox(ctx)
 defer inbox.Delete(ctx)
 
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-    fmt.Println(email.Subject)
-})
-defer subscription.Unsubscribe()
+go func() {
+    for email := range inbox.Watch(ctx) {
+        fmt.Println(email.Subject)
+    }
+}()
 ```
 
 ### 5. Handle Errors Appropriately
@@ -709,9 +715,7 @@ if err != nil {
     case errors.Is(err, context.DeadlineExceeded):
         fmt.Println("Timeout waiting for email")
     case errors.Is(err, vaultsandbox.ErrInboxNotFound):
-        fmt.Println("Inbox was deleted")
-    case errors.Is(err, vaultsandbox.ErrInboxExpired):
-        fmt.Println("Inbox has expired")
+        fmt.Println("Inbox was deleted or has expired")
     default:
         fmt.Printf("Unexpected error: %v\n", err)
     }

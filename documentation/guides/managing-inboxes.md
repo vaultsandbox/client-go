@@ -921,12 +921,6 @@ if errors.Is(err, vaultsandbox.ErrDecryptionFailed) {
 if errors.Is(err, vaultsandbox.ErrSignatureInvalid) {
 	// Email signature verification failed
 }
-if errors.Is(err, vaultsandbox.ErrSSEConnection) {
-	// Server-Sent Events connection failed
-}
-if errors.Is(err, vaultsandbox.ErrInboxExpired) {
-	// Inbox has passed its expiration time
-}
 if errors.Is(err, vaultsandbox.ErrRateLimited) {
 	// API rate limit exceeded
 }
@@ -953,46 +947,18 @@ if errors.As(err, &netErr) {
 	fmt.Printf("Cause: %v\n", netErr.Err)
 }
 
-// TimeoutError - Operation exceeded deadline
-var timeoutErr *vaultsandbox.TimeoutError
-if errors.As(err, &timeoutErr) {
-	fmt.Printf("Operation: %s\n", timeoutErr.Operation)
-	fmt.Printf("Timeout: %v\n", timeoutErr.Timeout)
-}
-
-// DecryptionError - Email decryption failure
-var decryptErr *vaultsandbox.DecryptionError
-if errors.As(err, &decryptErr) {
-	fmt.Printf("Stage: %s\n", decryptErr.Stage) // "kem", "hkdf", or "aes"
-	fmt.Printf("Message: %s\n", decryptErr.Message)
-}
-
 // SignatureVerificationError - Signature check failed
 var sigErr *vaultsandbox.SignatureVerificationError
 if errors.As(err, &sigErr) {
 	fmt.Printf("Message: %s\n", sigErr.Message)
-}
-
-// SSEError - Server-Sent Events connection failure
-var sseErr *vaultsandbox.SSEError
-if errors.As(err, &sseErr) {
-	fmt.Printf("Attempts: %d\n", sseErr.Attempts)
-	fmt.Printf("Cause: %v\n", sseErr.Err)
-}
-
-// ValidationError - Input validation failures
-var valErr *vaultsandbox.ValidationError
-if errors.As(err, &valErr) {
-	for _, e := range valErr.Errors {
-		fmt.Println("Validation error:", e)
+	if sigErr.IsKeyMismatch {
+		fmt.Println("Server key mismatch detected")
 	}
 }
 
-// StrategyError - Delivery strategy failure
-var stratErr *vaultsandbox.StrategyError
-if errors.As(err, &stratErr) {
-	fmt.Printf("Message: %s\n", stratErr.Message)
-	fmt.Printf("Cause: %v\n", stratErr.Err)
+// Timeouts - use context.DeadlineExceeded
+if errors.Is(err, context.DeadlineExceeded) {
+	fmt.Println("Operation timed out")
 }
 ```
 

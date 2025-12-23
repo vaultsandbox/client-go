@@ -542,25 +542,22 @@ inbox, err := client.ImportInboxFromFile(ctx, "/path/to/inbox.json")
 
 **Signature**: `ImportInboxFromFile(ctx context.Context, filePath string) (*Inbox, error)`
 
-### MonitorInboxes()
+### WatchInboxes()
 
-Create a monitor that watches multiple inboxes for new emails:
+Watch multiple inboxes for new emails via a channel:
 
 ```go
-monitor, err := client.MonitorInboxes([]*Inbox{inbox1, inbox2})
-if err != nil {
-	log.Fatal(err)
-}
-defer monitor.Unsubscribe()
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
 
-monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-	fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
-})
+for event := range client.WatchInboxes(ctx, inbox1, inbox2) {
+	fmt.Printf("New email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
+}
 ```
 
-**Signature**: `MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error)`
+**Signature**: `WatchInboxes(ctx context.Context, inboxes ...*Inbox) <-chan *InboxEvent`
 
-**Returns**: An `*InboxMonitor` that can register callbacks for email events.
+**Returns**: A receive-only channel of `*InboxEvent` that closes when context is cancelled.
 
 ### Close()
 
@@ -729,20 +726,22 @@ data := inbox.Export()
 
 **Warning**: The returned data contains private key material. Handle securely.
 
-### OnNewEmail()
+### Watch()
 
-Subscribe to new email notifications:
+Watch for new email notifications via a channel:
 
 ```go
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+for email := range inbox.Watch(ctx) {
 	fmt.Printf("New email: %s\n", email.Subject)
-})
-defer subscription.Unsubscribe()
+}
 ```
 
-**Signature**: `OnNewEmail(callback InboxEmailCallback) Subscription`
+**Signature**: `Watch(ctx context.Context) <-chan *Email`
 
-**Returns**: A `Subscription` that can be used to unsubscribe.
+**Returns**: A receive-only channel of `*Email` that closes when context is cancelled.
 
 ## Email Operations
 
@@ -859,28 +858,15 @@ type ExportedInbox struct {
 
 **Warning**: Contains private key material. Handle securely.
 
-### Subscription
+### InboxEvent
 
-Interface for active subscriptions:
-
-```go
-type Subscription interface {
-	Unsubscribe()
-}
-```
-
-### InboxMonitor
-
-Monitors multiple inboxes for new emails:
+Event struct returned when watching multiple inboxes:
 
 ```go
-type InboxMonitor struct {
-	// Internal fields
+type InboxEvent struct {
+	Inbox *Inbox  // The inbox that received the email
+	Email *Email  // The received email
 }
-
-// Methods:
-// OnEmail(callback EmailCallback) Subscription
-// Unsubscribe()
 ```
 
 ## Strategy Selection Guide
@@ -997,30 +983,24 @@ runTests()
 
 **Error Types**:
 
-- `APIError` - HTTP errors from the API with `StatusCode`, `Message`, and `RequestID` fields
+- `APIError` - HTTP errors from the API with `StatusCode`, `Message`, `RequestID`, and `ResourceType` fields
 - `NetworkError` - Network-level failures with `Err` (underlying error), `URL`, and `Attempt` fields
-- `TimeoutError` - Operation deadline exceeded with `Operation` and `Timeout` fields
-- `DecryptionError` - Email decryption failures with `Stage`, `Message`, and `Err` fields
-- `SignatureVerificationError` - Signature verification failures with `Message` field
-- `SSEError` - SSE connection failures with `Err` (underlying error) and `Attempts` fields
-- `ValidationError` - Multiple validation failures with `Errors` ([]string) field
-- `StrategyError` - Delivery strategy failures with `Message` and `Err` fields
+- `SignatureVerificationError` - Signature verification failures with `Message` and `IsKeyMismatch` fields
 
 **Sentinel Errors** (use with `errors.Is()`):
 
 - `ErrMissingAPIKey` - No API key provided to `New()`
+- `ErrClientClosed` - Client has been closed
 - `ErrUnauthorized` - Invalid or expired API key
-- `ErrInboxNotFound` - Inbox does not exist
+- `ErrInboxNotFound` - Inbox does not exist or has expired
 - `ErrEmailNotFound` - Email does not exist
-- `ErrInboxExpired` - Inbox TTL has elapsed
 - `ErrInboxAlreadyExists` - Inbox already exists (when importing duplicate)
 - `ErrInvalidImportData` - Invalid inbox import data
-- `ErrRateLimited` - API rate limit exceeded
 - `ErrDecryptionFailed` - Email decryption failed
 - `ErrSignatureInvalid` - Signature verification failed
-- `ErrSSEConnection` - SSE connection error
-- `ErrInvalidSecretKeySize` - Invalid secret key size
-- `ErrClientClosed` - Client has been closed
+- `ErrRateLimited` - API rate limit exceeded
+
+**Timeouts**: Use `context.DeadlineExceeded` for timeout handling
 
 **Do**:
 

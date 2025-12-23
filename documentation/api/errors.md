@@ -12,8 +12,6 @@ The SDK uses Go's idiomatic error handling with two patterns:
 1. **Sentinel errors** - For simple `errors.Is()` checks
 2. **Error types** - For detailed error information via `errors.As()`
 
-All SDK error types implement the `VaultSandboxError` interface, allowing type assertion to identify SDK-specific errors.
-
 ```go
 // Sentinel errors for errors.Is() checks
 var (
@@ -25,11 +23,7 @@ var (
     ErrInboxAlreadyExists error
     ErrInvalidImportData  error
     ErrDecryptionFailed   error
-    ErrSignatureInvalid     error
-    ErrServerKeyMismatch    error
-    ErrSSEConnection        error
-    ErrInvalidSecretKeySize error
-    ErrInboxExpired         error
+    ErrSignatureInvalid   error
     ErrRateLimited        error
 )
 
@@ -44,12 +38,7 @@ const (
 // Error types for errors.As() checks
 type APIError struct { ... }
 type NetworkError struct { ... }
-type TimeoutError struct { ... }
-type DecryptionError struct { ... }
 type SignatureVerificationError struct { ... }
-type SSEError struct { ... }
-type StrategyError struct { ... }
-type ValidationError struct { ... }
 ```
 
 The `authresults` package also provides errors for email authentication validation:
@@ -255,65 +244,6 @@ if errors.Is(err, vaultsandbox.ErrSignatureInvalid) {
 
 ---
 
-### ErrServerKeyMismatch
-
-Returned when the server public key in a payload doesn't match the key pinned at inbox creation. This is a **critical security error** that indicates a potential key substitution attack.
-
-```go
-emails, err := inbox.GetEmails(ctx)
-if errors.Is(err, vaultsandbox.ErrServerKeyMismatch) {
-    log.Fatal("CRITICAL: Server key mismatch - payload signed with unexpected key")
-}
-```
-
-This error occurs when:
-- An attacker attempts to inject payloads signed with their own key
-- The server's signing key has changed unexpectedly
-- The inbox was imported with incorrect key data
-
-**Always treat this error as a potential security incident.**
-
----
-
-### ErrSSEConnection
-
-Returned when the SSE connection fails.
-
-```go
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
-if errors.Is(err, vaultsandbox.ErrSSEConnection) {
-    log.Println("SSE connection failed - consider using polling strategy")
-}
-```
-
----
-
-### ErrInvalidSecretKeySize
-
-Returned when the secret key size is invalid during cryptographic operations.
-
-```go
-inbox, err := client.ImportInbox(ctx, exportedData)
-if errors.Is(err, vaultsandbox.ErrInvalidSecretKeySize) {
-    log.Println("Invalid secret key size - the exported data may be corrupted")
-}
-```
-
----
-
-### ErrInboxExpired
-
-Returned when an inbox has exceeded its TTL.
-
-```go
-emails, err := inbox.GetEmails(ctx)
-if errors.Is(err, vaultsandbox.ErrInboxExpired) {
-    log.Println("Inbox has expired")
-}
-```
-
----
-
 ### ErrRateLimited
 
 Returned when the API rate limit is exceeded.
@@ -449,104 +379,9 @@ if err != nil {
 
 ---
 
-### TimeoutError
-
-Represents an operation that exceeded its deadline. Commonly returned by `WaitForEmail()` and `WaitForEmailCount()`.
-
-```go
-type TimeoutError struct {
-    Operation string
-    Timeout   time.Duration
-}
-```
-
-#### Fields
-
-- `Operation`: Description of the operation that timed out
-- `Timeout`: The timeout duration that was exceeded
-
-#### Example
-
-```go
-import (
-    "errors"
-    "log"
-    "regexp"
-    "time"
-
-    vaultsandbox "github.com/vaultsandbox/client-go"
-)
-
-email, err := inbox.WaitForEmail(ctx,
-    vaultsandbox.WithWaitTimeout(5*time.Second),
-    vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Welcome`)),
-)
-if err != nil {
-    var timeoutErr *vaultsandbox.TimeoutError
-    if errors.As(err, &timeoutErr) {
-        log.Printf("Timed out after %v waiting for email", timeoutErr.Timeout)
-
-        // Check what emails did arrive
-        emails, _ := inbox.GetEmails(ctx)
-        log.Printf("Found %d emails:", len(emails))
-        for _, e := range emails {
-            log.Printf("  - %s", e.Subject)
-        }
-    }
-}
-```
-
----
-
-### DecryptionError
-
-Represents a failure to decrypt email content.
-
-```go
-type DecryptionError struct {
-    Stage   string // "kem", "hkdf", "aes"
-    Message string
-    Err     error
-}
-```
-
-#### Fields
-
-- `Stage`: The cryptographic stage where decryption failed
-- `Message`: Description of the failure
-- `Err`: The underlying error (implements `Unwrap()`)
-
-#### Example
-
-```go
-emails, err := inbox.GetEmails(ctx)
-if err != nil {
-    var decErr *vaultsandbox.DecryptionError
-    if errors.As(err, &decErr) {
-        log.Printf("Decryption failed at %s stage: %s", decErr.Stage, decErr.Message)
-        log.Println("This is a critical error - please report it")
-
-        // Log for investigation
-        log.Printf("Inbox: %s", inbox.EmailAddress())
-        log.Printf("Time: %s", time.Now().Format(time.RFC3339))
-    }
-}
-```
-
-#### Handling
-
-Decryption errors should **always** be logged and investigated as they may indicate:
-
-- Data corruption
-- SDK bug
-- MITM attack (rare)
-- Server-side encryption issue
-
----
-
 ### SignatureVerificationError
 
-Indicates potential tampering. This is a **critical security error** that may indicate a man-in-the-middle (MITM) attack or a key substitution attack.
+Indicates potential tampering. This is a **critical security error** that may indicate a man-in-the-middle (MITM) attack or a key substitution attack. This error always matches `ErrSignatureInvalid` when using `errors.Is()`.
 
 ```go
 type SignatureVerificationError struct {
@@ -558,25 +393,31 @@ type SignatureVerificationError struct {
 #### Fields
 
 - `Message`: Description of the signature verification failure
-- `IsKeyMismatch`: `true` if the error was caused by a server key mismatch (matches `ErrServerKeyMismatch`), `false` for other signature failures (matches `ErrSignatureInvalid`)
+- `IsKeyMismatch`: `true` if the error was caused by a server key mismatch (potential key substitution attack), `false` for other signature failures
 
 #### Example
 
 ```go
 emails, err := inbox.GetEmails(ctx)
 if err != nil {
-    var sigErr *vaultsandbox.SignatureVerificationError
-    if errors.As(err, &sigErr) {
-        log.Printf("CRITICAL: Signature verification failed: %s", sigErr.Message)
+    // Simple check using sentinel
+    if errors.Is(err, vaultsandbox.ErrSignatureInvalid) {
+        log.Println("CRITICAL: Signature verification failed!")
 
-        if sigErr.IsKeyMismatch {
-            log.Println("Server key mismatch - potential key substitution attack")
-        } else {
-            log.Println("Invalid signature - potential MITM attack or data tampering")
+        // For detailed information, use errors.As()
+        var sigErr *vaultsandbox.SignatureVerificationError
+        if errors.As(err, &sigErr) {
+            log.Printf("Details: %s", sigErr.Message)
+
+            if sigErr.IsKeyMismatch {
+                log.Println("Server key mismatch - potential key substitution attack")
+            } else {
+                log.Println("Invalid signature - potential MITM attack or data tampering")
+            }
         }
 
         // Alert security team
-        alertSecurityTeam(sigErr.Message)
+        alertSecurityTeam(err)
 
         // Do not continue
         os.Exit(1)
@@ -592,110 +433,6 @@ Signature verification errors should **never** be ignored:
 2. **Alert security/operations team**
 3. **Stop processing** - do not continue with the operation
 4. **Investigate** - check for network issues, proxy problems, or actual attacks
-
----
-
-### SSEError
-
-Represents an SSE connection failure.
-
-```go
-type SSEError struct {
-    Err      error
-    Attempts int
-}
-```
-
-#### Fields
-
-- `Err`: The underlying error (implements `Unwrap()`)
-- `Attempts`: Number of connection attempts made
-
-#### Example
-
-```go
-client, _ := vaultsandbox.New(
-    os.Getenv("VAULTSANDBOX_API_KEY"),
-    vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE),
-)
-defer client.Close()
-
-inbox, _ := client.CreateInbox(ctx)
-
-// WaitForEmail may return SSEError if SSE connection fails
-email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(30*time.Second))
-
-var sseErr *vaultsandbox.SSEError
-if errors.As(err, &sseErr) {
-    log.Printf("SSE connection failed after %d attempts: %v", sseErr.Attempts, sseErr.Err)
-    log.Println("Falling back to polling strategy")
-
-    // Recreate client with polling
-    pollingClient, _ := vaultsandbox.New(
-        os.Getenv("VAULTSANDBOX_API_KEY"),
-        vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyPolling),
-    )
-    defer pollingClient.Close()
-}
-```
-
----
-
-### StrategyError
-
-Indicates a delivery strategy failure.
-
-```go
-type StrategyError struct {
-    Message string
-    Err     error
-}
-```
-
-#### Fields
-
-- `Message`: Description of the strategy failure
-- `Err`: The underlying error (implements `Unwrap()`)
-
-#### Example
-
-```go
-monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox})
-
-var stratErr *vaultsandbox.StrategyError
-if errors.As(err, &stratErr) {
-    log.Printf("Strategy error: %s", stratErr.Message)
-    if stratErr.Err != nil {
-        log.Printf("Underlying error: %v", stratErr.Err)
-    }
-}
-```
-
----
-
-### ValidationError
-
-Contains multiple validation failures.
-
-```go
-type ValidationError struct {
-    Errors []string
-}
-```
-
-#### Example
-
-```go
-inbox, err := client.ImportInbox(ctx, invalidData)
-
-var valErr *vaultsandbox.ValidationError
-if errors.As(err, &valErr) {
-    log.Println("Validation failed:")
-    for _, e := range valErr.Errors {
-        log.Printf("  - %s", e)
-    }
-}
-```
 
 ## Authentication Results Errors
 
@@ -882,13 +619,12 @@ func main() {
 
     email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
     if err != nil {
-        var timeoutErr *vaultsandbox.TimeoutError
         var apiErr *vaultsandbox.APIError
         var netErr *vaultsandbox.NetworkError
 
         switch {
-        case errors.As(err, &timeoutErr):
-            log.Printf("Timed out waiting for email after %v", timeoutErr.Timeout)
+        case errors.Is(err, context.DeadlineExceeded):
+            log.Println("Timed out waiting for email")
         case errors.As(err, &apiErr):
             log.Printf("API Error (%d): %s", apiErr.StatusCode, apiErr.Message)
         case errors.As(err, &netErr):
@@ -921,8 +657,7 @@ func waitForEmailWithRetry(ctx context.Context, inbox *vaultsandbox.Inbox, opts 
 
         lastErr = err
 
-        var timeoutErr *vaultsandbox.TimeoutError
-        if errors.As(err, &timeoutErr) {
+        if errors.Is(err, context.DeadlineExceeded) {
             log.Printf("Attempt %d/%d timed out", attempt, maxAttempts)
 
             if attempt < maxAttempts {
@@ -959,8 +694,7 @@ func getEmailsWithFallback(ctx context.Context, inbox *vaultsandbox.Inbox) ([]*v
         return []*vaultsandbox.Email{email}, nil
     }
 
-    var timeoutErr *vaultsandbox.TimeoutError
-    if errors.As(err, &timeoutErr) {
+    if errors.Is(err, context.DeadlineExceeded) {
         log.Println("No new emails, checking existing...")
         // Fall back to listing existing emails
         return inbox.GetEmails(ctx)
@@ -1028,15 +762,14 @@ func TestEmailReceived(t *testing.T) {
 
 ## Best Practices
 
-### 1. Always Handle TimeoutError
+### 1. Always Handle Timeouts
 
-Timeouts are common in email testing. Always handle them explicitly:
+Timeouts are common in email testing. Always handle them explicitly using `context.DeadlineExceeded`:
 
 ```go
 email, err := inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(10*time.Second))
 if err != nil {
-    var timeoutErr *vaultsandbox.TimeoutError
-    if errors.As(err, &timeoutErr) {
+    if errors.Is(err, context.DeadlineExceeded) {
         // List what emails did arrive
         emails, _ := inbox.GetEmails(ctx)
         log.Printf("Expected email not found. Received %d emails:", len(emails))
@@ -1056,7 +789,6 @@ Always log signature verification and decryption errors:
 inbox, err := client.CreateInbox(ctx)
 if err != nil {
     if errors.Is(err, vaultsandbox.ErrSignatureInvalid) ||
-       errors.Is(err, vaultsandbox.ErrServerKeyMismatch) ||
        errors.Is(err, vaultsandbox.ErrDecryptionFailed) {
         // Critical security/integrity error
         logger.Critical(map[string]any{
@@ -1101,12 +833,11 @@ if errors.As(err, &apiErr) {
 }
 
 // Handle specific to general
-var timeoutErr *vaultsandbox.TimeoutError
 var netErr *vaultsandbox.NetworkError
 var apiErr *vaultsandbox.APIError
 
 switch {
-case errors.As(err, &timeoutErr):
+case errors.Is(err, context.DeadlineExceeded):
     // Handle timeout
 case errors.As(err, &netErr):
     // Handle network error

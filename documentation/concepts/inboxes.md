@@ -907,10 +907,6 @@ if err != nil {
 | `ErrInvalidImportData` | Imported inbox data is malformed or invalid |
 | `ErrDecryptionFailed` | Email decryption failed |
 | `ErrSignatureInvalid` | Signature verification failed (potential tampering) |
-| `ErrServerKeyMismatch` | Server public key mismatch (potential key substitution attack) |
-| `ErrSSEConnection` | Server-Sent Events connection failed |
-| `ErrInvalidSecretKeySize` | Secret key has invalid size |
-| `ErrInboxExpired` | Inbox TTL has been exceeded |
 | `ErrRateLimited` | API rate limit exceeded (HTTP 429) |
 
 ### Error Types
@@ -934,20 +930,6 @@ if errors.As(err, &netErr) {
 	fmt.Printf("Underlying: %v\n", netErr.Err)
 }
 
-// TimeoutError - Operation exceeded deadline
-var timeoutErr *vaultsandbox.TimeoutError
-if errors.As(err, &timeoutErr) {
-	fmt.Printf("Operation: %s\n", timeoutErr.Operation)
-	fmt.Printf("Timeout: %v\n", timeoutErr.Timeout)
-}
-
-// DecryptionError - Email decryption failure
-var decryptErr *vaultsandbox.DecryptionError
-if errors.As(err, &decryptErr) {
-	fmt.Printf("Stage: %s\n", decryptErr.Stage) // "kem", "hkdf", or "aes"
-	fmt.Printf("Message: %s\n", decryptErr.Message)
-}
-
 // SignatureVerificationError - Signature verification failure
 var sigErr *vaultsandbox.SignatureVerificationError
 if errors.As(err, &sigErr) {
@@ -957,24 +939,9 @@ if errors.As(err, &sigErr) {
 	}
 }
 
-// SSEError - Server-Sent Events connection failure
-var sseErr *vaultsandbox.SSEError
-if errors.As(err, &sseErr) {
-	fmt.Printf("Attempts: %d\n", sseErr.Attempts)
-	fmt.Printf("Underlying: %v\n", sseErr.Err)
-}
-
-// ValidationError - Multiple validation failures
-var valErr *vaultsandbox.ValidationError
-if errors.As(err, &valErr) {
-	fmt.Printf("Errors: %v\n", valErr.Errors)
-}
-
-// StrategyError - Delivery strategy failure
-var stratErr *vaultsandbox.StrategyError
-if errors.As(err, &stratErr) {
-	fmt.Printf("Message: %s\n", stratErr.Message)
-	fmt.Printf("Underlying: %v\n", stratErr.Err)
+// Timeouts - use context.DeadlineExceeded
+if errors.Is(err, context.DeadlineExceeded) {
+	fmt.Println("Operation timed out")
 }
 ```
 
@@ -982,9 +949,10 @@ if errors.As(err, &stratErr) {
 
 ```go
 type APIError struct {
-	StatusCode int
-	Message    string
-	RequestID  string
+	StatusCode   int
+	Message      string
+	RequestID    string
+	ResourceType ResourceType
 }
 
 type NetworkError struct {
@@ -993,51 +961,9 @@ type NetworkError struct {
 	Attempt int
 }
 
-type TimeoutError struct {
-	Operation string
-	Timeout   time.Duration
-}
-
-type DecryptionError struct {
-	Stage   string // "kem", "hkdf", "aes"
-	Message string
-	Err     error
-}
-
 type SignatureVerificationError struct {
 	Message       string
 	IsKeyMismatch bool // true if caused by server key mismatch
-}
-
-type SSEError struct {
-	Err      error
-	Attempts int
-}
-
-type ValidationError struct {
-	Errors []string
-}
-
-type StrategyError struct {
-	Message string
-	Err     error
-}
-```
-
-### VaultSandboxError Interface
-
-All SDK errors implement the `VaultSandboxError` interface:
-
-```go
-type VaultSandboxError interface {
-	error
-	VaultSandboxError() // marker method
-}
-
-// Check if error is from this SDK
-var sdkErr vaultsandbox.VaultSandboxError
-if errors.As(err, &sdkErr) {
-	fmt.Println("Error from VaultSandbox SDK")
 }
 ```
 

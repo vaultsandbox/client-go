@@ -141,6 +141,9 @@ func waitForEmails(ctx context.Context, inbox *vaultsandbox.Inbox, count int) ([
 emails, err := waitForEmails(ctx, inbox, 3)
 ```
 
+> **Tip**: For real-time processing without specifying a count, consider using `inbox.Watch(ctx)`
+> which returns a channel. See [Real-time Monitoring](/client-go/guides/real-time/).
+
 ## Timeout Handling
 
 ### With Error Handling

@@ -692,8 +692,7 @@ if len(email.Links) == 0 {
 ```go
 email, err := inbox.GetEmail(ctx, emailID)
 if err != nil {
-    var decryptErr *vaultsandbox.DecryptionError
-    if errors.As(err, &decryptErr) {
+    if errors.Is(err, vaultsandbox.ErrDecryptionFailed) {
         fmt.Println("Failed to decrypt email")
         fmt.Println("This may indicate:")
         fmt.Println("- Wrong private key")

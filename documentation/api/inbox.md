@@ -286,31 +286,21 @@ if len(emails) != 3 {
 
 ---
 
-### OnNewEmail
+### Watch
 
-Subscribes to new emails in real-time. Receives a callback for each new email that arrives.
+Returns a channel that receives emails as they arrive. The channel closes when the context is cancelled.
 
 ```go
-func (i *Inbox) OnNewEmail(callback InboxEmailCallback) Subscription
+func (i *Inbox) Watch(ctx context.Context) <-chan *Email
 ```
 
 #### Parameters
 
-- `callback`: Function called when a new email arrives
-
-```go
-type InboxEmailCallback func(email *Email)
-```
+- `ctx`: Context for cancellation - when cancelled, the channel closes
 
 #### Returns
 
-`Subscription` - Subscription interface with `Unsubscribe()` method
-
-```go
-type Subscription interface {
-    Unsubscribe()
-}
-```
+- `<-chan *Email` - Receive-only channel of emails
 
 #### Example
 
@@ -320,45 +310,46 @@ if err != nil {
     log.Fatal(err)
 }
 
-fmt.Printf("Monitoring: %s\n", inbox.EmailAddress())
+fmt.Printf("Watching: %s\n", inbox.EmailAddress())
 
-// Subscribe to new emails
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+watchCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+defer cancel()
+
+for email := range inbox.Watch(watchCtx) {
     fmt.Printf("New email: %q\n", email.Subject)
     fmt.Printf("From: %s\n", email.From)
-
-    // Process email...
-})
-
-// Later, stop monitoring
-subscription.Unsubscribe()
+}
 ```
+
+#### Behavior
+
+- Channel has buffer size of 16
+- Non-blocking sends: if buffer is full, events may be dropped
+- Channel closes automatically when context is cancelled
+- Watcher is automatically unregistered on context cancellation
 
 #### Best Practice
 
-Always unsubscribe when done to avoid goroutine leaks:
+Use context for lifecycle management:
 
 ```go
-var subscription vaultsandbox.Subscription
-
 func TestEmailFlow(t *testing.T) {
     inbox, err := client.CreateInbox(ctx)
     if err != nil {
         t.Fatal(err)
     }
+    defer inbox.Delete(ctx)
 
-    subscription = inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-        // Handle email
-    })
+    watchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+    defer cancel()
 
-    t.Cleanup(func() {
-        if subscription != nil {
-            subscription.Unsubscribe()
+    for email := range inbox.Watch(watchCtx) {
+        // Process email
+        if foundDesiredEmail(email) {
+            cancel() // Stop watching early
+            break
         }
-        inbox.Delete(ctx)
-    })
-
-    // Test logic...
+    }
 }
 ```
 
@@ -501,143 +492,6 @@ if err != nil {
 
 Exported data contains private encryption keys. Store securely with restrictive file permissions (0600)!
 
-## InboxMonitor
-
-The `InboxMonitor` type allows you to monitor multiple inboxes simultaneously.
-
-### Creating a Monitor
-
-```go
-inbox1, _ := client.CreateInbox(ctx)
-inbox2, _ := client.CreateInbox(ctx)
-
-monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-if err != nil {
-    log.Fatal(err)
-}
-```
-
-### Events
-
-#### OnEmail
-
-Registers a callback for new emails across all monitored inboxes.
-
-```go
-func (m *InboxMonitor) OnEmail(callback EmailCallback) Subscription
-```
-
-##### Parameters
-
-- `callback`: Function called when a new email arrives
-
-```go
-type EmailCallback func(inbox *Inbox, email *Email)
-```
-
-##### Example
-
-```go
-subscription := monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-    fmt.Printf("Email received in %s\n", inbox.EmailAddress())
-    fmt.Printf("Subject: %s\n", email.Subject)
-})
-```
-
-### Methods
-
-#### Unsubscribe
-
-Stops monitoring all inboxes and cleans up resources.
-
-```go
-func (m *InboxMonitor) Unsubscribe()
-```
-
-##### Example
-
-```go
-monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-if err != nil {
-    log.Fatal(err)
-}
-
-// Use monitor...
-
-// Stop monitoring
-monitor.Unsubscribe()
-```
-
-### Complete Example
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "log"
-    "os"
-    "time"
-
-    "github.com/vaultsandbox/client-go"
-)
-
-func monitorMultipleInboxes() error {
-    ctx := context.Background()
-
-    client, err := vaultsandbox.New(
-        os.Getenv("VAULTSANDBOX_API_KEY"),
-        vaultsandbox.WithBaseURL(os.Getenv("VAULTSANDBOX_URL")),
-    )
-    if err != nil {
-        return err
-    }
-    defer client.Close()
-
-    // Create multiple inboxes
-    inbox1, err := client.CreateInbox(ctx)
-    if err != nil {
-        return err
-    }
-    inbox2, err := client.CreateInbox(ctx)
-    if err != nil {
-        return err
-    }
-
-    fmt.Printf("Inbox 1: %s\n", inbox1.EmailAddress())
-    fmt.Printf("Inbox 2: %s\n", inbox2.EmailAddress())
-
-    // Monitor both inboxes
-    monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-    if err != nil {
-        return err
-    }
-
-    monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-        fmt.Printf("\nNew email in %s:\n", inbox.EmailAddress())
-        fmt.Printf("  Subject: %s\n", email.Subject)
-        fmt.Printf("  From: %s\n", email.From)
-    })
-
-    // Wait for emails to arrive...
-    time.Sleep(60 * time.Second)
-
-    // Clean up
-    monitor.Unsubscribe()
-    inbox1.Delete(ctx)
-    inbox2.Delete(ctx)
-
-    return nil
-}
-
-func main() {
-    if err := monitorMultipleInboxes(); err != nil {
-        log.Fatal(err)
-    }
-}
-```
-
 ## Complete Inbox Example
 
 ```go
@@ -675,10 +529,13 @@ func completeInboxExample() error {
     fmt.Printf("Created: %s\n", inbox.EmailAddress())
     fmt.Printf("Expires: %s\n", inbox.ExpiresAt().Format(time.RFC3339))
 
-    // Subscribe to new emails
-    subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-        fmt.Printf("Received: %s\n", email.Subject)
-    })
+    // Set up watching in a goroutine
+    watchCtx, cancelWatch := context.WithCancel(ctx)
+    go func() {
+        for email := range inbox.Watch(watchCtx) {
+            fmt.Printf("Received via watch: %s\n", email.Subject)
+        }
+    }()
 
     // Trigger test email
     err = sendTestEmail(inbox.EmailAddress())
@@ -723,7 +580,7 @@ func completeInboxExample() error {
     }
 
     // Clean up
-    subscription.Unsubscribe()
+    cancelWatch()
     err = inbox.Delete(ctx)
     if err != nil {
         return err

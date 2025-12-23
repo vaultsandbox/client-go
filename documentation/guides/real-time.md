@@ -1,36 +1,40 @@
 ---
 title: Real-time Monitoring
-description: Subscribe to emails as they arrive using Server-Sent Events
+description: Watch for emails as they arrive using channels
 ---
 
-VaultSandbox supports real-time email notifications via Server-Sent Events (SSE), enabling instant processing of emails as they arrive.
+VaultSandbox supports real-time email notifications via Server-Sent Events (SSE), enabling instant processing of emails as they arrive. The SDK provides a channel-based API for idiomatic Go patterns.
 
-## Basic Subscription
+## Basic Watching
 
-### Subscribe to Single Inbox
+### Watch Single Inbox
 
 ```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+defer cancel()
+
 inbox, err := client.CreateInbox(ctx)
 if err != nil {
 	log.Fatal(err)
 }
+defer inbox.Delete(ctx)
 
-fmt.Printf("Monitoring: %s\n", inbox.EmailAddress())
+fmt.Printf("Watching: %s\n", inbox.EmailAddress())
 
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+for email := range inbox.Watch(ctx) {
 	fmt.Printf("New email: %s\n", email.Subject)
 	fmt.Printf("   From: %s\n", email.From)
 	fmt.Printf("   Received: %s\n", email.ReceivedAt)
-})
-
-// Later, stop monitoring
-// subscription.Unsubscribe()
+}
 ```
 
-### Subscribe with Processing
+### Watch with Processing
 
 ```go
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+for email := range inbox.Watch(ctx) {
 	fmt.Println("Processing:", email.Subject)
 
 	// Extract links
@@ -48,108 +52,130 @@ subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
 	if err := inbox.MarkEmailAsRead(ctx, email.ID); err != nil {
 		log.Println("Failed to mark as read:", err)
 	}
-})
+}
 ```
 
-## Monitoring Multiple Inboxes
+## Watching Multiple Inboxes
 
-### Using InboxMonitor
+### Using WatchInboxes
 
 ```go
 inbox1, _ := client.CreateInbox(ctx)
 inbox2, _ := client.CreateInbox(ctx)
 inbox3, _ := client.CreateInbox(ctx)
 
-monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2, inbox3})
-if err != nil {
-	log.Fatal(err)
+watchCtx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+for event := range client.WatchInboxes(watchCtx, inbox1, inbox2, inbox3) {
+	fmt.Printf("Email in %s\n", event.Inbox.EmailAddress())
+	fmt.Printf("   Subject: %s\n", event.Email.Subject)
+	fmt.Printf("   From: %s\n", event.Email.From)
 }
-
-monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-	fmt.Printf("Email in %s\n", inbox.EmailAddress())
-	fmt.Printf("   Subject: %s\n", email.Subject)
-	fmt.Printf("   From: %s\n", email.From)
-})
-
-// Later, stop monitoring all
-// monitor.Unsubscribe()
 ```
 
-### Monitoring with Handlers
+### Watching with Handlers
 
 ```go
-monitor, _ := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
 
-monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
+for event := range client.WatchInboxes(ctx, inbox1, inbox2) {
 	switch {
-	case email.From == "alerts@example.com":
-		handleAlert(email)
-	case strings.Contains(email.Subject, "Invoice"):
-		handleInvoice(inbox, email)
+	case event.Email.From == "alerts@example.com":
+		handleAlert(event.Email)
+	case strings.Contains(event.Email.Subject, "Invoice"):
+		handleInvoice(event.Inbox, event.Email)
 	default:
-		fmt.Println("Other email:", email.Subject)
+		fmt.Println("Other email:", event.Email.Subject)
 	}
-})
+}
 ```
 
-## Unsubscribing
+## Stopping Early
 
-### Unsubscribe from Single Inbox
+### Context Cancellation
 
-```go
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-	fmt.Println("Email:", email.Subject)
-})
-
-// Unsubscribe when done
-subscription.Unsubscribe()
-```
-
-### Conditional Unsubscribe
+Use context cancellation to stop watching at any time:
 
 ```go
-var subscription vaultsandbox.Subscription
+ctx, cancel := context.WithCancel(context.Background())
 
-subscription = inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-	fmt.Println("Email:", email.Subject)
+go func() {
+	for email := range inbox.Watch(ctx) {
+		fmt.Println("Email:", email.Subject)
 
-	// Unsubscribe after first welcome email
-	if strings.Contains(email.Subject, "Welcome") {
-		subscription.Unsubscribe()
+		// Stop after finding welcome email
+		if strings.Contains(email.Subject, "Welcome") {
+			cancel()
+			return
+		}
 	}
-})
+}()
 ```
 
-### Unsubscribe from Monitor
+### With Timeout
 
 ```go
-monitor, _ := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
 
-monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-	fmt.Println("Email:", email.Subject)
-})
-
-// Unsubscribe from all inboxes
-monitor.Unsubscribe()
+for email := range inbox.Watch(ctx) {
+	processEmail(email)
+}
+// Channel closes automatically when timeout expires
 ```
 
-### Selective Callback Unsubscribe
+## Select-based Processing
+
+For more control over receiving emails, use select:
 
 ```go
-monitor, _ := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
 
-// Register multiple callbacks
-sub1 := monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-	fmt.Println("Handler 1:", email.Subject)
-})
+emails := inbox.Watch(ctx)
+for {
+	select {
+	case email, ok := <-emails:
+		if !ok {
+			fmt.Println("Channel closed")
+			return
+		}
+		processEmail(email)
+	case <-ctx.Done():
+		fmt.Println("Context cancelled")
+		return
+	}
+}
+```
 
-sub2 := monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-	fmt.Println("Handler 2:", email.Subject)
-})
+### Select with Multiple Channels
 
-// Unsubscribe only the first callback
-sub1.Unsubscribe()
-// Handler 2 continues receiving emails
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+emails := inbox.Watch(ctx)
+done := make(chan struct{})
+
+for {
+	select {
+	case email, ok := <-emails:
+		if !ok {
+			return
+		}
+		if processAndCheck(email) {
+			close(done)
+			cancel()
+			return
+		}
+	case <-done:
+		return
+	case <-time.After(5 * time.Second):
+		fmt.Println("No email in last 5 seconds...")
+	}
+}
 ```
 
 ## Real-World Patterns
@@ -166,26 +192,13 @@ func waitForSpecificEmail(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	resultCh := make(chan *vaultsandbox.Email, 1)
-
-	var subscription vaultsandbox.Subscription
-	subscription = inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+	for email := range inbox.Watch(ctx) {
 		if predicate(email) {
-			subscription.Unsubscribe()
-			select {
-			case resultCh <- email:
-			default:
-			}
+			return email, nil
 		}
-	})
-
-	select {
-	case email := <-resultCh:
-		return email, nil
-	case <-ctx.Done():
-		subscription.Unsubscribe()
-		return nil, fmt.Errorf("timeout waiting for email")
 	}
+
+	return nil, fmt.Errorf("timeout waiting for email")
 }
 
 // Usage
@@ -206,33 +219,18 @@ func collectEmails(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	var mu sync.Mutex
 	emails := make([]*vaultsandbox.Email, 0, count)
-	done := make(chan struct{})
 
-	var subscription vaultsandbox.Subscription
-	subscription = inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-		mu.Lock()
-		defer mu.Unlock()
-
+	for email := range inbox.Watch(ctx) {
 		emails = append(emails, email)
 		fmt.Printf("Received %d/%d\n", len(emails), count)
 
 		if len(emails) >= count {
-			subscription.Unsubscribe()
-			close(done)
+			return emails, nil
 		}
-	})
-
-	select {
-	case <-done:
-		return emails, nil
-	case <-ctx.Done():
-		subscription.Unsubscribe()
-		mu.Lock()
-		defer mu.Unlock()
-		return nil, fmt.Errorf("timeout: only received %d/%d", len(emails), count)
 	}
+
+	return nil, fmt.Errorf("timeout: only received %d/%d", len(emails), count)
 }
 
 // Usage
@@ -242,15 +240,15 @@ emails, err := collectEmails(ctx, inbox, 3, 20*time.Second)
 ### Process Email Pipeline
 
 ```go
-func processEmailPipeline(ctx context.Context, inbox *vaultsandbox.Inbox) vaultsandbox.Subscription {
-	return inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+func processEmailPipeline(ctx context.Context, inbox *vaultsandbox.Inbox) {
+	for email := range inbox.Watch(ctx) {
 		fmt.Println("Processing:", email.Subject)
 
 		// Step 1: Validate
 		auth := email.AuthResults.Validate()
 		if !auth.Passed {
 			fmt.Println("Failed auth:", auth.Failures)
-			return
+			continue
 		}
 
 		// Step 2: Extract data
@@ -260,33 +258,35 @@ func processEmailPipeline(ctx context.Context, inbox *vaultsandbox.Inbox) vaults
 		// Step 3: Store/process
 		if err := storeEmail(ctx, email); err != nil {
 			fmt.Println("Error storing:", err)
-			return
+			continue
 		}
 
 		// Step 4: Notify
 		if err := notifyProcessed(ctx, email.ID); err != nil {
 			fmt.Println("Error notifying:", err)
-			return
+			continue
 		}
 
 		// Step 5: Cleanup
 		if err := inbox.DeleteEmail(ctx, email.ID); err != nil {
 			fmt.Println("Error deleting:", err)
-			return
+			continue
 		}
 
 		fmt.Println("Processed:", email.Subject)
 		_ = links       // use as needed
 		_ = attachments // use as needed
-	})
+	}
 }
 
 // Usage
-subscription := processEmailPipeline(ctx, inbox)
-defer subscription.Unsubscribe()
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+go processEmailPipeline(ctx, inbox)
 ```
 
-## Testing with Real-Time Monitoring
+## Testing with Real-Time Watching
 
 ### Integration Test
 
@@ -299,25 +299,28 @@ func TestRealTimeEmailProcessing(t *testing.T) {
 	inbox, _ := client.CreateInbox(ctx)
 	defer inbox.Delete(ctx)
 
-	var mu sync.Mutex
-	var received []*vaultsandbox.Email
+	watchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-	subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-		mu.Lock()
-		received = append(received, email)
-		mu.Unlock()
-	})
-	defer subscription.Unsubscribe()
+	var received []*vaultsandbox.Email
+	done := make(chan struct{})
+
+	go func() {
+		for email := range inbox.Watch(watchCtx) {
+			received = append(received, email)
+			if len(received) >= 2 {
+				cancel()
+				close(done)
+				return
+			}
+		}
+	}()
 
 	// Send test emails
 	sendEmail(inbox.EmailAddress(), "Test 1")
 	sendEmail(inbox.EmailAddress(), "Test 2")
 
-	// Wait for emails to arrive
-	time.Sleep(5 * time.Second)
-
-	mu.Lock()
-	defer mu.Unlock()
+	<-done
 
 	if len(received) != 2 {
 		t.Errorf("expected 2 emails, got %d", len(received))
@@ -342,30 +345,28 @@ func TestProcessesEmailsAsynchronously(t *testing.T) {
 	inbox, _ := client.CreateInbox(ctx)
 	defer inbox.Delete(ctx)
 
+	watchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var mu sync.Mutex
 	var processed []string
+	done := make(chan struct{})
 
-	subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-		processEmail(email)
-		mu.Lock()
-		processed = append(processed, email.ID)
-		mu.Unlock()
-	})
-	defer subscription.Unsubscribe()
+	go func() {
+		for email := range inbox.Watch(watchCtx) {
+			processEmail(email)
+			mu.Lock()
+			processed = append(processed, email.ID)
+			mu.Unlock()
+			close(done)
+			cancel()
+			return
+		}
+	}()
 
 	sendEmail(inbox.EmailAddress(), "Test")
 
-	// Wait for processing
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		mu.Lock()
-		count := len(processed)
-		mu.Unlock()
-		if count > 0 {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	<-done
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -377,27 +378,28 @@ func TestProcessesEmailsAsynchronously(t *testing.T) {
 
 ## Error Handling
 
-### Handle Subscription Errors
+### Handle Processing Errors
 
 ```go
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+for email := range inbox.Watch(ctx) {
 	if err := processEmail(email); err != nil {
 		log.Println("Error processing email:", err)
-		// Don't panic - keeps subscription active
+		// Continue processing - don't stop watching
 	}
-})
+}
 ```
 
 ### Graceful Shutdown
 
 ```go
-func gracefulShutdown(subscriptions []vaultsandbox.Subscription, client *vaultsandbox.Client) {
+func gracefulShutdown(cancel context.CancelFunc, client *vaultsandbox.Client) {
 	fmt.Println("Shutting down...")
 
-	// Unsubscribe from all
-	for _, sub := range subscriptions {
-		sub.Unsubscribe()
-	}
+	// Cancel context to stop all watchers
+	cancel()
 
 	// Wait for pending operations
 	time.Sleep(1 * time.Second)
@@ -409,30 +411,16 @@ func gracefulShutdown(subscriptions []vaultsandbox.Subscription, client *vaultsa
 }
 
 // Usage
-subs := []vaultsandbox.Subscription{subscription1, subscription2}
-gracefulShutdown(subs, client)
-```
-
-### Using Context for Cancellation
-
-```go
-func monitorWithContext(ctx context.Context, inbox *vaultsandbox.Inbox) {
-	subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-		fmt.Println("Email:", email.Subject)
-	})
-
-	// Wait for context cancellation
-	<-ctx.Done()
-	subscription.Unsubscribe()
-	fmt.Println("Monitoring stopped")
-}
-
-// Usage
 ctx, cancel := context.WithCancel(context.Background())
-go monitorWithContext(ctx, inbox)
 
-// Later, stop monitoring
-cancel()
+go func() {
+	for email := range inbox.Watch(ctx) {
+		processEmail(email)
+	}
+}()
+
+// Later, on shutdown signal
+gracefulShutdown(cancel, client)
 ```
 
 ## SSE vs Polling
@@ -481,43 +469,30 @@ The auto strategy attempts SSE first and automatically falls back to polling if 
 ### Rate-Limited Processing
 
 ```go
-type rateLimitedProcessor struct {
-	queue   chan *vaultsandbox.Email
-	process func(*vaultsandbox.Email)
-}
+func rateLimitedWatch(ctx context.Context, inbox *vaultsandbox.Inbox, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
-func newRateLimitedProcessor(process func(*vaultsandbox.Email)) *rateLimitedProcessor {
-	p := &rateLimitedProcessor{
-		queue:   make(chan *vaultsandbox.Email, 100),
-		process: process,
-	}
-	go p.run()
-	return p
-}
-
-func (p *rateLimitedProcessor) run() {
-	for email := range p.queue {
-		p.process(email)
-		time.Sleep(1 * time.Second) // Rate limit: 1 per second
+	emails := inbox.Watch(ctx)
+	for {
+		select {
+		case email, ok := <-emails:
+			if !ok {
+				return
+			}
+			processEmail(email)
+			<-ticker.C // Wait for next tick
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
-func (p *rateLimitedProcessor) enqueue(email *vaultsandbox.Email) {
-	p.queue <- email
-}
+// Usage: Process at most 1 email per second
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
 
-func (p *rateLimitedProcessor) close() {
-	close(p.queue)
-}
-
-// Usage
-processor := newRateLimitedProcessor(func(email *vaultsandbox.Email) {
-	fmt.Println("Processing:", email.Subject)
-})
-defer processor.close()
-
-subscription := inbox.OnNewEmail(processor.enqueue)
-defer subscription.Unsubscribe()
+go rateLimitedWatch(ctx, inbox, time.Second)
 ```
 
 ### Priority Processing
@@ -536,7 +511,10 @@ func getPriority(email *vaultsandbox.Email) string {
 	return "low"
 }
 
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+for email := range inbox.Watch(ctx) {
 	switch getPriority(email) {
 	case "high":
 		processImmediately(email)
@@ -545,55 +523,53 @@ subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
 	default:
 		logAndDiscard(email)
 	}
-})
+}
 ```
 
 ### Worker Pool Processing
 
 ```go
-type workerPool struct {
-	jobs    chan *vaultsandbox.Email
-	workers int
-	wg      sync.WaitGroup
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+emails := inbox.Watch(ctx)
+
+// Fan-out to workers
+var wg sync.WaitGroup
+for i := 0; i < 3; i++ {
+	wg.Add(1)
+	go func(workerID int) {
+		defer wg.Done()
+		for email := range emails {
+			fmt.Printf("Worker %d processing: %s\n", workerID, email.Subject)
+			processEmail(email)
+		}
+	}(i)
 }
+wg.Wait()
+```
 
-func newWorkerPool(workers int, process func(*vaultsandbox.Email)) *workerPool {
-	p := &workerPool{
-		jobs:    make(chan *vaultsandbox.Email, 100),
-		workers: workers,
-	}
+### Multi-Inbox Worker Pool
 
-	for i := 0; i < workers; i++ {
-		p.wg.Add(1)
-		go func(id int) {
-			defer p.wg.Done()
-			for email := range p.jobs {
-				fmt.Printf("Worker %d processing: %s\n", id, email.Subject)
-				process(email)
-			}
-		}(i)
-	}
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
 
-	return p
+events := client.WatchInboxes(ctx, inbox1, inbox2, inbox3)
+
+var wg sync.WaitGroup
+for i := 0; i < 5; i++ {
+	wg.Add(1)
+	go func(workerID int) {
+		defer wg.Done()
+		for event := range events {
+			fmt.Printf("Worker %d processing email from %s: %s\n",
+				workerID, event.Inbox.EmailAddress(), event.Email.Subject)
+			processEmail(event.Email)
+		}
+	}(i)
 }
-
-func (p *workerPool) submit(email *vaultsandbox.Email) {
-	p.jobs <- email
-}
-
-func (p *workerPool) shutdown() {
-	close(p.jobs)
-	p.wg.Wait()
-}
-
-// Usage
-pool := newWorkerPool(3, processEmail)
-defer pool.shutdown()
-
-monitor, _ := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2, inbox3})
-monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-	pool.submit(email)
-})
+wg.Wait()
 ```
 
 ## Cleanup
@@ -615,22 +591,19 @@ func TestEmailMonitoring(t *testing.T) {
 	}
 	defer inbox.Delete(ctx)
 
-	var subscription vaultsandbox.Subscription
-	defer func() {
-		if subscription != nil {
-			subscription.Unsubscribe()
-		}
-	}()
+	watchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-	subscription = inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+	for email := range inbox.Watch(watchCtx) {
 		fmt.Println("Email:", email.Subject)
-	})
+		break // Process first email only
+	}
 
-	// Test code...
+	// Channel automatically closes when context is cancelled
 }
 ```
 
-### Cleanup with Monitor
+### Cleanup with Multi-Inbox Watching
 
 ```go
 func TestMultiInboxMonitoring(t *testing.T) {
@@ -644,28 +617,34 @@ func TestMultiInboxMonitoring(t *testing.T) {
 	defer inbox1.Delete(ctx)
 	defer inbox2.Delete(ctx)
 
-	monitor, _ := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-	defer monitor.Unsubscribe()
+	watchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-	monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-		fmt.Println("Email:", email.Subject)
-	})
+	for event := range client.WatchInboxes(watchCtx, inbox1, inbox2) {
+		fmt.Println("Email:", event.Email.Subject)
+		break // Process first email only
+	}
 
-	// Test code...
+	// Channel automatically closes when context is cancelled
 }
 ```
 
-## Single vs Multiple Inbox Monitoring
+## Comparison: Watch vs WatchInboxes
 
-| Aspect | Single Inbox (`OnNewEmail`) | Multiple Inboxes (`MonitorInboxes`) |
-|--------|---------------------------|-------------------------------------|
-| **Method** | `Inbox.OnNewEmail()` | `Client.MonitorInboxes()` |
-| **Callback Type** | `func(email *Email)` | `func(inbox *Inbox, email *Email)` |
-| **Inbox Info** | Implicit (from receiver) | Passed to callback |
-| **Strategy** | Uses client's strategy (SSE/polling/auto) | Uses client's strategy (SSE/polling/auto) |
-| **Multiple Callbacks** | Create separate subscriptions | Register via `OnEmail()` |
-| **Selective Unsubscribe** | N/A (one per inbox) | Yes, per-callback |
-| **Complexity** | Simple, lightweight | More powerful, flexible |
+| Aspect | `Inbox.Watch()` | `Client.WatchInboxes()` |
+|--------|-----------------|-------------------------|
+| **Scope** | Single inbox | Multiple inboxes |
+| **Return Type** | `<-chan *Email` | `<-chan *InboxEvent` |
+| **Inbox Info** | Implicit (from receiver) | `event.Inbox` field |
+| **Lifecycle** | Context cancellation | Context cancellation |
+| **Cleanup** | Automatic on ctx cancel | Automatic on ctx cancel |
+
+## Channel Behavior
+
+- **Buffer Size**: Channels are created with a buffer size of 16
+- **Non-blocking Sends**: If the channel buffer is full, events may be dropped
+- **Automatic Cleanup**: Channels close automatically when the context is cancelled
+- **Empty Input**: `WatchInboxes` returns an immediately closed channel if no inboxes are provided
 
 ## Next Steps
 
