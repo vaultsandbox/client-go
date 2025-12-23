@@ -46,6 +46,28 @@ func (i *Inbox) Watch(ctx context.Context) <-chan *Email {
 	return ch
 }
 
+// WatchFunc calls fn for each email as they arrive until the context is cancelled.
+// This is a convenience wrapper around Watch for simpler use cases.
+//
+// Example:
+//
+//	inbox.WatchFunc(ctx, func(email *vaultsandbox.Email) {
+//	    fmt.Printf("New email: %s\n", email.Subject)
+//	})
+func (i *Inbox) WatchFunc(ctx context.Context, fn func(*Email)) {
+	emails := i.Watch(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case email := <-emails:
+			if email != nil {
+				fn(email)
+			}
+		}
+	}
+}
+
 // WaitForEmail waits for an email matching the given criteria.
 // It uses the client's callback infrastructure to receive instant notifications
 // when SSE is active, or receives events when the polling handler fires.
@@ -75,13 +97,16 @@ func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, e
 	}
 
 	// 3. Watch for new emails
-	for email := range emails {
-		if cfg.Matches(email) {
-			return email, nil
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case email := <-emails:
+			if email != nil && cfg.Matches(email) {
+				return email, nil
+			}
 		}
 	}
-
-	return nil, ctx.Err()
 }
 
 // WaitForEmailCount waits until at least count matching emails are found.
@@ -138,12 +163,17 @@ func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOp
 	}
 
 	// 3. Watch for new emails
-	for email := range emails {
-		addIfNew(email)
-		if len(results) >= count {
-			return results[:count], nil
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case email := <-emails:
+			if email != nil {
+				addIfNew(email)
+				if len(results) >= count {
+					return results[:count], nil
+				}
+			}
 		}
 	}
-
-	return nil, ctx.Err()
 }

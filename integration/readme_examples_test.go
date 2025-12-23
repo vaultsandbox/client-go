@@ -540,28 +540,28 @@ func TestREADME_RealTimeMonitoring(t *testing.T) {
 
 	t.Logf("Watching for emails at: %s", inbox.EmailAddress())
 
-	// README example: Watch for new emails using channels
+	// README example: Watch for new emails using WatchFunc
 	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-
-	emails := inbox.Watch(watchCtx)
 
 	// Track received emails
 	var received []*vaultsandbox.Email
 	done := make(chan struct{})
+	var closeOnce sync.Once
 
-	// Process emails in a goroutine
+	// Process emails using WatchFunc
 	go func() {
-		for email := range emails {
+		inbox.WatchFunc(watchCtx, func(email *vaultsandbox.Email) {
 			received = append(received, email)
 			t.Logf("New email received: %q", email.Subject)
 
 			if len(received) >= 2 {
-				cancel() // Stop watching
-				close(done)
-				return
+				closeOnce.Do(func() {
+					cancel() // Stop watching
+					close(done)
+				})
 			}
-		}
+		})
 	}()
 
 	// Send emails
@@ -619,20 +619,18 @@ func TestREADME_WatchInboxes(t *testing.T) {
 
 	t.Logf("Watching inboxes: %s, %s", inbox1.EmailAddress(), inbox2.EmailAddress())
 
-	// README example: Watch multiple inboxes using channels
+	// README example: Watch multiple inboxes using WatchInboxesFunc
 	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-
-	events := client.WatchInboxes(watchCtx, inbox1, inbox2)
 
 	// Track which inboxes received emails
 	var receivedEmails sync.Map
 	done := make(chan struct{})
 	var closeOnce sync.Once
 
-	// Process events in a goroutine
+	// Process events using WatchInboxesFunc
 	go func() {
-		for event := range events {
+		client.WatchInboxesFunc(watchCtx, func(event *vaultsandbox.InboxEvent) {
 			t.Logf("New email in %s: %s", event.Inbox.EmailAddress(), event.Email.Subject)
 			receivedEmails.Store(event.Inbox.EmailAddress(), event.Email)
 
@@ -647,9 +645,8 @@ func TestREADME_WatchInboxes(t *testing.T) {
 					cancel() // Stop watching
 					close(done)
 				})
-				return
 			}
-		}
+		}, inbox1, inbox2)
 	}()
 
 	// Send emails to both inboxes

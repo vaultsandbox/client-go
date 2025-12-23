@@ -403,7 +403,7 @@ func TestMultipleNotificationEmails(t *testing.T) {
 
 ### Real-time Monitoring
 
-For scenarios where you need to process emails as they arrive, use the channel-based `Watch()` method. Context cancellation controls the lifecycle.
+For scenarios where you need to process emails as they arrive, use `WatchFunc()`. Context cancellation controls the lifecycle.
 
 ```go
 package main
@@ -448,11 +448,11 @@ func main() {
         cancel() // Stop watching on interrupt
     }()
 
-    // Watch for new emails via channel
-    for email := range inbox.Watch(watchCtx) {
+    // Watch for new emails
+    inbox.WatchFunc(watchCtx, func(email *vaultsandbox.Email) {
         fmt.Printf("New email received: %q\n", email.Subject)
         // Process the email here...
-    }
+    })
 
     fmt.Println("Stopped monitoring")
 }
@@ -494,7 +494,8 @@ func New(apiKey string, opts ...Option) (*Client, error)
 - `Inboxes() []*Inbox` — Gets all managed inboxes
 - `ServerInfo() *ServerInfo` — Gets server information
 - `CheckKey(ctx) error` — Validates API key
-- `WatchInboxes(ctx, inboxes ...*Inbox) <-chan *InboxEvent` — Returns a channel that receives events from multiple inboxes; closes when context is cancelled
+- `WatchInboxes(ctx, inboxes ...*Inbox) <-chan *InboxEvent` — Returns a channel that receives events from multiple inboxes; use select on ctx.Done() to detect cancellation
+- `WatchInboxesFunc(ctx, fn func(*InboxEvent), inboxes ...*Inbox)` — Calls fn for each event until context is cancelled (convenience wrapper)
 - `ExportInboxToFile(inbox *Inbox, filePath string) error` — Exports an inbox to a JSON file
 - `ImportInboxFromFile(ctx, filePath string) (*Inbox, error)` — Imports an inbox from a JSON file
 - `Close() error` — Closes the client, terminates any active SSE or polling connections, and cleans up resources
@@ -523,10 +524,10 @@ fmt.Printf("Watching inboxes: %s, %s\n", inbox1.EmailAddress(), inbox2.EmailAddr
 watchCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 defer cancel()
 
-for event := range client.WatchInboxes(watchCtx, inbox1, inbox2) {
+client.WatchInboxesFunc(watchCtx, func(event *vaultsandbox.InboxEvent) {
     fmt.Printf("New email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
     // Further processing...
-}
+}, inbox1, inbox2)
 ```
 
 ### Inbox
@@ -546,7 +547,8 @@ Represents a single email inbox.
 - `GetEmail(ctx, emailID string) (*Email, error)` — Gets a specific email
 - `WaitForEmail(ctx, opts ...WaitOption) (*Email, error)` — Waits for an email matching criteria
 - `WaitForEmailCount(ctx, count int, opts ...WaitOption) ([]*Email, error)` — Waits until the inbox has at least the specified number of emails
-- `Watch(ctx) <-chan *Email` — Returns a channel that receives emails as they arrive; closes when context is cancelled
+- `Watch(ctx) <-chan *Email` — Returns a channel that receives emails as they arrive; use select on ctx.Done() to detect cancellation
+- `WatchFunc(ctx, fn func(*Email))` — Calls fn for each email until context is cancelled (convenience wrapper)
 - `GetSyncStatus(ctx) (*SyncStatus, error)` — Gets inbox sync status
 - `GetRawEmail(ctx, emailID string) (string, error)` — Gets the raw, decrypted source of a specific email
 - `MarkEmailAsRead(ctx, emailID string) error` — Marks email as read
@@ -745,6 +747,41 @@ func main() {
     }
 
     fmt.Printf("Email received: %s\n", email.Subject)
+}
+```
+
+## Channel vs Callback API
+
+The SDK offers two styles for watching emails:
+
+**Callback-based (recommended for most cases):**
+
+```go
+// Simple and concise - handles context cancellation internally
+inbox.WatchFunc(ctx, func(email *vaultsandbox.Email) {
+    fmt.Printf("New email: %s\n", email.Subject)
+})
+
+// Multi-inbox variant
+client.WatchInboxesFunc(ctx, func(event *vaultsandbox.InboxEvent) {
+    fmt.Printf("Email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
+}, inbox1, inbox2)
+```
+
+**Channel-based (for advanced use cases):**
+
+```go
+// Use when you need to combine with other channels or custom select logic
+emails := inbox.Watch(ctx)
+for {
+    select {
+    case <-ctx.Done():
+        return
+    case email := <-emails:
+        fmt.Printf("New email: %s\n", email.Subject)
+    case <-otherChan:
+        // Handle other events concurrently
+    }
 }
 ```
 

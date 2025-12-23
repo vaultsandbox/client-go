@@ -429,6 +429,28 @@ func (c *Client) WatchInboxes(ctx context.Context, inboxes ...*Inbox) <-chan *In
 	return ch
 }
 
+// WatchInboxesFunc calls fn for each event from multiple inboxes until context is cancelled.
+// This is a convenience wrapper around WatchInboxes for simpler use cases.
+//
+// Example:
+//
+//	client.WatchInboxesFunc(ctx, func(event *vaultsandbox.InboxEvent) {
+//	    fmt.Printf("Email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
+//	}, inbox1, inbox2)
+func (c *Client) WatchInboxesFunc(ctx context.Context, fn func(*InboxEvent), inboxes ...*Inbox) {
+	events := c.WatchInboxes(ctx, inboxes...)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-events:
+			if event != nil {
+				fn(event)
+			}
+		}
+	}
+}
+
 // syncAllInboxes fetches emails for all tracked inboxes and notifies watchers.
 // This is called after SSE reconnection to catch any emails that arrived
 // during the reconnection window.
