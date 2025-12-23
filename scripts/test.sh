@@ -53,7 +53,7 @@ if [ "$VERBOSE" = true ]; then
 fi
 
 if [ "$COVERAGE" = true ]; then
-    CMD="$CMD -coverprofile=coverage.out"
+    CMD="$CMD -coverprofile=coverage.out -covermode=atomic -coverpkg=./..."
 fi
 
 if [ "$INTEGRATION" = true ]; then
