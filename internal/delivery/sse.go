@@ -346,34 +346,6 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 	return scanner.Err()
 }
 
-// SSEWaitForEmail waits for an email matching the given criteria.
-// SSE strategy delegates to the generic WaitForEmail function.
-// The type parameter T represents the email type being waited for.
-func SSEWaitForEmail[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], pollInterval time.Duration) (T, error) {
-	return WaitForEmail(ctx, fetcher, matcher, pollInterval)
-}
-
-// SSEWaitForEmailWithSync waits for an email using sync-status-based change detection.
-// SSE strategy delegates to the generic WaitForEmailWithSync function.
-// The type parameter T represents the email type being waited for.
-func SSEWaitForEmailWithSync[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], opts WaitOptions) (T, error) {
-	return WaitForEmailWithSync(ctx, fetcher, matcher, opts)
-}
-
-// SSEWaitForEmailCount waits until at least count emails match the criteria.
-// SSE strategy delegates to the generic WaitForEmailCount function.
-// The type parameter T represents the email type being waited for.
-func SSEWaitForEmailCount[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, pollInterval time.Duration) ([]T, error) {
-	return WaitForEmailCount(ctx, fetcher, matcher, count, pollInterval)
-}
-
-// SSEWaitForEmailCountWithSync waits for multiple emails using sync-status-based
-// change detection. SSE strategy delegates to the generic WaitForEmailCountWithSync function.
-// The type parameter T represents the email type being waited for.
-func SSEWaitForEmailCountWithSync[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, opts WaitOptions) ([]T, error) {
-	return WaitForEmailCountWithSync(ctx, fetcher, matcher, count, opts)
-}
-
 // Close releases resources and stops the SSE strategy.
 // It is equivalent to calling Stop.
 func (s *SSEStrategy) Close() error {

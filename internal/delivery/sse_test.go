@@ -98,7 +98,7 @@ func TestSSEStrategy_WaitForEmail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := SSEWaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
+	result, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
@@ -123,7 +123,7 @@ func TestSSEStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	result, err := SSEWaitForEmail(ctx, fetcher, matcher, time.Second)
+	result, err := WaitForEmail(ctx, fetcher, matcher, time.Second)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -151,7 +151,7 @@ func TestSSEStrategy_WaitForEmail_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := SSEWaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
+	_, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmail() error = %v, want context.DeadlineExceeded", err)
 	}
@@ -179,7 +179,7 @@ func TestSSEStrategy_WaitForEmailCount(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := SSEWaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("WaitForEmailCount() error = %v", err)
 	}
@@ -205,7 +205,7 @@ func TestSSEStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	results, err := SSEWaitForEmailCount(ctx, fetcher, matcher, 2, time.Second)
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, time.Second)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -235,7 +235,7 @@ func TestSSEStrategy_WaitForEmailCount_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := SSEWaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
+	_, err := WaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmailCount() error = %v, want context.DeadlineExceeded", err)
 	}
@@ -301,7 +301,7 @@ func TestSSEStrategy_WaitForEmail_DefaultInterval(t *testing.T) {
 	defer cancel()
 
 	// Pass 0 for pollInterval to use default
-	_, err := SSEWaitForEmail(ctx, fetcher, matcher, 0)
+	_, err := WaitForEmail(ctx, fetcher, matcher, 0)
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
@@ -355,7 +355,7 @@ func TestSSEStrategy_WaitForEmailWithSync(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := SSEWaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
+	result, err := WaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
@@ -391,7 +391,7 @@ func TestSSEStrategy_WaitForEmailCountWithSync(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := SSEWaitForEmailCountWithSync(ctx, fetcher, matcher, 2, WaitOptions{
+	results, err := WaitForEmailCountWithSync(ctx, fetcher, matcher, 2, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
