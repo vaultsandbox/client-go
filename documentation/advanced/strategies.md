@@ -193,29 +193,27 @@ func main() {
 
 ### Adding Inboxes After Connection
 
-When using SSE, the connection is established with a fixed set of inboxes. If you add inboxes after the SSE connection is already active (e.g., by calling `client.CreateInbox` or `client.ImportInbox`), the new inboxes will only receive events after the next reconnection.
+When using SSE, the SDK automatically handles adding new inboxes after the connection is established. If you call `client.CreateInbox` or `client.ImportInbox` while SSE is already connected, the SDK will:
 
-For tests that create all inboxes upfront before subscribing, this is not an issue. If you need to add inboxes dynamically and receive events immediately, stop and restart the client:
+1. **Immediately trigger a reconnection** (without exponential backoff)
+2. **Include the new inbox** in the updated connection
+3. **Sync all inboxes** after reconnection to catch any emails that arrived during the brief reconnection window
+
+This means you can safely add inboxes dynamically without any manual intervention:
 
 ```go
 // Create initial inbox and start listening
 inbox1, _ := client.CreateInbox(ctx)
 subscription := inbox1.OnNewEmail(handler)
 
-// Later, need to add another inbox with immediate event delivery
-subscription.Unsubscribe()
-client.Close()
+// Later, add another inbox - events start flowing automatically
+inbox2, _ := client.CreateInbox(ctx)
+subscription2 := inbox2.OnNewEmail(handler)
 
-// Recreate client and inboxes
-client, _ = vaultsandbox.New(apiKey)
-inbox1, _ = client.ImportInbox(ctx, inbox1Key) // re-import
-inbox2, _ := client.CreateInbox(ctx)           // new inbox
-
-// Now both inboxes will receive events
-monitor, _ := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
+// Both inboxes now receive real-time events
 ```
 
-For most testing scenarios, create all required inboxes before subscribing to events.
+The reconnection is transparent and fast, so there's no need to manually restart the client or coordinate inbox creation timing.
 
 ## Polling Strategy
 
