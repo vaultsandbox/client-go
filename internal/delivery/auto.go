@@ -129,19 +129,11 @@ func (a *AutoStrategy) RemoveInbox(inboxHash string) error {
 	return nil
 }
 
-// Close releases resources and stops the underlying strategy.
-// It is equivalent to calling Stop.
-func (a *AutoStrategy) Close() error {
-	return a.Stop()
-}
-
 // OnReconnect forwards the callback to the underlying strategy.
 // If SSE is selected, this enables sync after reconnection.
 // If polling is selected, this is a no-op.
 func (a *AutoStrategy) OnReconnect(fn func(ctx context.Context)) {
 	if a.current != nil {
-		if fs, ok := a.current.(FullStrategy); ok {
-			fs.OnReconnect(fn)
-		}
+		a.current.OnReconnect(fn)
 	}
 }

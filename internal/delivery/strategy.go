@@ -57,6 +57,13 @@ type Strategy interface {
 	// Name returns the strategy name for logging and debugging.
 	// Examples: "polling", "sse", "auto:sse", "auto:polling"
 	Name() string
+
+	// OnReconnect sets a callback that is invoked after each successful
+	// connection/reconnection. For SSE, this is called after the EventSource
+	// connects. For polling, this is a no-op since polling doesn't have
+	// persistent connections. This can be used to sync emails that may have
+	// arrived during the reconnection window.
+	OnReconnect(fn func(ctx context.Context))
 }
 
 // Config holds configuration shared by all delivery strategies.
@@ -104,23 +111,3 @@ type WaitOptions struct {
 	SyncFetcher SyncFetcher
 }
 
-// FullStrategy extends the Strategy interface with a Close method.
-// This interface is implemented by all concrete strategies
-// (PollingStrategy, SSEStrategy, AutoStrategy).
-//
-// Note: Email waiting is handled at the Inbox level using callbacks,
-// which leverages SSE for instant notifications when available.
-type FullStrategy interface {
-	Strategy
-
-	// Close releases resources and stops the strategy.
-	// It is equivalent to calling Stop.
-	Close() error
-
-	// OnReconnect sets a callback that is invoked after each successful
-	// connection/reconnection. For SSE, this is called after the EventSource
-	// connects. For polling, this is a no-op since polling doesn't have
-	// persistent connections. This can be used to sync emails that may have
-	// arrived during the reconnection window.
-	OnReconnect(fn func(ctx context.Context))
-}

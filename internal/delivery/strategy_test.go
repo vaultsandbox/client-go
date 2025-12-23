@@ -29,7 +29,7 @@ func TestConfig(t *testing.T) {
 	}
 }
 
-// Test that strategies implement the interfaces
+// Test that strategies implement the Strategy interface
 func TestStrategyInterface(t *testing.T) {
 	// Verify PollingStrategy implements Strategy
 	var _ Strategy = (*PollingStrategy)(nil)
@@ -39,15 +39,4 @@ func TestStrategyInterface(t *testing.T) {
 
 	// Verify AutoStrategy implements Strategy
 	var _ Strategy = (*AutoStrategy)(nil)
-}
-
-func TestFullStrategyInterface(t *testing.T) {
-	// Verify PollingStrategy implements FullStrategy
-	var _ FullStrategy = (*PollingStrategy)(nil)
-
-	// Verify SSEStrategy implements FullStrategy
-	var _ FullStrategy = (*SSEStrategy)(nil)
-
-	// Verify AutoStrategy implements FullStrategy
-	var _ FullStrategy = (*AutoStrategy)(nil)
 }

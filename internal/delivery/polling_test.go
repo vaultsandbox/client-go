@@ -67,13 +67,6 @@ func TestPollingStrategy_Stop_NotStarted(t *testing.T) {
 	}
 }
 
-func TestPollingStrategy_Close(t *testing.T) {
-	p := NewPollingStrategy(Config{})
-
-	if err := p.Close(); err != nil {
-		t.Errorf("Close() error = %v", err)
-	}
-}
 
 func TestPollingStrategy_WaitForEmail(t *testing.T) {
 	var callCount int32
@@ -95,7 +88,7 @@ func TestPollingStrategy_WaitForEmail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
+	result, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{PollInterval: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
@@ -120,7 +113,7 @@ func TestPollingStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	result, err := WaitForEmail(ctx, fetcher, matcher, time.Second)
+	result, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{PollInterval: time.Second})
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -149,7 +142,7 @@ func TestPollingStrategy_WaitForEmail_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
+	_, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{PollInterval: 10 * time.Millisecond})
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmail() error = %v, want context.DeadlineExceeded", err)
 	}
@@ -177,7 +170,7 @@ func TestPollingStrategy_WaitForEmailCount(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, WaitOptions{PollInterval: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("WaitForEmailCount() error = %v", err)
 	}
@@ -203,7 +196,7 @@ func TestPollingStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, time.Second)
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, WaitOptions{PollInterval: time.Second})
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -233,7 +226,7 @@ func TestPollingStrategy_WaitForEmailCount_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := WaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
+	_, err := WaitForEmailCount(ctx, fetcher, matcher, 2, WaitOptions{PollInterval: 10 * time.Millisecond})
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmailCount() error = %v, want context.DeadlineExceeded", err)
 	}
@@ -257,7 +250,7 @@ func TestPollingStrategy_WaitForEmail_DefaultInterval(t *testing.T) {
 	defer cancel()
 
 	// Pass 0 for pollInterval to use default
-	_, err := WaitForEmail(ctx, fetcher, matcher, 0)
+	_, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{})
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
@@ -317,7 +310,7 @@ type testEmail struct {
 	Subject string
 }
 
-func TestPollingStrategy_WaitForEmailWithSync(t *testing.T) {
+func TestPollingStrategy_WaitForEmail_WithSync(t *testing.T) {
 	var fetchCount int32
 	var syncCount int32
 	currentHash := "hash1"
@@ -351,12 +344,12 @@ func TestPollingStrategy_WaitForEmailWithSync(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := WaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
+	result, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
 	if err != nil {
-		t.Fatalf("WaitForEmailWithSync() error = %v", err)
+		t.Fatalf("WaitForEmail() error = %v", err)
 	}
 
 	if result.ID != "email1" {
@@ -369,7 +362,7 @@ func TestPollingStrategy_WaitForEmailWithSync(t *testing.T) {
 	}
 }
 
-func TestPollingStrategy_WaitForEmailWithSync_BackoffOnNoChange(t *testing.T) {
+func TestPollingStrategy_WaitForEmail_BackoffOnNoChange(t *testing.T) {
 	var syncCount int32
 	var fetchCount int32
 
@@ -393,7 +386,7 @@ func TestPollingStrategy_WaitForEmailWithSync_BackoffOnNoChange(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := WaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
+	_, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{
 		PollInterval: 5 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
@@ -416,7 +409,7 @@ func TestPollingStrategy_WaitForEmailWithSync_BackoffOnNoChange(t *testing.T) {
 	}
 }
 
-func TestPollingStrategy_WaitForEmailCountWithSync(t *testing.T) {
+func TestPollingStrategy_WaitForEmailCount_WithSync(t *testing.T) {
 	var fetchCount int32
 
 	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
@@ -445,12 +438,12 @@ func TestPollingStrategy_WaitForEmailCountWithSync(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := WaitForEmailCountWithSync(ctx, fetcher, matcher, 2, WaitOptions{
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
 	if err != nil {
-		t.Fatalf("WaitForEmailCountWithSync() error = %v", err)
+		t.Fatalf("WaitForEmailCount() error = %v", err)
 	}
 
 	if len(results) != 2 {
@@ -551,7 +544,7 @@ func TestPollingStrategy_ConcurrentPolling(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 
-			result, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
+			result, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{PollInterval: 10 * time.Millisecond})
 			if err != nil {
 				t.Errorf("WaitForEmail() for %s error = %v", inboxHash, err)
 				return
@@ -608,30 +601,30 @@ func TestPollingStrategy_RemoveInbox_Idempotent(t *testing.T) {
 	}
 }
 
-func TestPollingStrategy_AddInbox_AfterClose(t *testing.T) {
-	// Test behavior when adding inbox after strategy is closed
+func TestPollingStrategy_AddInbox_AfterStop(t *testing.T) {
+	// Test behavior when adding inbox after strategy is stopped
 	p := NewPollingStrategy(Config{})
 
-	// Close the strategy
-	if err := p.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
+	// Stop the strategy
+	if err := p.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
 
-	// Try to add inbox after close
+	// Try to add inbox after stop
 	inbox := InboxInfo{
 		Hash:         "hash123",
 		EmailAddress: "test@example.com",
 	}
 
 	// AddInbox should still work (it just adds to the map)
-	// The strategy is closed but the map operations still work
+	// The strategy is stopped but the map operations still work
 	err := p.AddInbox(inbox)
 	if err != nil {
-		t.Logf("AddInbox after Close returned: %v", err)
+		t.Logf("AddInbox after Stop returned: %v", err)
 	}
 
 	// Verify the inbox was added to the map (the current implementation allows this)
 	if _, exists := p.inboxes[inbox.Hash]; !exists {
-		t.Log("inbox was not added after close (acceptable behavior)")
+		t.Log("inbox was not added after stop (acceptable behavior)")
 	}
 }

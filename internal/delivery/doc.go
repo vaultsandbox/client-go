@@ -18,8 +18,7 @@
 //
 // # Usage
 //
-// All strategies implement the [Strategy] interface for event-driven delivery
-// and the [FullStrategy] interface which adds Close():
+// All strategies implement the [Strategy] interface for event-driven delivery:
 //
 //	cfg := delivery.Config{APIClient: apiClient}
 //	strategy := delivery.NewAutoStrategy(cfg)

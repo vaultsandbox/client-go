@@ -37,14 +37,6 @@ func TestAutoStrategy_Stop_NotStarted(t *testing.T) {
 	}
 }
 
-func TestAutoStrategy_Close(t *testing.T) {
-	a := NewAutoStrategy(Config{})
-
-	if err := a.Close(); err != nil {
-		t.Errorf("Close() error = %v", err)
-	}
-}
-
 func TestAutoStrategy_AddInbox_NoCurrent(t *testing.T) {
 	a := NewAutoStrategy(Config{})
 

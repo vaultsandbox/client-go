@@ -253,22 +253,12 @@ func (p *PollingStrategy) getWaitDuration(inbox *polledInbox) time.Duration {
 	return inbox.interval + jitter
 }
 
-// WaitForEmail waits for an email matching the given criteria using simple polling.
-// It blocks until a matching email is found or the context is canceled.
-// The type parameter T represents the email type being waited for.
-func WaitForEmail[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], pollInterval time.Duration) (T, error) {
-	return WaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
-		PollInterval: pollInterval,
-		SyncFetcher:  nil, // No sync fetcher, use simple polling
-	})
-}
-
-// WaitForEmailWithSync waits for an email using sync-status-based change detection.
+// WaitForEmail waits for an email using sync-status-based change detection.
 // If opts.SyncFetcher is provided, it uses smart polling that only fetches emails
 // when the sync status hash changes, reducing API calls. If SyncFetcher is nil,
 // it falls back to simple interval-based polling.
 // The type parameter T represents the email type being waited for.
-func WaitForEmailWithSync[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], opts WaitOptions) (T, error) {
+func WaitForEmail[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], opts WaitOptions) (T, error) {
 	var zero T
 	pollInterval := opts.PollInterval
 	if pollInterval == 0 {
@@ -376,21 +366,12 @@ func waitForEmailSimple[T any](ctx context.Context, fetcher EmailFetcher[T], mat
 	}
 }
 
-// WaitForEmailCount waits until at least count emails match the criteria.
-// It blocks until enough matching emails are found or the context is canceled.
+// WaitForEmailCount waits for multiple emails using sync-status-based
+// change detection. Like WaitForEmail, it uses smart polling when a
+// SyncFetcher is provided. If SyncFetcher is nil, it falls back to
+// simple interval-based polling.
 // The type parameter T represents the email type being waited for.
-func WaitForEmailCount[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, pollInterval time.Duration) ([]T, error) {
-	return WaitForEmailCountWithSync(ctx, fetcher, matcher, count, WaitOptions{
-		PollInterval: pollInterval,
-		SyncFetcher:  nil,
-	})
-}
-
-// WaitForEmailCountWithSync waits for multiple emails using sync-status-based
-// change detection. Like WaitForEmailWithSync, it uses smart polling when a
-// SyncFetcher is provided.
-// The type parameter T represents the email type being waited for.
-func WaitForEmailCountWithSync[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, opts WaitOptions) ([]T, error) {
+func WaitForEmailCount[T any](ctx context.Context, fetcher EmailFetcher[T], matcher EmailMatcher[T], count int, opts WaitOptions) ([]T, error) {
 	pollInterval := opts.PollInterval
 	if pollInterval == 0 {
 		pollInterval = PollingInitialInterval
@@ -507,12 +488,6 @@ func waitForEmailCountSimple[T any](ctx context.Context, fetcher EmailFetcher[T]
 			}
 		}
 	}
-}
-
-// Close releases resources and stops the polling strategy.
-// It is equivalent to calling Stop.
-func (p *PollingStrategy) Close() error {
-	return p.Stop()
 }
 
 // OnReconnect is a no-op for polling strategy since polling doesn't have

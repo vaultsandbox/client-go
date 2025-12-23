@@ -346,8 +346,3 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 	return scanner.Err()
 }
 
-// Close releases resources and stops the SSE strategy.
-// It is equivalent to calling Stop.
-func (s *SSEStrategy) Close() error {
-	return s.Stop()
-}

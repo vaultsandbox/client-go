@@ -70,14 +70,6 @@ func TestSSEStrategy_Stop_NotStarted(t *testing.T) {
 	}
 }
 
-func TestSSEStrategy_Close(t *testing.T) {
-	s := NewSSEStrategy(Config{})
-
-	if err := s.Close(); err != nil {
-		t.Errorf("Close() error = %v", err)
-	}
-}
-
 func TestSSEStrategy_WaitForEmail(t *testing.T) {
 	var callCount int32
 
@@ -98,7 +90,7 @@ func TestSSEStrategy_WaitForEmail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
+	result, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{PollInterval: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
@@ -123,7 +115,7 @@ func TestSSEStrategy_WaitForEmail_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	result, err := WaitForEmail(ctx, fetcher, matcher, time.Second)
+	result, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{PollInterval: time.Second})
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -151,7 +143,7 @@ func TestSSEStrategy_WaitForEmail_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := WaitForEmail(ctx, fetcher, matcher, 10*time.Millisecond)
+	_, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{PollInterval: 10 * time.Millisecond})
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmail() error = %v, want context.DeadlineExceeded", err)
 	}
@@ -179,7 +171,7 @@ func TestSSEStrategy_WaitForEmailCount(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, WaitOptions{PollInterval: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("WaitForEmailCount() error = %v", err)
 	}
@@ -205,7 +197,7 @@ func TestSSEStrategy_WaitForEmailCount_ImmediateMatch(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, time.Second)
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, WaitOptions{PollInterval: time.Second})
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -235,7 +227,7 @@ func TestSSEStrategy_WaitForEmailCount_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := WaitForEmailCount(ctx, fetcher, matcher, 2, 10*time.Millisecond)
+	_, err := WaitForEmailCount(ctx, fetcher, matcher, 2, WaitOptions{PollInterval: 10 * time.Millisecond})
 	if err != context.DeadlineExceeded {
 		t.Errorf("WaitForEmailCount() error = %v, want context.DeadlineExceeded", err)
 	}
@@ -300,8 +292,8 @@ func TestSSEStrategy_WaitForEmail_DefaultInterval(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Pass 0 for pollInterval to use default
-	_, err := WaitForEmail(ctx, fetcher, matcher, 0)
+	// Pass empty options to use defaults
+	_, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{})
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
 	}
@@ -328,7 +320,7 @@ func TestSSEStrategy_LastError(t *testing.T) {
 	}
 }
 
-func TestSSEStrategy_WaitForEmailWithSync(t *testing.T) {
+func TestSSEStrategy_WaitForEmail_WithSync(t *testing.T) {
 	var fetchCount int32
 
 	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
@@ -355,12 +347,12 @@ func TestSSEStrategy_WaitForEmailWithSync(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	result, err := WaitForEmailWithSync(ctx, fetcher, matcher, WaitOptions{
+	result, err := WaitForEmail(ctx, fetcher, matcher, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
 	if err != nil {
-		t.Fatalf("WaitForEmailWithSync() error = %v", err)
+		t.Fatalf("WaitForEmail() error = %v", err)
 	}
 
 	if result.ID != "email1" {
@@ -368,7 +360,7 @@ func TestSSEStrategy_WaitForEmailWithSync(t *testing.T) {
 	}
 }
 
-func TestSSEStrategy_WaitForEmailCountWithSync(t *testing.T) {
+func TestSSEStrategy_WaitForEmailCount_WithSync(t *testing.T) {
 	syncFetcher := func(ctx context.Context) (*SyncStatus, error) {
 		return &SyncStatus{
 			EmailCount: 3,
@@ -391,12 +383,12 @@ func TestSSEStrategy_WaitForEmailCountWithSync(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := WaitForEmailCountWithSync(ctx, fetcher, matcher, 2, WaitOptions{
+	results, err := WaitForEmailCount(ctx, fetcher, matcher, 2, WaitOptions{
 		PollInterval: 10 * time.Millisecond,
 		SyncFetcher:  syncFetcher,
 	})
 	if err != nil {
-		t.Fatalf("WaitForEmailCountWithSync() error = %v", err)
+		t.Fatalf("WaitForEmailCount() error = %v", err)
 	}
 
 	if len(results) != 2 {
@@ -444,8 +436,8 @@ func TestSSEStrategy_RemoveInbox_Idempotent(t *testing.T) {
 	}
 }
 
-func TestSSEStrategy_AddInbox_AfterClose(t *testing.T) {
-	// Test behavior when adding inbox after strategy is closed
+func TestSSEStrategy_AddInbox_AfterStop(t *testing.T) {
+	// Test behavior when adding inbox after strategy is stopped
 	s := NewSSEStrategy(Config{})
 
 	// Start the strategy first
@@ -462,39 +454,39 @@ func TestSSEStrategy_AddInbox_AfterClose(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	// Close the strategy
+	// Stop the strategy
 	cancel()
-	if err := s.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
+	if err := s.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
 
-	// Try to add inbox after close
+	// Try to add inbox after stop
 	inbox := InboxInfo{
 		Hash:         "hash123",
 		EmailAddress: "test@example.com",
 	}
 
 	// AddInbox should still work (it just adds to the map)
-	// The strategy is closed but the map operations still work
+	// The strategy is stopped but the map operations still work
 	err := s.AddInbox(inbox)
 	if err != nil {
-		t.Logf("AddInbox after Close returned: %v", err)
+		t.Logf("AddInbox after Stop returned: %v", err)
 	}
 
-	// Verify the behavior - current implementation allows adding to map even after close
+	// Verify the behavior - current implementation allows adding to map even after stop
 	// This is acceptable since the strategy is stopped and won't process new inboxes
 	if _, exists := s.inboxHashes[inbox.Hash]; !exists {
-		t.Log("inbox was not added after close (this is acceptable behavior)")
+		t.Log("inbox was not added after stop (this is acceptable behavior)")
 	}
 }
 
-func TestSSEStrategy_Start_AfterClose(t *testing.T) {
-	// Test that starting after close doesn't cause panics
+func TestSSEStrategy_Start_AfterStop(t *testing.T) {
+	// Test that starting after stop doesn't cause panics
 	s := NewSSEStrategy(Config{})
 
-	// Close without starting
-	if err := s.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
+	// Stop without starting
+	if err := s.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
 
 	// Verify started flag is false
@@ -503,7 +495,7 @@ func TestSSEStrategy_Start_AfterClose(t *testing.T) {
 	s.mu.RUnlock()
 
 	if started {
-		t.Error("started should be false after Close")
+		t.Error("started should be false after Stop")
 	}
 }
 

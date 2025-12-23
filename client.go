@@ -28,7 +28,7 @@ type ServerInfo struct {
 // Client is the main VaultSandbox client for managing inboxes.
 type Client struct {
 	apiClient      *api.Client
-	strategy       delivery.FullStrategy
+	strategy       delivery.Strategy
 	serverInfo     *api.ServerInfo
 	inboxes        map[string]*Inbox // keyed by email address
 	inboxesByHash  map[string]*Inbox // keyed by inbox hash for O(1) lookup
@@ -71,7 +71,7 @@ func buildAPIClient(apiKey string, cfg *clientConfig) (*api.Client, error) {
 }
 
 // createDeliveryStrategy creates a delivery strategy based on the config.
-func createDeliveryStrategy(cfg *clientConfig, apiClient *api.Client) delivery.FullStrategy {
+func createDeliveryStrategy(cfg *clientConfig, apiClient *api.Client) delivery.Strategy {
 	deliveryCfg := delivery.Config{APIClient: apiClient}
 	switch cfg.deliveryStrategy {
 	case StrategySSE:
@@ -565,7 +565,7 @@ func (c *Client) Close() error {
 
 	// Stop delivery strategy
 	if c.strategy != nil {
-		if err := c.strategy.Close(); err != nil {
+		if err := c.strategy.Stop(); err != nil {
 			return err
 		}
 	}
