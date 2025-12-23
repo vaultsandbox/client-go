@@ -26,9 +26,6 @@ func TestDefaultConstants(t *testing.T) {
 	if defaultWaitTimeout != 60*time.Second {
 		t.Errorf("defaultWaitTimeout = %v, want 60s", defaultWaitTimeout)
 	}
-	if defaultPollInterval != 2*time.Second {
-		t.Errorf("defaultPollInterval = %v, want 2s", defaultPollInterval)
-	}
 }
 
 func TestWithBaseURL(t *testing.T) {
@@ -148,14 +145,6 @@ func TestWithWaitTimeout(t *testing.T) {
 	WithWaitTimeout(5 * time.Minute)(cfg)
 	if cfg.timeout != 5*time.Minute {
 		t.Errorf("timeout = %v, want 5m", cfg.timeout)
-	}
-}
-
-func TestWithPollInterval(t *testing.T) {
-	cfg := &waitConfig{}
-	WithPollInterval(10 * time.Second)(cfg)
-	if cfg.pollInterval != 10*time.Second {
-		t.Errorf("pollInterval = %v, want 10s", cfg.pollInterval)
 	}
 }
 

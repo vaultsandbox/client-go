@@ -19,9 +19,8 @@ const (
 )
 
 const (
-	defaultBaseURL      = "https://api.vaultsandbox.com"
-	defaultWaitTimeout  = 60 * time.Second
-	defaultPollInterval = 2 * time.Second
+	defaultBaseURL     = "https://api.vaultsandbox.com"
+	defaultWaitTimeout = 60 * time.Second
 )
 
 // clientConfig holds configuration for the client.
@@ -55,7 +54,6 @@ type waitConfig struct {
 	fromRegex    *regexp.Regexp
 	predicate    func(*Email) bool
 	timeout      time.Duration
-	pollInterval time.Duration
 }
 
 // Option configures the client.
@@ -284,12 +282,6 @@ func WithWaitTimeout(timeout time.Duration) WaitOption {
 	}
 }
 
-// WithPollInterval sets the polling interval.
-func WithPollInterval(interval time.Duration) WaitOption {
-	return func(c *waitConfig) {
-		c.pollInterval = interval
-	}
-}
 
 // Matches checks if an email matches the wait criteria.
 func (w *waitConfig) Matches(e *Email) bool {

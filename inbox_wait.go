@@ -34,8 +34,7 @@ func (i *Inbox) Watch(ctx context.Context) <-chan *Email {
 // when SSE is active, or receives events when the polling handler fires.
 func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, error) {
 	cfg := &waitConfig{
-		timeout:      defaultWaitTimeout,
-		pollInterval: defaultPollInterval,
+		timeout: defaultWaitTimeout,
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -73,8 +72,7 @@ func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, e
 // when SSE is active, or receives events when the polling handler fires.
 func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOption) ([]*Email, error) {
 	cfg := &waitConfig{
-		timeout:      defaultWaitTimeout,
-		pollInterval: defaultPollInterval,
+		timeout: defaultWaitTimeout,
 	}
 	for _, opt := range opts {
 		opt(cfg)

@@ -317,26 +317,6 @@ func main() {
 }
 ```
 
-### Custom Poll Interval
-
-You can override the polling interval for specific wait operations:
-
-```go
-// Default client polling
-client, _ := vaultsandbox.New(
-    os.Getenv("VAULTSANDBOX_API_KEY"),
-    vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyPolling),
-)
-
-inbox, _ := client.CreateInbox(ctx)
-
-// Override for specific operation (faster)
-email, err := inbox.WaitForEmail(ctx,
-    vaultsandbox.WithWaitTimeout(30*time.Second),
-    vaultsandbox.WithPollInterval(1*time.Second), // Check every 1s for this operation
-)
-```
-
 ### When to Use Polling
 
 - **Corporate networks**: Restrictive firewall/proxy environments
@@ -589,19 +569,13 @@ if err != nil {
 If emails arrive slowly with polling:
 
 ```go
-// Solution 1: Use faster poll interval for specific operations
-email, err := inbox.WaitForEmail(ctx,
-    vaultsandbox.WithPollInterval(500*time.Millisecond), // Fast polling for this operation
-    vaultsandbox.WithWaitTimeout(10*time.Second),
-)
-
-// Solution 2: Use SSE if available
+// Solution 1: Use SSE for real-time delivery
 client, _ := vaultsandbox.New(
     os.Getenv("VAULTSANDBOX_API_KEY"),
     vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE), // Real-time delivery
 )
 
-// Solution 3: Use auto and let it choose
+// Solution 2: Use auto and let it choose
 client, _ := vaultsandbox.New(
     os.Getenv("VAULTSANDBOX_API_KEY"),
     vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyAuto),

@@ -168,7 +168,6 @@ func (i *Inbox) WaitForEmail(ctx context.Context, opts ...WaitOption) (*Email, e
 | Option | Description |
 | ------ | ----------- |
 | `WithWaitTimeout(d time.Duration)` | Maximum time to wait (default: 60s) |
-| `WithPollInterval(d time.Duration)` | Polling interval (default: 2s) |
 | `WithSubject(s string)` | Filter by exact subject match |
 | `WithSubjectRegex(r *regexp.Regexp)` | Filter by subject pattern |
 | `WithFrom(s string)` | Filter by exact sender address |
@@ -246,7 +245,6 @@ func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOp
 | Option | Description |
 | ------ | ----------- |
 | `WithWaitTimeout(d time.Duration)` | Maximum time to wait (default: 60s) |
-| `WithPollInterval(d time.Duration)` | Polling interval (default: 2s) |
 | `WithSubject(s string)` | Filter by exact subject match |
 | `WithSubjectRegex(r *regexp.Regexp)` | Filter by subject pattern |
 | `WithFrom(s string)` | Filter by exact sender address |

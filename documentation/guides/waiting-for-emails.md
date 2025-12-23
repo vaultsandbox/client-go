@@ -108,7 +108,6 @@ sendNotifications(inbox.EmailAddress(), 3)
 // Wait for all 3 to arrive
 emails, err := inbox.WaitForEmailCount(ctx, 3,
     vaultsandbox.WithWaitTimeout(30*time.Second),
-    vaultsandbox.WithPollInterval(1*time.Second), // Check every second
 )
 if err != nil {
     log.Fatal(err)
@@ -207,40 +206,6 @@ func waitWithRetry(ctx context.Context, inbox *vaultsandbox.Inbox, maxRetries in
     }
     return nil, lastErr
 }
-```
-
-## Polling Configuration
-
-### Custom Poll Interval
-
-```go
-// Poll every 500ms (more responsive)
-email, err := inbox.WaitForEmail(ctx,
-    vaultsandbox.WithWaitTimeout(10*time.Second),
-    vaultsandbox.WithPollInterval(500*time.Millisecond),
-)
-
-// Poll every 5 seconds (less frequent)
-email, err := inbox.WaitForEmail(ctx,
-    vaultsandbox.WithWaitTimeout(60*time.Second),
-    vaultsandbox.WithPollInterval(5*time.Second),
-)
-```
-
-### Efficient Polling
-
-```go
-// For quick tests - poll frequently
-email, err := inbox.WaitForEmail(ctx,
-    vaultsandbox.WithWaitTimeout(5*time.Second),
-    vaultsandbox.WithPollInterval(200*time.Millisecond), // Check 5 times per second
-)
-
-// For slow email services - poll less frequently
-email, err := inbox.WaitForEmail(ctx,
-    vaultsandbox.WithWaitTimeout(2*time.Minute),
-    vaultsandbox.WithPollInterval(10*time.Second), // Check every 10 seconds
-)
 ```
 
 ## Real-World Examples

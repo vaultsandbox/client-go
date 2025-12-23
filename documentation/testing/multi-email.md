@@ -744,16 +744,14 @@ emails, err := inbox.WaitForEmailCount(ctx, 10,
 	vaultsandbox.WithWaitTimeout(30*time.Second),
 )
 
-// Faster polling for time-sensitive tests
+// For time-sensitive tests
 emails, err := inbox.WaitForEmailCount(ctx, 10,
 	vaultsandbox.WithWaitTimeout(30*time.Second),
-	vaultsandbox.WithPollInterval(500*time.Millisecond),
 )
 
-// Slower polling for large batches
+// For large batches
 emails, err := inbox.WaitForEmailCount(ctx, 100,
 	vaultsandbox.WithWaitTimeout(2*time.Minute),
-	vaultsandbox.WithPollInterval(5*time.Second),
 )
 ```
 

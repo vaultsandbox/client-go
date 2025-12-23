@@ -310,22 +310,6 @@ email, err := inbox.WaitForEmail(ctx,
 )
 ```
 
-#### WithPollInterval
-
-**Signature**: `WithPollInterval(interval time.Duration) WaitOption`
-
-**Default**: `2 * time.Second`
-
-**Description**: Polling interval when using polling strategy
-
-**Examples**:
-
-```go
-vaultsandbox.WithPollInterval(2 * time.Second)   // Default
-vaultsandbox.WithPollInterval(5 * time.Second)   // Less aggressive
-vaultsandbox.WithPollInterval(500 * time.Millisecond) // More responsive
-```
-
 #### WithSubject
 
 **Signature**: `WithSubject(subject string) WaitOption`

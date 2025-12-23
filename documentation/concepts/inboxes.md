@@ -82,6 +82,12 @@ client, err := vaultsandbox.New(apiKey,
 | `WithTimeout(timeout time.Duration)` | Set default request timeout (default: 60s) |
 | `WithRetries(count int)` | Set number of retry attempts for failed requests |
 | `WithRetryOn(statusCodes []int)` | Set HTTP status codes that trigger retries (default: 408, 429, 500, 502, 503, 504) |
+| `WithPollingConfig(cfg PollingConfig)` | Set complete polling configuration (see below) |
+| `WithPollingInitialInterval(interval time.Duration)` | Set initial polling interval (default: 2s) |
+| `WithPollingMaxBackoff(maxBackoff time.Duration)` | Set maximum backoff duration (default: 30s) |
+| `WithPollingBackoffMultiplier(multiplier float64)` | Set backoff multiplier (default: 1.5) |
+| `WithPollingJitterFactor(factor float64)` | Set jitter factor 0-1 (default: 0.3) |
+| `WithSSEConnectionTimeout(timeout time.Duration)` | Set SSE connection timeout (default: 5s) |
 
 ### Delivery Strategies
 
@@ -109,6 +115,38 @@ client, err := vaultsandbox.New(apiKey,
 // Force SSE for lowest latency
 client, err := vaultsandbox.New(apiKey,
 	vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE),
+)
+```
+
+### Polling Configuration
+
+When using polling delivery strategy, you can fine-tune the polling behavior:
+
+```go
+type PollingConfig struct {
+	InitialInterval   time.Duration // Starting interval between polls (default: 2s)
+	MaxBackoff        time.Duration // Maximum interval after backoff (default: 30s)
+	BackoffMultiplier float64       // Multiplier for exponential backoff (default: 1.5)
+	JitterFactor      float64       // Random jitter 0-1 to prevent thundering herd (default: 0.3)
+}
+```
+
+```go
+// Configure polling with custom settings
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyPolling),
+	vaultsandbox.WithPollingConfig(vaultsandbox.PollingConfig{
+		InitialInterval:   1 * time.Second,
+		MaxBackoff:        10 * time.Second,
+		BackoffMultiplier: 2.0,
+		JitterFactor:      0.2,
+	}),
+)
+
+// Or configure individual settings
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithPollingInitialInterval(500 * time.Millisecond),
+	vaultsandbox.WithPollingMaxBackoff(15 * time.Second),
 )
 ```
 
@@ -468,7 +506,6 @@ email, err := inbox.WaitForEmail(ctx,
 | `WithFrom(string)` | Filter by exact sender match |
 | `WithFromRegex(regexp)` | Filter by sender regex pattern |
 | `WithPredicate(func(*Email) bool)` | Filter by custom predicate function |
-| `WithPollInterval(duration)` | Set the polling interval (default: 2s) |
 
 ```go
 // Using exact subject match
@@ -493,7 +530,6 @@ email, err := inbox.WaitForEmail(ctx,
 	vaultsandbox.WithWaitTimeout(60*time.Second),
 	vaultsandbox.WithFrom("notifications@example.com"),
 	vaultsandbox.WithSubjectRegex(regexp.MustCompile(`Order #\d+`)),
-	vaultsandbox.WithPollInterval(1*time.Second),
 )
 ```
 
@@ -648,29 +684,45 @@ inbox, err := client.ImportInboxFromFile(ctx, "inbox.json")
 
 **Security Warning**: Exported data contains private keys. Treat as sensitive.
 
-## Monitoring for New Emails
+## Watching for New Emails
 
-### Single Inbox Monitoring
+### Single Inbox Watching
+
+Use `Watch()` to receive new emails as they arrive via a channel:
 
 ```go
-subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+// Watch returns a channel that receives new emails
+for email := range inbox.Watch(ctx) {
 	fmt.Printf("New email: %s\n", email.Subject)
-})
-defer subscription.Unsubscribe()
+}
 ```
 
-### Multiple Inbox Monitoring
+The channel is closed when the context is cancelled.
+
+### Multiple Inbox Watching
+
+Use `WatchInboxes()` to monitor multiple inboxes simultaneously:
 
 ```go
-monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-if err != nil {
-	log.Fatal(err)
-}
-defer monitor.Unsubscribe()
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
 
-monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-	fmt.Printf("New email in %s: %s\n", inbox.EmailAddress(), email.Subject)
-})
+// WatchInboxes returns a channel of InboxEvent
+for event := range client.WatchInboxes(ctx, inbox1, inbox2) {
+	fmt.Printf("New email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
+}
+```
+
+The `InboxEvent` struct contains:
+
+```go
+type InboxEvent struct {
+	Inbox *Inbox // The inbox that received the email
+	Email *Email // The received email
+}
 ```
 
 ## Best Practices

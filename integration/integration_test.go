@@ -246,7 +246,6 @@ func TestIntegration_WaitForEmail_Timeout(t *testing.T) {
 	start := time.Now()
 	_, err = inbox.WaitForEmail(ctx,
 		vaultsandbox.WithWaitTimeout(3*time.Second),
-		vaultsandbox.WithPollInterval(1*time.Second),
 	)
 
 	elapsed := time.Since(start)
@@ -495,7 +494,6 @@ func TestIntegration_PollingDelivery(t *testing.T) {
 
 	email, err := inbox.WaitForEmail(ctx,
 		vaultsandbox.WithWaitTimeout(2*time.Minute),
-		vaultsandbox.WithPollInterval(2*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("WaitForEmail() error = %v", err)
@@ -1193,7 +1191,6 @@ func TestIntegration_DeletedInboxDuringWait(t *testing.T) {
 		close(waitStarted)
 		_, err := inbox.WaitForEmail(ctx,
 			vaultsandbox.WithWaitTimeout(10*time.Second),
-			vaultsandbox.WithPollInterval(500*time.Millisecond),
 		)
 		waitDone <- err
 	}()

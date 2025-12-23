@@ -627,7 +627,6 @@ Options for creating an inbox with `client.CreateInbox()`.
 Options for waiting for emails with `inbox.WaitForEmail()`.
 
 - `WithWaitTimeout(timeout time.Duration)` — Maximum time to wait (default: 60 seconds)
-- `WithPollInterval(interval time.Duration)` — Polling interval (default: 2 seconds)
 - `WithSubject(subject string)` — Filter emails by exact subject match
 - `WithSubjectRegex(pattern *regexp.Regexp)` — Filter emails by subject regex
 - `WithFrom(from string)` — Filter emails by exact sender address

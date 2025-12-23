@@ -450,7 +450,6 @@ email, err := inbox.WaitForEmail(ctx,
 	vaultsandbox.WithFrom("support@example.com"),
 	vaultsandbox.WithSubjectRegex(regexp.MustCompile(`(?i)ticket`)),
 	vaultsandbox.WithWaitTimeout(2*time.Minute),
-	vaultsandbox.WithPollInterval(5*time.Second),
 )
 ```
 
