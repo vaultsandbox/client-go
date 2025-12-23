@@ -591,7 +591,7 @@ Represents an email attachment.
 type Attachment struct {
     Filename           string  // Attachment filename
     ContentType        string  // MIME content type
-    Size               int64   // Size in bytes
+    Size               int     // Size in bytes
     Content            []byte  // Decrypted content
     ContentID          string  // Content-ID for inline attachments
     ContentDisposition string  // Content disposition
@@ -751,7 +751,7 @@ func main() {
 
 ## Requirements
 
-- Go 1.21 or later
+- Go 1.24 or later
 - VaultSandbox Gateway server
 - Valid API key
 
