@@ -22,7 +22,7 @@ func (i *Inbox) decryptEmail(ctx context.Context, raw *api.RawEmail) (*Email, er
 	if raw.EncryptedParsed == nil {
 		fullEmail, err := i.client.apiClient.GetEmail(ctx, i.emailAddress, raw.ID)
 		if err != nil {
-			return nil, fmt.Errorf("fetch full email: %w", wrapError(err))
+			return nil, fmt.Errorf("fetch full email: %w", err)
 		}
 		emailData = fullEmail
 	}

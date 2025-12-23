@@ -1,23 +1,41 @@
-package api
+// Package apierrors provides shared error types for the VaultSandbox client.
+package apierrors
 
 import (
 	"errors"
 	"fmt"
 )
 
-// Common API errors that can be checked with errors.Is.
+// Sentinel errors for errors.Is() checks
 var (
-	// ErrUnauthorized indicates the API key is invalid or expired.
+	// ErrMissingAPIKey is returned when no API key is provided.
+	ErrMissingAPIKey = errors.New("API key is required")
+
+	// ErrClientClosed is returned when operations are attempted on a closed client.
+	ErrClientClosed = errors.New("client has been closed")
+
+	// ErrUnauthorized is returned when the API key is invalid or expired.
 	ErrUnauthorized = errors.New("invalid or expired API key")
-	// ErrInboxNotFound indicates the requested inbox does not exist.
+
+	// ErrInboxNotFound is returned when an inbox is not found.
 	ErrInboxNotFound = errors.New("inbox not found")
-	// ErrEmailNotFound indicates the requested email does not exist.
+
+	// ErrEmailNotFound is returned when an email is not found.
 	ErrEmailNotFound = errors.New("email not found")
-	// ErrInboxAlreadyExists indicates an inbox with that address already exists.
+
+	// ErrInboxAlreadyExists is returned when trying to import an inbox that already exists.
 	ErrInboxAlreadyExists = errors.New("inbox already exists")
-	// ErrInvalidAPIKey indicates the API key format is invalid.
-	ErrInvalidAPIKey = errors.New("invalid API key")
-	// ErrRateLimited indicates the rate limit has been exceeded.
+
+	// ErrInvalidImportData is returned when imported inbox data is invalid.
+	ErrInvalidImportData = errors.New("invalid import data")
+
+	// ErrDecryptionFailed is returned when email decryption fails.
+	ErrDecryptionFailed = errors.New("decryption failed")
+
+	// ErrSignatureInvalid is returned when signature verification fails.
+	ErrSignatureInvalid = errors.New("signature verification failed")
+
+	// ErrRateLimited is returned when the API rate limit is exceeded.
 	ErrRateLimited = errors.New("rate limit exceeded")
 )
 
@@ -58,7 +76,7 @@ func (e *APIError) Error() string {
 func (e *APIError) Is(target error) bool {
 	switch e.StatusCode {
 	case 401:
-		return target == ErrUnauthorized || target == ErrInvalidAPIKey
+		return target == ErrUnauthorized
 	case 404:
 		switch e.ResourceType {
 		case ResourceInbox:
@@ -105,6 +123,27 @@ func (e *NetworkError) Error() string {
 	return fmt.Sprintf("network error: %v", e.Err)
 }
 
+// Unwrap returns the underlying error.
 func (e *NetworkError) Unwrap() error {
 	return e.Err
+}
+
+// SignatureVerificationError indicates signature verification failed,
+// including server key mismatch (potential MITM attack).
+type SignatureVerificationError struct {
+	Message       string
+	IsKeyMismatch bool
+}
+
+func (e *SignatureVerificationError) Error() string {
+	if e.IsKeyMismatch {
+		return fmt.Sprintf("server key mismatch: %s", e.Message)
+	}
+	return fmt.Sprintf("signature verification failed: %s", e.Message)
+}
+
+// Is implements errors.Is for sentinel error matching.
+// All signature verification failures match ErrSignatureInvalid.
+func (e *SignatureVerificationError) Is(target error) bool {
+	return target == ErrSignatureInvalid
 }

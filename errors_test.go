@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/vaultsandbox/client-go/internal/api"
+	"github.com/vaultsandbox/client-go/internal/apierrors"
 )
 
 func TestSentinelErrors(t *testing.T) {
@@ -201,121 +201,77 @@ func TestErrorWrapping(t *testing.T) {
 	}
 }
 
-func TestWrapError_PreservesAPIError(t *testing.T) {
-	internalErr := &api.APIError{
-		StatusCode: 401,
-		Message:    "invalid API key",
-		RequestID:  "req-123",
-	}
+func TestTypeAliases_AreCompatible(t *testing.T) {
+	// Verify that public types are aliases to internal types
+	t.Run("APIError is same type", func(t *testing.T) {
+		var internalErr *apierrors.APIError = &apierrors.APIError{StatusCode: 401}
+		var publicErr *APIError = internalErr // This should compile if they're the same type
 
-	wrapped := wrapError(internalErr)
+		if publicErr.StatusCode != 401 {
+			t.Error("type alias should preserve data")
+		}
+	})
 
-	var publicErr *APIError
-	if !errors.As(wrapped, &publicErr) {
-		t.Fatal("wrapError should convert internal API error to public APIError")
-	}
+	t.Run("NetworkError is same type", func(t *testing.T) {
+		underlying := errors.New("test")
+		var internalErr *apierrors.NetworkError = &apierrors.NetworkError{Err: underlying}
+		var publicErr *NetworkError = internalErr
 
-	if publicErr.StatusCode != 401 {
-		t.Errorf("StatusCode = %d, want 401", publicErr.StatusCode)
-	}
-	if publicErr.Message != "invalid API key" {
-		t.Errorf("Message = %s, want 'invalid API key'", publicErr.Message)
-	}
-	if publicErr.RequestID != "req-123" {
-		t.Errorf("RequestID = %s, want 'req-123'", publicErr.RequestID)
-	}
+		if publicErr.Err != underlying {
+			t.Error("type alias should preserve data")
+		}
+	})
 
-	if !errors.Is(wrapped, ErrUnauthorized) {
-		t.Error("wrapped error should match ErrUnauthorized sentinel")
-	}
-}
-
-func TestWrapError_PreservesNetworkError(t *testing.T) {
-	underlying := errors.New("connection refused")
-	internalErr := &api.NetworkError{
-		Err:     underlying,
-		URL:     "https://api.example.com/test",
-		Attempt: 3,
-	}
-
-	wrapped := wrapError(internalErr)
-
-	var publicErr *NetworkError
-	if !errors.As(wrapped, &publicErr) {
-		t.Fatal("wrapError should convert internal network error to public NetworkError")
-	}
-
-	if publicErr.URL != "https://api.example.com/test" {
-		t.Errorf("URL = %s, want 'https://api.example.com/test'", publicErr.URL)
-	}
-	if publicErr.Attempt != 3 {
-		t.Errorf("Attempt = %d, want 3", publicErr.Attempt)
-	}
-
-	if !errors.Is(wrapped, underlying) {
-		t.Error("wrapped error should still match underlying error")
-	}
-}
-
-func TestWrapError_PassesThroughOther(t *testing.T) {
-	originalErr := errors.New("some other error")
-
-	wrapped := wrapError(originalErr)
-
-	if wrapped != originalErr {
-		t.Error("wrapError should pass through non-API/non-Network errors unchanged")
-	}
-}
-
-func TestWrapError_NilReturnsNil(t *testing.T) {
-	wrapped := wrapError(nil)
-	if wrapped != nil {
-		t.Error("wrapError(nil) should return nil")
-	}
+	t.Run("sentinel errors are same instance", func(t *testing.T) {
+		if ErrUnauthorized != apierrors.ErrUnauthorized {
+			t.Error("ErrUnauthorized should be same instance as apierrors.ErrUnauthorized")
+		}
+		if ErrInboxNotFound != apierrors.ErrInboxNotFound {
+			t.Error("ErrInboxNotFound should be same instance as apierrors.ErrInboxNotFound")
+		}
+	})
 }
 
 func TestErrorChain_CanUnwrapToSentinel(t *testing.T) {
 	tests := []struct {
 		name          string
-		internalErr   error
+		err           error
 		expectedMatch error
 	}{
 		{
 			name:          "401 matches ErrUnauthorized",
-			internalErr:   &api.APIError{StatusCode: 401, Message: "unauthorized"},
+			err:           &APIError{StatusCode: 401, Message: "unauthorized"},
 			expectedMatch: ErrUnauthorized,
 		},
 		{
 			name:          "404 with inbox resource matches ErrInboxNotFound",
-			internalErr:   &api.APIError{StatusCode: 404, Message: "not found", ResourceType: api.ResourceInbox},
+			err:           &APIError{StatusCode: 404, Message: "not found", ResourceType: ResourceInbox},
 			expectedMatch: ErrInboxNotFound,
 		},
 		{
 			name:          "404 with email resource matches ErrEmailNotFound",
-			internalErr:   &api.APIError{StatusCode: 404, Message: "not found", ResourceType: api.ResourceEmail},
+			err:           &APIError{StatusCode: 404, Message: "not found", ResourceType: ResourceEmail},
 			expectedMatch: ErrEmailNotFound,
 		},
 		{
 			name:          "409 matches ErrInboxAlreadyExists",
-			internalErr:   &api.APIError{StatusCode: 409, Message: "already exists"},
+			err:           &APIError{StatusCode: 409, Message: "already exists"},
 			expectedMatch: ErrInboxAlreadyExists,
 		},
 		{
 			name:          "429 matches ErrRateLimited",
-			internalErr:   &api.APIError{StatusCode: 429, Message: "rate limit exceeded"},
+			err:           &APIError{StatusCode: 429, Message: "rate limit exceeded"},
 			expectedMatch: ErrRateLimited,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			wrapped := wrapError(tt.internalErr)
-
-			if !errors.Is(wrapped, tt.expectedMatch) {
-				t.Errorf("wrapped error should match %v", tt.expectedMatch)
+			if !errors.Is(tt.err, tt.expectedMatch) {
+				t.Errorf("error should match %v", tt.expectedMatch)
 			}
 
-			doubleWrapped := fmt.Errorf("operation failed: %w", wrapped)
+			doubleWrapped := fmt.Errorf("operation failed: %w", tt.err)
 			if !errors.Is(doubleWrapped, tt.expectedMatch) {
 				t.Errorf("double-wrapped error should still match %v", tt.expectedMatch)
 			}

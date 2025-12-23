@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vaultsandbox/client-go/internal/apierrors"
 	"github.com/vaultsandbox/client-go/internal/crypto"
 )
 
@@ -21,7 +22,7 @@ func (c *Client) CheckKey(ctx context.Context) error {
 		return err
 	}
 	if !result.OK {
-		return ErrInvalidAPIKey
+		return apierrors.ErrUnauthorized
 	}
 	return nil
 }
@@ -40,7 +41,7 @@ func (c *Client) GetServerInfo(ctx context.Context) (*ServerInfo, error) {
 // Returns [ErrInboxNotFound] if the inbox does not exist.
 func (c *Client) DeleteInboxByEmail(ctx context.Context, emailAddress string) error {
 	path := fmt.Sprintf("/api/inboxes/%s", url.PathEscape(emailAddress))
-	return WithResourceType(c.Do(ctx, "DELETE", path, nil, nil), ResourceInbox)
+	return apierrors.WithResourceType(c.Do(ctx, "DELETE", path, nil, nil), apierrors.ResourceInbox)
 }
 
 // DeleteAllInboxes deletes all inboxes associated with the API key.
@@ -50,7 +51,7 @@ func (c *Client) DeleteAllInboxes(ctx context.Context) (int, error) {
 		Deleted int `json:"deleted"`
 	}
 	if err := c.Do(ctx, "DELETE", "/api/inboxes", nil, &result); err != nil {
-		return 0, WithResourceType(err, ResourceInbox)
+		return 0, apierrors.WithResourceType(err, apierrors.ResourceInbox)
 	}
 	return result.Deleted, nil
 }
@@ -61,7 +62,7 @@ func (c *Client) GetInboxSync(ctx context.Context, emailAddress string) (*SyncSt
 	path := fmt.Sprintf("/api/inboxes/%s/sync", url.PathEscape(emailAddress))
 	var result SyncStatus
 	if err := c.Do(ctx, "GET", path, nil, &result); err != nil {
-		return nil, WithResourceType(err, ResourceInbox)
+		return nil, apierrors.WithResourceType(err, apierrors.ResourceInbox)
 	}
 	return &result, nil
 }
@@ -130,7 +131,7 @@ func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*Crea
 
 	var apiResp createInboxAPIResponse
 	if err := c.do(ctx, http.MethodPost, "/api/inboxes", apiReq, &apiResp); err != nil {
-		return nil, WithResourceType(err, ResourceInbox)
+		return nil, apierrors.WithResourceType(err, apierrors.ResourceInbox)
 	}
 
 	serverSigPk, err := crypto.DecodeBase64(apiResp.ServerSigPk)
@@ -159,7 +160,7 @@ func (c *Client) GetEmails(ctx context.Context, emailAddress string) (*GetEmails
 	path := fmt.Sprintf("/api/inboxes/%s/emails", url.PathEscape(emailAddress))
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		// This endpoint can fail due to inbox not found
-		return nil, WithResourceType(err, ResourceInbox)
+		return nil, apierrors.WithResourceType(err, apierrors.ResourceInbox)
 	}
 
 	emails := make([]*RawEmail, 0, len(resp))
@@ -175,7 +176,7 @@ func (c *Client) GetEmail(ctx context.Context, emailAddress, emailID string) (*R
 	var resp RawEmail
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
-		return nil, WithResourceType(err, ResourceEmail)
+		return nil, apierrors.WithResourceType(err, apierrors.ResourceEmail)
 	}
 
 	return &resp, nil
@@ -188,7 +189,7 @@ func (c *Client) GetEmailRaw(ctx context.Context, emailAddress, emailID string) 
 	}
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/raw", url.PathEscape(emailAddress), url.PathEscape(emailID))
 	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
-		return "", WithResourceType(err, ResourceEmail)
+		return "", apierrors.WithResourceType(err, apierrors.ResourceEmail)
 	}
 	return resp.Raw, nil
 }
@@ -196,18 +197,18 @@ func (c *Client) GetEmailRaw(ctx context.Context, emailAddress, emailID string) 
 // MarkEmailAsRead marks an email as read.
 func (c *Client) MarkEmailAsRead(ctx context.Context, emailAddress, emailID string) error {
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/read", url.PathEscape(emailAddress), url.PathEscape(emailID))
-	return WithResourceType(c.do(ctx, http.MethodPatch, path, nil, nil), ResourceEmail)
+	return apierrors.WithResourceType(c.do(ctx, http.MethodPatch, path, nil, nil), apierrors.ResourceEmail)
 }
 
 // DeleteEmail deletes the specified email from an inbox.
 func (c *Client) DeleteEmail(ctx context.Context, emailAddress, emailID string) error {
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s", url.PathEscape(emailAddress), url.PathEscape(emailID))
-	return WithResourceType(c.do(ctx, http.MethodDelete, path, nil, nil), ResourceEmail)
+	return apierrors.WithResourceType(c.do(ctx, http.MethodDelete, path, nil, nil), apierrors.ResourceEmail)
 }
 
 // DeleteInbox deletes the inbox with the given email address.
 func (c *Client) DeleteInbox(ctx context.Context, emailAddress string) error {
 	path := fmt.Sprintf("/api/inboxes/%s", url.PathEscape(emailAddress))
-	return WithResourceType(c.do(ctx, http.MethodDelete, path, nil, nil), ResourceInbox)
+	return apierrors.WithResourceType(c.do(ctx, http.MethodDelete, path, nil, nil), apierrors.ResourceInbox)
 }
 

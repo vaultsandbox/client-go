@@ -4,32 +4,34 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/vaultsandbox/client-go/internal/apierrors"
 )
 
 func TestAPIError_Error(t *testing.T) {
 	tests := []struct {
 		name     string
-		err      *APIError
+		err      *apierrors.APIError
 		expected string
 	}{
 		{
 			name:     "with message",
-			err:      &APIError{StatusCode: 401, Message: "invalid API key"},
+			err:      &apierrors.APIError{StatusCode: 401, Message: "invalid API key"},
 			expected: "API error 401: invalid API key",
 		},
 		{
 			name:     "without message",
-			err:      &APIError{StatusCode: 500},
+			err:      &apierrors.APIError{StatusCode: 500},
 			expected: "API error 500",
 		},
 		{
 			name:     "with request ID",
-			err:      &APIError{StatusCode: 404, Message: "not found", RequestID: "req-123"},
+			err:      &apierrors.APIError{StatusCode: 404, Message: "not found", RequestID: "req-123"},
 			expected: "API error 404: not found (request_id: req-123)",
 		},
 		{
 			name:     "with request ID only",
-			err:      &APIError{StatusCode: 500, RequestID: "req-456"},
+			err:      &apierrors.APIError{StatusCode: 500, RequestID: "req-456"},
 			expected: "API error 500 (request_id: req-456)",
 		},
 	}
@@ -48,28 +50,27 @@ func TestAPIError_Is(t *testing.T) {
 	tests := []struct {
 		name         string
 		statusCode   int
-		resourceType ResourceType
+		resourceType apierrors.ResourceType
 		target       error
 		expected     bool
 	}{
-		{"401 matches ErrUnauthorized", 401, ResourceUnknown, ErrUnauthorized, true},
-		{"401 matches ErrInvalidAPIKey", 401, ResourceUnknown, ErrInvalidAPIKey, true},
-		{"404 with unknown resource matches ErrInboxNotFound", 404, ResourceUnknown, ErrInboxNotFound, true},
-		{"404 with unknown resource matches ErrEmailNotFound", 404, ResourceUnknown, ErrEmailNotFound, true},
-		{"404 with inbox resource matches ErrInboxNotFound", 404, ResourceInbox, ErrInboxNotFound, true},
-		{"404 with inbox resource does not match ErrEmailNotFound", 404, ResourceInbox, ErrEmailNotFound, false},
-		{"404 with email resource matches ErrEmailNotFound", 404, ResourceEmail, ErrEmailNotFound, true},
-		{"404 with email resource does not match ErrInboxNotFound", 404, ResourceEmail, ErrInboxNotFound, false},
-		{"409 matches ErrInboxAlreadyExists", 409, ResourceUnknown, ErrInboxAlreadyExists, true},
-		{"429 matches ErrRateLimited", 429, ResourceUnknown, ErrRateLimited, true},
-		{"500 does not match ErrUnauthorized", 500, ResourceUnknown, ErrUnauthorized, false},
-		{"401 does not match ErrInboxNotFound", 401, ResourceUnknown, ErrInboxNotFound, false},
-		{"200 does not match anything", 200, ResourceUnknown, ErrUnauthorized, false},
+		{"401 matches ErrUnauthorized", 401, apierrors.ResourceUnknown, apierrors.ErrUnauthorized, true},
+		{"404 with unknown resource matches ErrInboxNotFound", 404, apierrors.ResourceUnknown, apierrors.ErrInboxNotFound, true},
+		{"404 with unknown resource matches ErrEmailNotFound", 404, apierrors.ResourceUnknown, apierrors.ErrEmailNotFound, true},
+		{"404 with inbox resource matches ErrInboxNotFound", 404, apierrors.ResourceInbox, apierrors.ErrInboxNotFound, true},
+		{"404 with inbox resource does not match ErrEmailNotFound", 404, apierrors.ResourceInbox, apierrors.ErrEmailNotFound, false},
+		{"404 with email resource matches ErrEmailNotFound", 404, apierrors.ResourceEmail, apierrors.ErrEmailNotFound, true},
+		{"404 with email resource does not match ErrInboxNotFound", 404, apierrors.ResourceEmail, apierrors.ErrInboxNotFound, false},
+		{"409 matches ErrInboxAlreadyExists", 409, apierrors.ResourceUnknown, apierrors.ErrInboxAlreadyExists, true},
+		{"429 matches ErrRateLimited", 429, apierrors.ResourceUnknown, apierrors.ErrRateLimited, true},
+		{"500 does not match ErrUnauthorized", 500, apierrors.ResourceUnknown, apierrors.ErrUnauthorized, false},
+		{"401 does not match ErrInboxNotFound", 401, apierrors.ResourceUnknown, apierrors.ErrInboxNotFound, false},
+		{"200 does not match anything", 200, apierrors.ResourceUnknown, apierrors.ErrUnauthorized, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := &APIError{StatusCode: tt.statusCode, ResourceType: tt.resourceType}
+			err := &apierrors.APIError{StatusCode: tt.statusCode, ResourceType: tt.resourceType}
 			result := errors.Is(err, tt.target)
 			if result != tt.expected {
 				t.Errorf("errors.Is() = %v, want %v", result, tt.expected)
@@ -80,7 +81,7 @@ func TestAPIError_Is(t *testing.T) {
 
 func TestNetworkError_Error(t *testing.T) {
 	underlying := errors.New("connection refused")
-	err := &NetworkError{Err: underlying}
+	err := &apierrors.NetworkError{Err: underlying}
 
 	expected := "network error: connection refused"
 	if err.Error() != expected {
@@ -90,7 +91,7 @@ func TestNetworkError_Error(t *testing.T) {
 
 func TestNetworkError_Unwrap(t *testing.T) {
 	underlying := errors.New("connection refused")
-	err := &NetworkError{Err: underlying}
+	err := &apierrors.NetworkError{Err: underlying}
 
 	unwrapped := err.Unwrap()
 	if unwrapped != underlying {
@@ -100,7 +101,7 @@ func TestNetworkError_Unwrap(t *testing.T) {
 
 func TestNetworkError_Is(t *testing.T) {
 	underlying := errors.New("connection refused")
-	err := &NetworkError{Err: underlying}
+	err := &apierrors.NetworkError{Err: underlying}
 
 	if !errors.Is(err, underlying) {
 		t.Error("errors.Is() should match underlying error")
@@ -109,16 +110,16 @@ func TestNetworkError_Is(t *testing.T) {
 
 func TestNetworkError_As(t *testing.T) {
 	underlying := fmt.Errorf("wrapped: %w", errors.New("root error"))
-	err := &NetworkError{Err: underlying}
+	err := &apierrors.NetworkError{Err: underlying}
 
-	var netErr *NetworkError
+	var netErr *apierrors.NetworkError
 	if !errors.As(err, &netErr) {
 		t.Error("errors.As() should match NetworkError")
 	}
 }
 
 func TestNetworkError_WithFields(t *testing.T) {
-	err := &NetworkError{
+	err := &apierrors.NetworkError{
 		Err:     errors.New("timeout"),
 		URL:     "https://example.com/api",
 		Attempt: 3,
@@ -138,12 +139,11 @@ func TestSentinelErrors(t *testing.T) {
 		name string
 		err  error
 	}{
-		{"ErrUnauthorized", ErrUnauthorized},
-		{"ErrInboxNotFound", ErrInboxNotFound},
-		{"ErrEmailNotFound", ErrEmailNotFound},
-		{"ErrInboxAlreadyExists", ErrInboxAlreadyExists},
-		{"ErrInvalidAPIKey", ErrInvalidAPIKey},
-		{"ErrRateLimited", ErrRateLimited},
+		{"ErrUnauthorized", apierrors.ErrUnauthorized},
+		{"ErrInboxNotFound", apierrors.ErrInboxNotFound},
+		{"ErrEmailNotFound", apierrors.ErrEmailNotFound},
+		{"ErrInboxAlreadyExists", apierrors.ErrInboxAlreadyExists},
+		{"ErrRateLimited", apierrors.ErrRateLimited},
 	}
 
 	for _, s := range sentinels {

@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/vaultsandbox/client-go/internal/apierrors"
 )
 
 const (
@@ -249,13 +251,13 @@ func (c *Client) doWithRetry(ctx context.Context, method, path string, body io.R
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			lastErr = &NetworkError{Err: err}
+			lastErr = &apierrors.NetworkError{Err: err}
 			continue
 		}
 
 		// Check for retryable status codes
 		if c.isRetryable(resp.StatusCode) && attempt < c.maxRetries {
-			lastErr = &APIError{StatusCode: resp.StatusCode}
+			lastErr = &apierrors.APIError{StatusCode: resp.StatusCode}
 			resp.Body.Close()
 			continue
 		}
@@ -323,14 +325,14 @@ func parseErrorResponse(resp *http.Response) error {
 		if msg == "" {
 			msg = string(body)
 		}
-		return &APIError{
+		return &apierrors.APIError{
 			StatusCode: resp.StatusCode,
 			Message:    msg,
 			RequestID:  errResp.RequestID,
 		}
 	}
 
-	return &APIError{
+	return &apierrors.APIError{
 		StatusCode: resp.StatusCode,
 		Message:    string(body),
 	}

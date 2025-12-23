@@ -52,7 +52,7 @@ func (i *Inbox) IsExpired() bool {
 func (i *Inbox) GetSyncStatus(ctx context.Context) (*SyncStatus, error) {
 	status, err := i.client.apiClient.GetInboxSync(ctx, i.emailAddress)
 	if err != nil {
-		return nil, wrapError(err)
+		return nil, err
 	}
 	return &SyncStatus{
 		EmailCount: status.EmailCount,

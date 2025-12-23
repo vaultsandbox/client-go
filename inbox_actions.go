@@ -8,7 +8,7 @@ import (
 func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
 	resp, err := i.client.apiClient.GetEmails(ctx, i.emailAddress)
 	if err != nil {
-		return nil, wrapError(err)
+		return nil, err
 	}
 
 	emails := make([]*Email, 0, len(resp.Emails))
@@ -27,7 +27,7 @@ func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
 func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
 	resp, err := i.client.apiClient.GetEmail(ctx, i.emailAddress, emailID)
 	if err != nil {
-		return nil, wrapError(err)
+		return nil, err
 	}
 
 	return i.decryptEmail(ctx, resp)
@@ -37,17 +37,17 @@ func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
 func (i *Inbox) GetRawEmail(ctx context.Context, emailID string) (string, error) {
 	raw, err := i.client.apiClient.GetEmailRaw(ctx, i.emailAddress, emailID)
 	if err != nil {
-		return "", wrapError(err)
+		return "", err
 	}
 	return raw, nil
 }
 
 // MarkEmailAsRead marks a specific email as read.
 func (i *Inbox) MarkEmailAsRead(ctx context.Context, emailID string) error {
-	return wrapError(i.client.apiClient.MarkEmailAsRead(ctx, i.emailAddress, emailID))
+	return i.client.apiClient.MarkEmailAsRead(ctx, i.emailAddress, emailID)
 }
 
 // DeleteEmail deletes a specific email.
 func (i *Inbox) DeleteEmail(ctx context.Context, emailID string) error {
-	return wrapError(i.client.apiClient.DeleteEmail(ctx, i.emailAddress, emailID))
+	return i.client.apiClient.DeleteEmail(ctx, i.emailAddress, emailID)
 }

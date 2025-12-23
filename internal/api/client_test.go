@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/vaultsandbox/client-go/internal/apierrors"
 )
 
 func TestNewClient_RequiresAPIKey(t *testing.T) {
@@ -276,7 +278,7 @@ func TestClient_Do_ErrorResponse(t *testing.T) {
 			statusCode: 401,
 			body:       `{"error": "invalid API key"}`,
 			checkError: func(t *testing.T, err error) {
-				var apiErr *APIError
+				var apiErr *apierrors.APIError
 				if !isAPIError(err, &apiErr) {
 					t.Errorf("expected APIError, got %T", err)
 					return
@@ -291,7 +293,7 @@ func TestClient_Do_ErrorResponse(t *testing.T) {
 			statusCode: 404,
 			body:       `{"error": "inbox not found"}`,
 			checkError: func(t *testing.T, err error) {
-				var apiErr *APIError
+				var apiErr *apierrors.APIError
 				if !isAPIError(err, &apiErr) {
 					t.Errorf("expected APIError, got %T", err)
 					return
@@ -306,7 +308,7 @@ func TestClient_Do_ErrorResponse(t *testing.T) {
 			statusCode: 429,
 			body:       `{"error": "rate limit exceeded"}`,
 			checkError: func(t *testing.T, err error) {
-				var apiErr *APIError
+				var apiErr *apierrors.APIError
 				if !isAPIError(err, &apiErr) {
 					t.Errorf("expected APIError, got %T", err)
 					return
@@ -462,8 +464,8 @@ func TestWithHTTPClient(t *testing.T) {
 }
 
 // Helper function to check if error is APIError
-func isAPIError(err error, target **APIError) bool {
-	apiErr, ok := err.(*APIError)
+func isAPIError(err error, target **apierrors.APIError) bool {
+	apiErr, ok := err.(*apierrors.APIError)
 	if ok {
 		*target = apiErr
 		return true
