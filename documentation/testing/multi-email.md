@@ -253,7 +253,7 @@ func TestEmailIntervals(t *testing.T) {
 
 ## Processing Emails as They Arrive
 
-For scenarios where you need to process emails immediately as they arrive, use `OnNewEmail()`:
+For scenarios where you need to process emails immediately as they arrive, use `Watch()`. This returns a channel that receives emails as they arrive:
 
 ```go
 func TestRealTimeNotifications(t *testing.T) {
@@ -271,38 +271,30 @@ func TestRealTimeNotifications(t *testing.T) {
 	}
 	defer inbox.Delete(ctx)
 
-	var receivedSubjects []string
-	var mu sync.Mutex
-
-	// Subscribe to new emails
-	subscription := inbox.OnNewEmail(func(email *vaultsandbox.Email) {
-		mu.Lock()
-		receivedSubjects = append(receivedSubjects, email.Subject)
-		mu.Unlock()
-		t.Logf("Received: %s", email.Subject)
-	})
-	defer subscription.Unsubscribe()
-
 	// Trigger multiple notifications
 	if err := sendMultipleNotifications(inbox.EmailAddress(), 5); err != nil {
 		t.Fatalf("failed to send notifications: %v", err)
 	}
 
-	// Wait for all emails to arrive
-	_, err = inbox.WaitForEmailCount(ctx, 5,
-		vaultsandbox.WithWaitTimeout(30*time.Second),
-	)
-	if err != nil {
-		t.Fatalf("failed to receive all emails: %v", err)
+	// Create a context with timeout for watching
+	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Watch for emails as they arrive
+	var receivedSubjects []string
+	for email := range inbox.Watch(watchCtx) {
+		t.Logf("Received: %s", email.Subject)
+		receivedSubjects = append(receivedSubjects, email.Subject)
+
+		// Stop after receiving 5 emails
+		if len(receivedSubjects) >= 5 {
+			cancel()
+		}
 	}
 
 	// Verify all were processed
-	mu.Lock()
-	count := len(receivedSubjects)
-	mu.Unlock()
-
-	if count != 5 {
-		t.Errorf("expected 5 processed emails, got %d", count)
+	if len(receivedSubjects) != 5 {
+		t.Errorf("expected 5 processed emails, got %d", len(receivedSubjects))
 	}
 
 	for _, subject := range receivedSubjects {
@@ -545,7 +537,7 @@ func TestMultipleRecipients(t *testing.T) {
 
 ## Monitoring Multiple Inboxes
 
-Use `MonitorInboxes()` to watch multiple inboxes simultaneously:
+Use `WatchInboxes()` to watch multiple inboxes simultaneously. This returns a channel of `InboxEvent` structs containing both the inbox and email:
 
 ```go
 func TestMultipleInboxMonitor(t *testing.T) {
@@ -569,29 +561,6 @@ func TestMultipleInboxMonitor(t *testing.T) {
 	}
 	defer inbox2.Delete(ctx)
 
-	type receivedEmail struct {
-		inboxAddress string
-		subject      string
-	}
-	var receivedEmails []receivedEmail
-	var mu sync.Mutex
-
-	// Monitor both inboxes
-	monitor, err := client.MonitorInboxes([]*vaultsandbox.Inbox{inbox1, inbox2})
-	if err != nil {
-		t.Fatalf("failed to create monitor: %v", err)
-	}
-	defer monitor.Unsubscribe()
-
-	monitor.OnEmail(func(inbox *vaultsandbox.Inbox, email *vaultsandbox.Email) {
-		mu.Lock()
-		receivedEmails = append(receivedEmails, receivedEmail{
-			inboxAddress: inbox.EmailAddress(),
-			subject:      email.Subject,
-		})
-		mu.Unlock()
-	})
-
 	// Send emails to both inboxes
 	if err := sendEmail(inbox1.EmailAddress(), "Test 1"); err != nil {
 		t.Fatalf("failed to send to inbox1: %v", err)
@@ -600,30 +569,45 @@ func TestMultipleInboxMonitor(t *testing.T) {
 		t.Fatalf("failed to send to inbox2: %v", err)
 	}
 
-	// Wait for both emails
-	var wg sync.WaitGroup
-	wg.Add(2)
+	// Create a context with timeout for watching
+	watchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
-	go func() {
-		defer wg.Done()
-		inbox1.WaitForEmailCount(ctx, 1, vaultsandbox.WithWaitTimeout(10*time.Second))
-	}()
-	go func() {
-		defer wg.Done()
-		inbox2.WaitForEmailCount(ctx, 1, vaultsandbox.WithWaitTimeout(10*time.Second))
-	}()
+	// Watch both inboxes simultaneously
+	events := client.WatchInboxes(watchCtx, inbox1, inbox2)
 
-	wg.Wait()
+	type receivedEmail struct {
+		inboxAddress string
+		subject      string
+	}
+	var receivedEmails []receivedEmail
 
-	// Give the monitor a moment to process
-	time.Sleep(time.Second)
+	for event := range events {
+		receivedEmails = append(receivedEmails, receivedEmail{
+			inboxAddress: event.Inbox.EmailAddress(),
+			subject:      event.Email.Subject,
+		})
 
-	mu.Lock()
-	count := len(receivedEmails)
-	mu.Unlock()
+		// Stop after receiving 2 emails
+		if len(receivedEmails) >= 2 {
+			cancel()
+		}
+	}
 
-	if count != 2 {
-		t.Errorf("expected 2 received emails, got %d", count)
+	if len(receivedEmails) != 2 {
+		t.Errorf("expected 2 received emails, got %d", len(receivedEmails))
+	}
+
+	// Verify we received emails from both inboxes
+	inboxAddresses := make(map[string]bool)
+	for _, email := range receivedEmails {
+		inboxAddresses[email.inboxAddress] = true
+	}
+	if !inboxAddresses[inbox1.EmailAddress()] {
+		t.Error("did not receive email from inbox1")
+	}
+	if !inboxAddresses[inbox2.EmailAddress()] {
+		t.Error("did not receive email from inbox2")
 	}
 }
 ```
