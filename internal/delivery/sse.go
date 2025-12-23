@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -34,6 +35,9 @@ const (
 // receives events as they occur. If the connection is lost, it automatically
 // reconnects with exponential backoff up to SSEMaxReconnectAttempts.
 //
+// When inboxes are added or removed, the strategy closes the current connection
+// and establishes a new one with the updated inbox list.
+//
 // SSE Protocol: The server sends events in the standard SSE format:
 //
 //	data: {"inbox_id":"...","email_id":"...","encrypted_metadata":"..."}
@@ -45,13 +49,16 @@ type SSEStrategy struct {
 	inboxHashes   map[string]struct{}  // Set of inbox hashes to monitor.
 	handler       EventHandler         // Callback for new email events.
 	cancel        context.CancelFunc   // Cancels the connection goroutine.
-	mu            sync.RWMutex         // Protects inboxHashes and handler.
+	connCancel    context.CancelFunc   // Cancels the current connection (for reconnection).
+	mu            sync.RWMutex         // Protects inboxHashes, handler, and connCancel.
 	reconnectWait time.Duration        // Base interval for reconnection backoff.
 	attempts      int                  // Consecutive failed connection attempts.
 	started       bool                 // Whether the strategy is active.
 	connected     chan struct{}        // Closed when first connection succeeds.
 	connectedOnce sync.Once            // Ensures connected is closed only once.
 	lastError     error                // Most recent connection error.
+	inboxAdded    chan struct{}        // Signaled when an inbox is added (0→1 case).
+	onReconnect   func(ctx context.Context) // Called after each successful connection.
 }
 
 // NewSSEStrategy creates a new SSE strategy with the given configuration.
@@ -62,6 +69,7 @@ func NewSSEStrategy(cfg Config) *SSEStrategy {
 		inboxHashes:   make(map[string]struct{}),
 		reconnectWait: SSEReconnectInterval,
 		connected:     make(chan struct{}),
+		inboxAdded:    make(chan struct{}, 1),
 	}
 }
 
@@ -83,6 +91,15 @@ func (s *SSEStrategy) LastError() error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.lastError
+}
+
+// OnReconnect sets a callback that is invoked after each successful SSE
+// connection (including the first connection). This can be used to sync
+// emails that may have arrived during the reconnection window.
+func (s *SSEStrategy) OnReconnect(fn func(ctx context.Context)) {
+	s.mu.Lock()
+	s.onReconnect = fn
+	s.mu.Unlock()
 }
 
 // Start begins listening for emails on the given inboxes via SSE. It spawns
@@ -120,27 +137,52 @@ func (s *SSEStrategy) Stop() error {
 	return nil
 }
 
-// AddInbox adds an inbox to be monitored. Note that SSE connections are
-// established with a fixed set of inbox hashes, so newly added inboxes
-// will only be monitored after the next reconnection. To force immediate
-// inclusion, stop and restart the strategy.
+// AddInbox adds an inbox to be monitored. If the strategy is running,
+// this triggers an immediate reconnection with the updated inbox list.
 func (s *SSEStrategy) AddInbox(inbox InboxInfo) error {
 	s.mu.Lock()
+	wasEmpty := len(s.inboxHashes) == 0
 	s.inboxHashes[inbox.Hash] = struct{}{}
+	started := s.started
+	connCancel := s.connCancel
 	s.mu.Unlock()
-	// Trigger reconnection with new inbox set would require
-	// closing the current connection. For now, new inboxes
-	// will be picked up on the next reconnection.
+
+	if !started {
+		return nil
+	}
+
+	if wasEmpty {
+		// Signal that an inbox was added - this wakes up connectLoop if it's
+		// waiting for inboxes
+		select {
+		case s.inboxAdded <- struct{}{}:
+		default:
+		}
+	} else {
+		// Already have inboxes and a connection - cancel current connection
+		// to force reconnection with the new inbox included
+		if connCancel != nil {
+			connCancel()
+		}
+	}
+
 	return nil
 }
 
-// RemoveInbox removes an inbox from monitoring. The inbox will no longer
-// receive events after the current connection closes. This method is safe
-// to call while the strategy is active.
+// RemoveInbox removes an inbox from monitoring. If the strategy is running,
+// this triggers an immediate reconnection with the updated inbox list.
 func (s *SSEStrategy) RemoveInbox(inboxHash string) error {
 	s.mu.Lock()
 	delete(s.inboxHashes, inboxHash)
+	started := s.started
+	connCancel := s.connCancel
 	s.mu.Unlock()
+
+	// Cancel current connection to force reconnection without the removed inbox
+	if started && connCancel != nil {
+		connCancel()
+	}
+
 	return nil
 }
 
@@ -154,13 +196,43 @@ func (s *SSEStrategy) connectLoop(ctx context.Context) {
 		default:
 		}
 
-		err := s.connect(ctx)
-		if err == nil {
-			// Clean disconnect
-			return
+		// Check if we have any inboxes to monitor
+		s.mu.RLock()
+		hasInboxes := len(s.inboxHashes) > 0
+		s.mu.RUnlock()
+
+		if !hasInboxes {
+			// Wait for an inbox to be added before attempting connection
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.inboxAdded:
+				// Inbox was added, try to connect
+				continue
+			}
 		}
 
-		// Handle reconnection with backoff
+		err := s.connect(ctx)
+		if err == nil {
+			// Clean disconnect - reconnect immediately
+			continue
+		}
+
+		// Check if the main context was canceled (shutdown)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Check if this was a context.Canceled error from AddInbox/RemoveInbox
+		// triggering a reconnection - in that case, reconnect immediately without backoff
+		if errors.Is(err, context.Canceled) {
+			s.attempts = 0
+			continue
+		}
+
+		// Handle reconnection with backoff for real errors
 		s.attempts++
 		if s.attempts >= SSEMaxReconnectAttempts {
 			// Max attempts reached, give up
@@ -180,15 +252,30 @@ func (s *SSEStrategy) connectLoop(ctx context.Context) {
 // connection closes or an error occurs. Returns nil on clean disconnect,
 // or an error if the connection failed.
 func (s *SSEStrategy) connect(ctx context.Context) error {
-	s.mu.RLock()
+	// Create a child context that can be canceled for reconnection
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+
+	// Store the cancel function so AddInbox/RemoveInbox can trigger reconnection
+	s.mu.Lock()
+	s.connCancel = connCancel
 	hashes := make([]string, 0, len(s.inboxHashes))
 	for h := range s.inboxHashes {
 		hashes = append(hashes, h)
 	}
-	s.mu.RUnlock()
+	s.mu.Unlock()
 
+	// Clean up connCancel when we exit
+	defer func() {
+		s.mu.Lock()
+		s.connCancel = nil
+		s.mu.Unlock()
+	}()
+
+	// Note: connectLoop ensures we have at least one inbox before calling connect,
+	// but we still handle empty case gracefully by returning an error
 	if len(hashes) == 0 {
-		return nil
+		return fmt.Errorf("no inboxes to monitor")
 	}
 
 	// Check for nil API client
@@ -200,7 +287,7 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 		return err
 	}
 
-	resp, err := s.apiClient.OpenEventStream(ctx, hashes)
+	resp, err := s.apiClient.OpenEventStream(connCtx, hashes)
 	if err != nil {
 		s.mu.Lock()
 		s.lastError = err
@@ -216,6 +303,15 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 	s.connectedOnce.Do(func() {
 		close(s.connected)
 	})
+
+	// Call reconnect handler to sync emails that may have arrived
+	// during the reconnection window. Run async to not block the event loop.
+	s.mu.RLock()
+	onReconnect := s.onReconnect
+	s.mu.RUnlock()
+	if onReconnect != nil {
+		go onReconnect(connCtx)
+	}
 
 	scanner := bufio.NewScanner(resp.Body)
 	// Allow lines up to 1MB (default is 64KB)
@@ -242,7 +338,7 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 			s.mu.RUnlock()
 
 			if handler != nil {
-				handler(ctx, &event)
+				handler(connCtx, &event)
 			}
 		}
 	}

@@ -514,3 +514,10 @@ func waitForEmailCountSimple[T any](ctx context.Context, fetcher EmailFetcher[T]
 func (p *PollingStrategy) Close() error {
 	return p.Stop()
 }
+
+// OnReconnect is a no-op for polling strategy since polling doesn't have
+// persistent connections. Polling already checks all inboxes each cycle,
+// so no special reconnection handling is needed.
+func (p *PollingStrategy) OnReconnect(fn func(ctx context.Context)) {
+	// No-op: polling doesn't need reconnection handling
+}

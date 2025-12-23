@@ -507,6 +507,61 @@ func TestSSEStrategy_Start_AfterClose(t *testing.T) {
 	}
 }
 
+// TestSSEStrategy_AddInboxAfterStart verifies that adding an inbox after
+// starting with an empty list properly triggers the connection loop.
+// This was a bug where connectLoop would exit immediately when started with
+// no inboxes, and never wake up when inboxes were added later.
+func TestSSEStrategy_AddInboxAfterStart(t *testing.T) {
+	s := NewSSEStrategy(Config{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := func(ctx context.Context, event *api.SSEEvent) error {
+		return nil
+	}
+
+	// Start with NO inboxes
+	if err := s.Start(ctx, nil, handler); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Give connectLoop time to start waiting
+	time.Sleep(50 * time.Millisecond)
+
+	// Now add an inbox AFTER start
+	inbox := InboxInfo{
+		Hash:         "hash123",
+		EmailAddress: "test@example.com",
+	}
+	if err := s.AddInbox(inbox); err != nil {
+		t.Fatalf("AddInbox() error = %v", err)
+	}
+
+	// Verify inbox is in the map
+	s.mu.RLock()
+	_, exists := s.inboxHashes[inbox.Hash]
+	s.mu.RUnlock()
+
+	if !exists {
+		t.Fatal("inbox should exist in map")
+	}
+
+	// With the fix: connectLoop should wake up and attempt connection.
+	// Since we don't have a real API client, it will fail, but we can verify
+	// that LastError is set (meaning connect was attempted).
+	time.Sleep(100 * time.Millisecond)
+
+	// Check that an error was recorded (connection was attempted but failed
+	// because apiClient is nil)
+	err := s.LastError()
+	if err == nil {
+		t.Error("Expected LastError to be set after AddInbox triggered connection attempt")
+	} else {
+		t.Logf("Connection attempted after AddInbox (got expected error: %v)", err)
+	}
+}
+
 func TestSSEStrategy_ConcurrentSubscriptions(t *testing.T) {
 	// Test adding and removing inboxes concurrently
 	s := NewSSEStrategy(Config{})

@@ -142,6 +142,10 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("start delivery strategy: %w", err)
 	}
 
+	// Register reconnect handler to sync emails after SSE reconnection.
+	// This catches any emails that arrived during the reconnection window.
+	strategy.OnReconnect(c.syncAllInboxes)
+
 	return c, nil
 }
 
@@ -385,17 +389,50 @@ func (c *Client) MonitorInboxes(inboxes []*Inbox) (*InboxMonitor, error) {
 	return newInboxMonitor(c, inboxes), nil
 }
 
-// handleSSEEvent processes incoming SSE events from the delivery strategy.
-func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error {
-	if event == nil {
-		return nil
+// syncAllInboxes fetches emails for all tracked inboxes and notifies callbacks.
+// This is called after SSE reconnection to catch any emails that arrived
+// during the reconnection window.
+func (c *Client) syncAllInboxes(ctx context.Context) {
+	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		return
+	}
+	// Copy inbox list to avoid holding lock during API calls
+	inboxes := make([]*Inbox, 0, len(c.inboxes))
+	for _, inbox := range c.inboxes {
+		inboxes = append(inboxes, inbox)
+	}
+	c.mu.RUnlock()
+
+	// Sync each inbox
+	for _, inbox := range inboxes {
+		c.syncInbox(ctx, inbox)
+	}
+}
+
+// syncInbox fetches emails for a single inbox and notifies callbacks for each.
+func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
+	// Fetch all emails (decrypted)
+	emails, err := inbox.GetEmails(ctx)
+	if err != nil {
+		return // Silently ignore errors during sync
 	}
 
+	// Notify callbacks for each email
+	for _, email := range emails {
+		c.notifyEmailCallbacks(inbox, email)
+	}
+}
+
+// notifyEmailCallbacks calls all registered callbacks for an email.
+// This is used by both SSE event handling and sync.
+func (c *Client) notifyEmailCallbacks(inbox *Inbox, email *Email) {
 	c.callbacksMu.RLock()
-	callbacks := c.eventCallbacks[event.InboxID]
+	callbacks := c.eventCallbacks[inbox.inboxHash]
 	if len(callbacks) == 0 {
 		c.callbacksMu.RUnlock()
-		return nil
+		return
 	}
 	// Copy callbacks to slice for iteration outside lock
 	callbacksCopy := make([]emailEventCallback, 0, len(callbacks))
@@ -403,6 +440,18 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 		callbacksCopy = append(callbacksCopy, cb)
 	}
 	c.callbacksMu.RUnlock()
+
+	// Call each callback
+	for _, cb := range callbacksCopy {
+		go cb(inbox, email)
+	}
+}
+
+// handleSSEEvent processes incoming SSE events from the delivery strategy.
+func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error {
+	if event == nil {
+		return nil
+	}
 
 	// Find the inbox using O(1) lookup
 	c.mu.RLock()
@@ -422,10 +471,8 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 		return err
 	}
 
-	// Low volume expected; spawning per-email is fine.
-	for _, cb := range callbacksCopy {
-		go cb(inbox, email)
-	}
+	// Notify all callbacks
+	c.notifyEmailCallbacks(inbox, email)
 
 	return nil
 }

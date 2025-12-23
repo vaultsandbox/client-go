@@ -116,4 +116,11 @@ type FullStrategy interface {
 	// Close releases resources and stops the strategy.
 	// It is equivalent to calling Stop.
 	Close() error
+
+	// OnReconnect sets a callback that is invoked after each successful
+	// connection/reconnection. For SSE, this is called after the EventSource
+	// connects. For polling, this is a no-op since polling doesn't have
+	// persistent connections. This can be used to sync emails that may have
+	// arrived during the reconnection window.
+	OnReconnect(fn func(ctx context.Context))
 }
