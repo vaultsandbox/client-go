@@ -24,29 +24,31 @@ func TestInbox_Watch_ReturnsChannel(t *testing.T) {
 	}
 }
 
-func TestInbox_Watch_ClosesOnContextCancel(t *testing.T) {
+func TestInbox_Watch_UnsubscribesOnContextCancel(t *testing.T) {
+	client := &Client{
+		subs: newSubscriptionManager(),
+	}
 	inbox := &Inbox{
 		inboxHash: "test-hash",
-		client: &Client{
-			subs: newSubscriptionManager(),
-		},
+		client:    client,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-
 	ch := inbox.Watch(ctx)
 
-	// Cancel context
+	// Cancel context and wait for unsubscribe goroutine
 	cancel()
+	time.Sleep(10 * time.Millisecond)
 
-	// Channel should close
+	// After cancel, notify should not deliver (unsubscribed)
+	client.subs.notify("test-hash", &Email{ID: "late-email"})
+
+	// Channel should not receive the email (non-blocking check)
 	select {
-	case _, ok := <-ch:
-		if ok {
-			t.Error("expected channel to be closed")
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Error("channel did not close after context cancel")
+	case <-ch:
+		t.Error("received email after context cancel")
+	default:
+		// Expected: no email received
 	}
 }
 
@@ -220,7 +222,7 @@ func TestClient_WatchInboxes_ReceivesFromMultipleInboxes(t *testing.T) {
 	}
 }
 
-func TestClient_WatchInboxes_ClosesOnContextCancel(t *testing.T) {
+func TestClient_WatchInboxes_UnsubscribesOnContextCancel(t *testing.T) {
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -229,15 +231,19 @@ func TestClient_WatchInboxes_ClosesOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := client.WatchInboxes(ctx, inbox)
 
+	// Cancel context and wait for unsubscribe goroutine
 	cancel()
+	time.Sleep(10 * time.Millisecond)
 
+	// After cancel, notify should not deliver (unsubscribed)
+	client.subs.notify("hash-1", &Email{ID: "late-email"})
+
+	// Channel should not receive the event (non-blocking check)
 	select {
-	case _, ok := <-ch:
-		if ok {
-			t.Error("expected channel to be closed")
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Error("channel did not close after context cancel")
+	case <-ch:
+		t.Error("received event after context cancel")
+	default:
+		// Expected: no event received
 	}
 }
 

@@ -377,15 +377,22 @@ type InboxEvent struct {
 }
 
 // WatchInboxes returns a channel that receives events from multiple inboxes.
-// The channel closes when the context is cancelled.
+// The channel is not closed when the context is cancelled; use a select
+// on ctx.Done() to detect cancellation.
 //
 // Example:
 //
 //	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 //	defer cancel()
 //
-//	for event := range client.WatchInboxes(ctx, inbox1, inbox2) {
-//	    fmt.Printf("Email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
+//	ch := client.WatchInboxes(ctx, inbox1, inbox2)
+//	for {
+//	    select {
+//	    case <-ctx.Done():
+//	        return
+//	    case event := <-ch:
+//	        fmt.Printf("Email in %s: %s\n", event.Inbox.EmailAddress(), event.Email.Subject)
+//	    }
 //	}
 func (c *Client) WatchInboxes(ctx context.Context, inboxes ...*Inbox) <-chan *InboxEvent {
 	ch := make(chan *InboxEvent, 16)
@@ -409,13 +416,14 @@ func (c *Client) WatchInboxes(ctx context.Context, inboxes ...*Inbox) <-chan *In
 		unsubscribes = append(unsubscribes, unsub)
 	}
 
-	// Cleanup goroutine
+	// Cleanup goroutine: unsubscribe when context is cancelled.
+	// We intentionally do not close(ch) to avoid a race where an
+	// in-flight callback tries to send after close.
 	go func() {
 		<-ctx.Done()
 		for _, unsub := range unsubscribes {
 			unsub()
 		}
-		close(ch)
 	}()
 
 	return ch

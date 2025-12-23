@@ -6,15 +6,22 @@ import (
 )
 
 // Watch returns a channel that receives emails as they arrive.
-// The channel closes when the context is cancelled.
+// The channel is not closed when the context is cancelled; use a select
+// on ctx.Done() to detect cancellation.
 //
 // Example:
 //
 //	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 //	defer cancel()
 //
-//	for email := range inbox.Watch(ctx) {
-//	    fmt.Printf("New email: %s\n", email.Subject)
+//	ch := inbox.Watch(ctx)
+//	for {
+//	    select {
+//	    case <-ctx.Done():
+//	        return
+//	    case email := <-ch:
+//	        fmt.Printf("New email: %s\n", email.Subject)
+//	    }
 //	}
 func (i *Inbox) Watch(ctx context.Context) <-chan *Email {
 	ch := make(chan *Email, 16)
@@ -28,11 +35,12 @@ func (i *Inbox) Watch(ctx context.Context) <-chan *Email {
 		}
 	})
 
-	// Cleanup goroutine
+	// Cleanup goroutine: unsubscribe when context is cancelled.
+	// We intentionally do not close(ch) to avoid a race where an
+	// in-flight callback tries to send after close.
 	go func() {
 		<-ctx.Done()
-		unsubscribe() // Callback won't fire after this returns
-		close(ch)     // Safe - no more sends possible
+		unsubscribe()
 	}()
 
 	return ch
