@@ -24,10 +24,12 @@ Move all unexported logic related to signature verification, decryption, and JSO
 - **Methods**: `decryptEmail()`, `verifyAndDecrypt()`, `applyParsedContent()`, `convertDecryptedEmail()`.
 - **Helpers**: `parseMetadata()`, `parseParsedContent()`, `buildDecryptedEmail()`, `wrapCryptoError()`.
 
-### 5. `inbox_factory.go` (Initialization & Import/Export)
-Move logic for creating or restoring inboxes.
-- **Methods**: `Export()`, `newInboxFromResult()`, `newInboxFromExport()`.
+### 5. `inbox_export.go` (Import/Export)
+Move logic for serializing and restoring inboxes.
+- **Methods**: `Export()`, `newInboxFromExport()`.
 - **Data**: `ExportedInbox` struct and its `Validate()` method.
+
+**Note**: `newInboxFromResult()` is internal and should stay with the client code that calls it (likely in the client package).
 
 ## Benefits
 - **Clearer Boundaries**: Separates I/O logic from crypto logic.
