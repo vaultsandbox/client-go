@@ -18,13 +18,9 @@ type Inbox struct {
 	client       *Client
 }
 
-// SyncStatus represents the synchronization status of an inbox.
-type SyncStatus struct {
-	// EmailCount is the number of emails in the inbox.
-	EmailCount int
-	// EmailsHash is a hash of the email list for efficient change detection.
-	EmailsHash string
-}
+// SyncStatus is a type alias for api.SyncStatus.
+// It represents the synchronization status of an inbox.
+type SyncStatus = api.SyncStatus
 
 // EmailAddress returns the inbox email address.
 func (i *Inbox) EmailAddress() string {
@@ -50,14 +46,7 @@ func (i *Inbox) IsExpired() bool {
 // This includes the number of emails and a hash of the email list,
 // which can be used to efficiently check for changes.
 func (i *Inbox) GetSyncStatus(ctx context.Context) (*SyncStatus, error) {
-	status, err := i.client.apiClient.GetInboxSync(ctx, i.emailAddress)
-	if err != nil {
-		return nil, err
-	}
-	return &SyncStatus{
-		EmailCount: status.EmailCount,
-		EmailsHash: status.EmailsHash,
-	}, nil
+	return i.client.apiClient.GetInboxSync(ctx, i.emailAddress)
 }
 
 // Delete deletes the inbox.

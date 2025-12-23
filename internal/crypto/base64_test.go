@@ -94,17 +94,6 @@ func TestFromBase64URL_InvalidInput(t *testing.T) {
 	}
 }
 
-func TestEncodeBase64_Alias(t *testing.T) {
-	data := []byte("test data")
-
-	encoded1 := ToBase64URL(data)
-	encoded2 := EncodeBase64(data)
-
-	if encoded1 != encoded2 {
-		t.Errorf("EncodeBase64 != ToBase64URL: got %s, want %s", encoded2, encoded1)
-	}
-}
-
 func TestDecodeBase64_MultipleFormats(t *testing.T) {
 	original := []byte("hello world")
 

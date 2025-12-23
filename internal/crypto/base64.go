@@ -27,11 +27,6 @@ func FromBase64URL(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(s)
 }
 
-// EncodeBase64 is an alias for [ToBase64URL].
-func EncodeBase64(data []byte) string {
-	return ToBase64URL(data)
-}
-
 // DecodeBase64 decodes base64 data with automatic format detection.
 // It tries multiple encodings in order:
 //  1. URL-safe without padding (base64url, RFC 4648 §5)

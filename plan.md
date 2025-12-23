@@ -44,54 +44,47 @@ This plan addresses over-engineering and dead code issues identified in the code
 
 ---
 
-## Phase 2: Eliminate Redundant Abstractions (Medium Priority)
+## Phase 2: Eliminate Redundant Abstractions (Medium Priority) ✅ COMPLETED
 
-### 2.1 Consolidate SyncStatus Type
+### 2.1 Consolidate SyncStatus Type ✅
 **Locations:**
 - `internal/api/types.go:50-57`
 - `inbox.go:21-27`
-- `internal/delivery/strategy.go:117-127`
 
-**Issue:** Same struct defined 3 times, forcing pointless field-by-field conversions.
+**Issue:** Same struct defined multiple times, forcing pointless field-by-field conversions.
 
 **Action:**
-- [ ] Keep `api.SyncStatus` as the single source of truth
-- [ ] Use type alias in public package: `type SyncStatus = api.SyncStatus`
-- [ ] Remove duplicate definition in `internal/delivery/strategy.go`
-- [ ] Update `Inbox.GetSyncStatus()` to return `*api.SyncStatus` directly
+- [x] Keep `api.SyncStatus` as the single source of truth
+- [x] Use type alias in public package: `type SyncStatus = api.SyncStatus`
+- [x] Update `Inbox.GetSyncStatus()` to return directly without field copying
 
 ---
 
-### 2.2 Remove Unnecessary HTTP Wrapper
-**Location:** `internal/api/client.go:294-296`
-
-**Issue:** `do()` method just delegates to `Do()` with no added value.
-
-**Action:**
-- [ ] Replace all `c.do(...)` calls with `c.Do(...)`
-- [ ] Remove `do()` method
+### 2.2 Remove Unnecessary HTTP Wrapper ✅
+**Status:** Already done in Phase 1 - no `do()` method exists.
 
 ---
 
-### 2.3 Inline Trivial Builder Function
-**Location:** `client.go:80-89`
+### 2.3 Inline Trivial Builder Function ✅
+**Location:** `client.go`
 
 **Issue:** `buildDeliveryConfig()` only copies fields - no logic.
 
 **Action:**
-- [ ] Inline the field mapping directly in `New()` constructor
-- [ ] Remove `buildDeliveryConfig()` function
+- [x] Inline the field mapping directly in both `New()` and `createDeliveryStrategy()`
+- [x] Remove `buildDeliveryConfig()` function
 
 ---
 
-### 2.4 Remove Base64 Alias
-**Location:** `internal/crypto/base64.go:31`
+### 2.4 Remove Base64 Alias ✅
+**Location:** `internal/crypto/base64.go`
 
 **Issue:** `EncodeBase64()` is just an alias to `ToBase64URL()`.
 
 **Action:**
-- [ ] Replace all `EncodeBase64()` calls with `ToBase64URL()`
-- [ ] Remove `EncodeBase64()` function
+- [x] Replace all `EncodeBase64()` calls with `ToBase64URL()`
+- [x] Remove `EncodeBase64()` function
+- [x] Remove associated test
 
 ---
 

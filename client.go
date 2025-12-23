@@ -76,9 +76,10 @@ func buildAPIClient(apiKey string, cfg *clientConfig) (*api.Client, error) {
 	return apiClient, nil
 }
 
-// buildDeliveryConfig creates a delivery.Config from the client config.
-func buildDeliveryConfig(cfg *clientConfig, apiClient *api.Client) delivery.Config {
-	return delivery.Config{
+// createDeliveryStrategy creates a delivery strategy based on the config.
+// For StrategyAuto, it returns an SSE strategy that will be tested for connectivity.
+func createDeliveryStrategy(cfg *clientConfig, apiClient *api.Client) delivery.Strategy {
+	deliveryCfg := delivery.Config{
 		APIClient:                apiClient,
 		PollingInitialInterval:   cfg.pollingInitialInterval,
 		PollingMaxBackoff:        cfg.pollingMaxBackoff,
@@ -86,12 +87,6 @@ func buildDeliveryConfig(cfg *clientConfig, apiClient *api.Client) delivery.Conf
 		PollingJitterFactor:      cfg.pollingJitterFactor,
 		SSEConnectionTimeout:     cfg.sseConnectionTimeout,
 	}
-}
-
-// createDeliveryStrategy creates a delivery strategy based on the config.
-// For StrategyAuto, it returns an SSE strategy that will be tested for connectivity.
-func createDeliveryStrategy(cfg *clientConfig, apiClient *api.Client) delivery.Strategy {
-	deliveryCfg := buildDeliveryConfig(cfg, apiClient)
 	switch cfg.deliveryStrategy {
 	case StrategySSE:
 		return delivery.NewSSEStrategy(deliveryCfg)
@@ -138,7 +133,14 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("fetch server info: %w", err)
 	}
 
-	deliveryCfg := buildDeliveryConfig(cfg, apiClient)
+	deliveryCfg := delivery.Config{
+		APIClient:                apiClient,
+		PollingInitialInterval:   cfg.pollingInitialInterval,
+		PollingMaxBackoff:        cfg.pollingMaxBackoff,
+		PollingBackoffMultiplier: cfg.pollingBackoffMultiplier,
+		PollingJitterFactor:      cfg.pollingJitterFactor,
+		SSEConnectionTimeout:     cfg.sseConnectionTimeout,
+	}
 	strategy := createDeliveryStrategy(cfg, apiClient)
 
 	// Determine SSE connection timeout for auto mode
