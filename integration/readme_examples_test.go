@@ -793,7 +793,7 @@ func TestREADME_WaitForEmail_FromFilter(t *testing.T) {
 // README Error Handling Example (lines 696-749)
 // ============================================================================
 
-func TestREADME_ErrorHandling_TimeoutError(t *testing.T) {
+func TestREADME_ErrorHandling_Timeout(t *testing.T) {
 	client := newClient(t)
 	ctx := context.Background()
 
@@ -803,25 +803,22 @@ func TestREADME_ErrorHandling_TimeoutError(t *testing.T) {
 	}
 	defer inbox.Delete(ctx)
 
-	// README example: This might return a TimeoutError
+	// README example: This might return context.DeadlineExceeded
 	_, err = inbox.WaitForEmail(ctx, vaultsandbox.WithWaitTimeout(1*time.Second))
 	if err == nil {
 		t.Skip("unexpectedly received an email")
 	}
 
 	// README example: Check error types
-	var timeoutErr *vaultsandbox.TimeoutError
 	var apiErr *vaultsandbox.APIError
 
 	switch {
-	case errors.As(err, &timeoutErr):
-		t.Logf("Timed out waiting for email: %s", timeoutErr.Error())
+	case errors.Is(err, context.DeadlineExceeded):
+		t.Log("Context deadline exceeded (expected for timeout test)")
 	case errors.As(err, &apiErr):
 		t.Logf("API Error (%d): %s", apiErr.StatusCode, apiErr.Message)
 	case errors.Is(err, vaultsandbox.ErrSignatureInvalid):
 		t.Log("CRITICAL: Signature verification failed!")
-	case errors.Is(err, context.DeadlineExceeded):
-		t.Log("Context deadline exceeded (expected for timeout test)")
 	default:
 		t.Logf("Other error: %v", err)
 	}

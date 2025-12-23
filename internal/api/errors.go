@@ -54,23 +54,18 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("API error %d", e.StatusCode)
 }
 
-// VaultSandboxError implements the VaultSandboxError interface.
-func (e *APIError) VaultSandboxError() {}
-
 // Is implements errors.Is for sentinel error matching.
 func (e *APIError) Is(target error) bool {
 	switch e.StatusCode {
 	case 401:
 		return target == ErrUnauthorized || target == ErrInvalidAPIKey
 	case 404:
-		// Use ResourceType for precise error matching
 		switch e.ResourceType {
 		case ResourceInbox:
 			return target == ErrInboxNotFound
 		case ResourceEmail:
 			return target == ErrEmailNotFound
 		default:
-			// Fallback: match both for unknown resource type
 			return target == ErrInboxNotFound || target == ErrEmailNotFound
 		}
 	case 409:
@@ -113,7 +108,3 @@ func (e *NetworkError) Error() string {
 func (e *NetworkError) Unwrap() error {
 	return e.Err
 }
-
-// VaultSandboxError implements the VaultSandboxError interface.
-func (e *NetworkError) VaultSandboxError() {}
-

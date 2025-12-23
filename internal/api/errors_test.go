@@ -78,12 +78,6 @@ func TestAPIError_Is(t *testing.T) {
 	}
 }
 
-func TestAPIError_VaultSandboxError(t *testing.T) {
-	err := &APIError{StatusCode: 400}
-	// This just verifies the method exists and is callable
-	err.VaultSandboxError()
-}
-
 func TestNetworkError_Error(t *testing.T) {
 	underlying := errors.New("connection refused")
 	err := &NetworkError{Err: underlying}
@@ -121,12 +115,6 @@ func TestNetworkError_As(t *testing.T) {
 	if !errors.As(err, &netErr) {
 		t.Error("errors.As() should match NetworkError")
 	}
-}
-
-func TestNetworkError_VaultSandboxError(t *testing.T) {
-	err := &NetworkError{}
-	// This just verifies the method exists and is callable
-	err.VaultSandboxError()
 }
 
 func TestNetworkError_WithFields(t *testing.T) {
