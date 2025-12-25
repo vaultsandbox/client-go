@@ -38,6 +38,9 @@ type clientConfig struct {
 	pollingBackoffMultiplier float64
 	pollingJitterFactor      float64
 	sseConnectionTimeout     time.Duration
+
+	// Error callback for background sync failures
+	onSyncError func(error)
 }
 
 // inboxConfig holds configuration for inbox creation.
@@ -105,6 +108,14 @@ func WithRetries(count int) Option {
 func WithRetryOn(statusCodes []int) Option {
 	return func(c *clientConfig) {
 		c.retryOn = statusCodes
+	}
+}
+
+// WithOnSyncError sets a callback for errors during background sync.
+// This is called when syncInbox fails to fetch emails after an SSE reconnection.
+func WithOnSyncError(fn func(error)) Option {
+	return func(c *clientConfig) {
+		c.onSyncError = fn
 	}
 }
 

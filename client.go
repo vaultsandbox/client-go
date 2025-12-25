@@ -40,6 +40,9 @@ type Client struct {
 
 	strategyCtx    context.Context
 	strategyCancel context.CancelFunc
+
+	// Error callback for background sync failures
+	onSyncError func(error)
 }
 
 // buildAPIClient creates and configures an API client from the given config.
@@ -137,6 +140,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		subs:           newSubscriptionManager(),
 		strategyCtx:    strategyCtx,
 		strategyCancel: strategyCancel,
+		onSyncError:    cfg.onSyncError,
 	}
 
 	// Start the strategy with an event handler
@@ -476,7 +480,10 @@ func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
 	// Fetch all emails (decrypted)
 	emails, err := inbox.GetEmails(ctx)
 	if err != nil {
-		return // Silently ignore errors during sync
+		if c.onSyncError != nil {
+			c.onSyncError(err)
+		}
+		return
 	}
 
 	// Notify subscribers for each email

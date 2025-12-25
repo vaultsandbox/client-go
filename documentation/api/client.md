@@ -36,6 +36,7 @@ WithDeliveryStrategy(strategy DeliveryStrategy) Option
 WithTimeout(timeout time.Duration) Option
 WithRetries(count int) Option
 WithRetryOn(statusCodes []int) Option
+WithOnSyncError(fn func(error)) Option
 ```
 
 #### Option Functions
@@ -48,6 +49,7 @@ WithRetryOn(statusCodes []int) Option
 | `WithTimeout`         | `time.Duration`     | `60s`                              | Request timeout                            |
 | `WithRetries`         | `int`               | `3`                                | Maximum retry attempts for HTTP requests   |
 | `WithRetryOn`         | `[]int`             | `[408, 429, 500, 502, 503, 504]`   | HTTP status codes that trigger a retry     |
+| `WithOnSyncError`     | `func(error)`       | `nil`                              | Callback for background sync errors        |
 
 #### Polling Configuration Options
 

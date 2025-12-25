@@ -145,6 +145,24 @@ vaultsandbox.WithRetryOn([]int{500, 502, 503})                // Only server err
 vaultsandbox.WithRetryOn([]int{})                             // Never retry
 ```
 
+#### WithOnSyncError
+
+**Signature**: `WithOnSyncError(fn func(error)) Option`
+
+**Default**: `nil` (errors are silently ignored)
+
+**Description**: Callback invoked when background sync fails to fetch emails after an SSE reconnection. Use this to log or handle errors that would otherwise be silently dropped.
+
+**Example**:
+
+```go
+client, err := vaultsandbox.New(apiKey,
+	vaultsandbox.WithOnSyncError(func(err error) {
+		log.Printf("background sync error: %v", err)
+	}),
+)
+```
+
 #### WithHTTPClient
 
 **Signature**: `WithHTTPClient(client *http.Client) Option`
