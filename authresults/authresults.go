@@ -10,35 +10,41 @@ type AuthResults struct {
 
 // SPFResult represents an SPF check result.
 type SPFResult struct {
-	Status string `json:"status"` // pass, fail, softfail, neutral, none, temperror, permerror
-	Domain string `json:"domain,omitempty"`
-	IP     string `json:"ip,omitempty"`
-	Info   string `json:"info,omitempty"`
+	Status  string `json:"result"` // pass, fail, softfail, neutral, none, temperror, permerror
+	Domain  string `json:"domain,omitempty"`
+	IP      string `json:"ip,omitempty"`
+	Details string `json:"details,omitempty"`
 }
 
 // DKIMResult represents a DKIM check result.
 type DKIMResult struct {
-	Status   string `json:"status"` // pass, fail, none
-	Domain   string `json:"domain,omitempty"`
-	Selector string `json:"selector,omitempty"`
-	Info     string `json:"info,omitempty"`
+	Status    string `json:"result"` // pass, fail, none
+	Domain    string `json:"domain,omitempty"`
+	Selector  string `json:"selector,omitempty"`
+	Signature string `json:"signature,omitempty"`
 }
 
 // DMARCResult represents a DMARC check result.
 type DMARCResult struct {
-	Status  string `json:"status"` // pass, fail, none
+	Status  string `json:"result"` // pass, fail, none
 	Policy  string `json:"policy,omitempty"` // none, quarantine, reject
 	Aligned bool   `json:"aligned,omitempty"`
 	Domain  string `json:"domain,omitempty"`
-	Info    string `json:"info,omitempty"`
 }
 
 // ReverseDNSResult represents a reverse DNS check result.
 type ReverseDNSResult struct {
-	Status   string `json:"status"` // pass, fail, none
+	Verified bool   `json:"verified"`
 	IP       string `json:"ip,omitempty"`
 	Hostname string `json:"hostname,omitempty"`
-	Info     string `json:"info,omitempty"`
+}
+
+// Status returns "pass" if Verified, otherwise "fail".
+func (r *ReverseDNSResult) Status() string {
+	if r.Verified {
+		return "pass"
+	}
+	return "fail"
 }
 
 // AuthValidation provides a summary of email authentication validation.
@@ -114,9 +120,9 @@ func (a *AuthResults) Validate() AuthValidation {
 	}
 
 	// Check Reverse DNS
-	reverseDNSPassed := a.ReverseDNS != nil && a.ReverseDNS.Status == "pass"
+	reverseDNSPassed := a.ReverseDNS != nil && a.ReverseDNS.Status() == "pass"
 	if a.ReverseDNS != nil && !reverseDNSPassed {
-		msg := "Reverse DNS check failed: " + a.ReverseDNS.Status
+		msg := "Reverse DNS check failed: " + a.ReverseDNS.Status()
 		if a.ReverseDNS.Hostname != "" {
 			msg += " (hostname: " + a.ReverseDNS.Hostname + ")"
 		}

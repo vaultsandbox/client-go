@@ -91,7 +91,7 @@ func TestValidate(t *testing.T) {
 				SPF:        &SPFResult{Status: "pass"},
 				DKIM:       []DKIMResult{{Status: "pass"}},
 				DMARC:      &DMARCResult{Status: "pass"},
-				ReverseDNS: &ReverseDNSResult{Status: "pass"},
+				ReverseDNS: &ReverseDNSResult{Verified: true},
 			},
 			wantErr: false,
 		},
@@ -174,7 +174,7 @@ func TestValidate(t *testing.T) {
 				SPF:        &SPFResult{Status: "pass"},
 				DKIM:       []DKIMResult{{Status: "pass"}},
 				DMARC:      &DMARCResult{Status: "pass"},
-				ReverseDNS: &ReverseDNSResult{Status: "fail"},
+				ReverseDNS: &ReverseDNSResult{Verified: false},
 			},
 			wantErr: true,
 			errMsgs: []string{"reverse DNS"},
@@ -383,17 +383,17 @@ func TestValidateReverseDNS(t *testing.T) {
 		},
 		{
 			name:    "ReverseDNS pass",
-			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Status: "pass"}},
+			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Verified: true}},
 			wantErr: nil,
 		},
 		{
 			name:    "ReverseDNS fail",
-			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Status: "fail"}},
+			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Verified: false}},
 			wantErr: ErrReverseDNSFailed,
 		},
 		{
 			name:    "ReverseDNS none",
-			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Status: "none"}},
+			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Verified: false}},
 			wantErr: ErrReverseDNSFailed,
 		},
 	}
@@ -430,7 +430,7 @@ func TestIsPassing(t *testing.T) {
 				SPF:        &SPFResult{Status: "pass"},
 				DKIM:       []DKIMResult{{Status: "pass"}},
 				DMARC:      &DMARCResult{Status: "pass"},
-				ReverseDNS: &ReverseDNSResult{Status: "pass"},
+				ReverseDNS: &ReverseDNSResult{Verified: true},
 			},
 			expected: true,
 		},
@@ -458,7 +458,7 @@ func TestIsPassing(t *testing.T) {
 		{
 			name: "ReverseDNS fails",
 			results: &AuthResults{
-				ReverseDNS: &ReverseDNSResult{Status: "fail"},
+				ReverseDNS: &ReverseDNSResult{Verified: false},
 			},
 			expected: false,
 		},
@@ -506,10 +506,10 @@ func TestIsPassing(t *testing.T) {
 func TestResultTypes_Fields(t *testing.T) {
 	t.Run("SPFResult", func(t *testing.T) {
 		spf := &SPFResult{
-			Status: "pass",
-			Domain: "example.com",
-			IP:     "1.2.3.4",
-			Info:   "SPF record found",
+			Status:  "pass",
+			Domain:  "example.com",
+			IP:      "1.2.3.4",
+			Details: "SPF record found",
 		}
 
 		if spf.Status != "pass" {
@@ -525,10 +525,10 @@ func TestResultTypes_Fields(t *testing.T) {
 
 	t.Run("DKIMResult", func(t *testing.T) {
 		dkim := DKIMResult{
-			Status:   "pass",
-			Domain:   "example.com",
-			Selector: "selector1",
-			Info:     "DKIM verified",
+			Status:    "pass",
+			Domain:    "example.com",
+			Selector:  "selector1",
+			Signature: "DKIM verified",
 		}
 
 		if dkim.Status != "pass" {
@@ -545,7 +545,6 @@ func TestResultTypes_Fields(t *testing.T) {
 			Policy:  "reject",
 			Aligned: true,
 			Domain:  "example.com",
-			Info:    "DMARC aligned",
 		}
 
 		if dmarc.Status != "pass" {
@@ -561,14 +560,13 @@ func TestResultTypes_Fields(t *testing.T) {
 
 	t.Run("ReverseDNSResult", func(t *testing.T) {
 		rdns := &ReverseDNSResult{
-			Status:   "pass",
+			Verified: true,
 			IP:       "1.2.3.4",
 			Hostname: "mail.example.com",
-			Info:     "PTR record matches",
 		}
 
-		if rdns.Status != "pass" {
-			t.Errorf("Status = %s, want pass", rdns.Status)
+		if rdns.Status() != "pass" {
+			t.Errorf("Status = %s, want pass", rdns.Status())
 		}
 		if rdns.Hostname != "mail.example.com" {
 			t.Errorf("Hostname = %s, want mail.example.com", rdns.Hostname)

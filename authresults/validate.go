@@ -65,7 +65,7 @@ func Validate(results *AuthResults) error {
 	}
 
 	// ReverseDNS must pass if present
-	if results.ReverseDNS != nil && results.ReverseDNS.Status != "pass" {
+	if results.ReverseDNS != nil && results.ReverseDNS.Status() != "pass" {
 		errs = append(errs, "reverse DNS did not pass")
 	}
 
@@ -117,7 +117,7 @@ func ValidateReverseDNS(results *AuthResults) error {
 	if results == nil || results.ReverseDNS == nil {
 		return ErrNoAuthResults
 	}
-	if results.ReverseDNS.Status != "pass" {
+	if results.ReverseDNS.Status() != "pass" {
 		return ErrReverseDNSFailed
 	}
 	return nil

@@ -253,10 +253,10 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 
 	t.Run("with valid auth results", func(t *testing.T) {
 		authResultsJSON := json.RawMessage(`{
-			"spf": {"status": "pass", "domain": "example.com"},
-			"dkim": [{"status": "pass", "domain": "example.com", "selector": "default"}],
-			"dmarc": {"status": "pass", "policy": "reject"},
-			"reverseDns": {"status": "pass", "hostname": "mail.example.com"}
+			"spf": {"result": "pass", "domain": "example.com"},
+			"dkim": [{"result": "pass", "domain": "example.com", "selector": "default"}],
+			"dmarc": {"result": "pass", "policy": "reject"},
+			"reverseDns": {"verified": true, "hostname": "mail.example.com"}
 		}`)
 
 		decrypted := &crypto.DecryptedEmail{
@@ -296,8 +296,8 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 		if email.AuthResults.ReverseDNS == nil {
 			t.Fatal("ReverseDNS should not be nil")
 		}
-		if email.AuthResults.ReverseDNS.Status != "pass" {
-			t.Errorf("ReverseDNS.Status = %s, want pass", email.AuthResults.ReverseDNS.Status)
+		if email.AuthResults.ReverseDNS.Status() != "pass" {
+			t.Errorf("ReverseDNS.Status = %s, want pass", email.AuthResults.ReverseDNS.Status())
 		}
 	})
 
@@ -336,9 +336,9 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 
 	t.Run("validate and IsPassing work correctly", func(t *testing.T) {
 		authResultsJSON := json.RawMessage(`{
-			"spf": {"status": "pass"},
-			"dkim": [{"status": "pass"}],
-			"dmarc": {"status": "pass"}
+			"spf": {"result": "pass"},
+			"dkim": [{"result": "pass"}],
+			"dmarc": {"result": "pass"}
 		}`)
 
 		decrypted := &crypto.DecryptedEmail{
