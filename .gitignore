@@ -1,0 +1,43 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Binary output
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# AI
+.claude
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build output
+/bin/
+/dist/
+
+# Vendor directory (if not committed)
+# /vendor/

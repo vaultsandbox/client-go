@@ -1,0 +1,146 @@
+package api
+
+import (
+	"errors"
+	"fmt"
+	"testing"
+
+	"github.com/vaultsandbox/client-go/internal/apierrors"
+)
+
+func TestAPIError_Error(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      *apierrors.APIError
+		expected string
+	}{
+		{
+			name:     "with message",
+			err:      &apierrors.APIError{StatusCode: 401, Message: "invalid API key"},
+			expected: "API error 401: invalid API key",
+		},
+		{
+			name:     "without message",
+			err:      &apierrors.APIError{StatusCode: 500},
+			expected: "API error 500",
+		},
+		{
+			name:     "with request ID",
+			err:      &apierrors.APIError{StatusCode: 404, Message: "not found", RequestID: "req-123"},
+			expected: "API error 404: not found (request_id: req-123)",
+		},
+		{
+			name:     "with request ID only",
+			err:      &apierrors.APIError{StatusCode: 500, RequestID: "req-456"},
+			expected: "API error 500 (request_id: req-456)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.err.Error()
+			if result != tt.expected {
+				t.Errorf("Error() = %s, want %s", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAPIError_Is(t *testing.T) {
+	tests := []struct {
+		name         string
+		statusCode   int
+		resourceType apierrors.ResourceType
+		target       error
+		expected     bool
+	}{
+		{"401 matches ErrUnauthorized", 401, apierrors.ResourceUnknown, apierrors.ErrUnauthorized, true},
+		{"404 with unknown resource matches ErrInboxNotFound", 404, apierrors.ResourceUnknown, apierrors.ErrInboxNotFound, true},
+		{"404 with unknown resource matches ErrEmailNotFound", 404, apierrors.ResourceUnknown, apierrors.ErrEmailNotFound, true},
+		{"404 with inbox resource matches ErrInboxNotFound", 404, apierrors.ResourceInbox, apierrors.ErrInboxNotFound, true},
+		{"404 with inbox resource does not match ErrEmailNotFound", 404, apierrors.ResourceInbox, apierrors.ErrEmailNotFound, false},
+		{"404 with email resource matches ErrEmailNotFound", 404, apierrors.ResourceEmail, apierrors.ErrEmailNotFound, true},
+		{"404 with email resource does not match ErrInboxNotFound", 404, apierrors.ResourceEmail, apierrors.ErrInboxNotFound, false},
+		{"409 matches ErrInboxAlreadyExists", 409, apierrors.ResourceUnknown, apierrors.ErrInboxAlreadyExists, true},
+		{"429 matches ErrRateLimited", 429, apierrors.ResourceUnknown, apierrors.ErrRateLimited, true},
+		{"500 does not match ErrUnauthorized", 500, apierrors.ResourceUnknown, apierrors.ErrUnauthorized, false},
+		{"401 does not match ErrInboxNotFound", 401, apierrors.ResourceUnknown, apierrors.ErrInboxNotFound, false},
+		{"200 does not match anything", 200, apierrors.ResourceUnknown, apierrors.ErrUnauthorized, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := &apierrors.APIError{StatusCode: tt.statusCode, ResourceType: tt.resourceType}
+			result := errors.Is(err, tt.target)
+			if result != tt.expected {
+				t.Errorf("errors.Is() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNetworkError_Error(t *testing.T) {
+	underlying := errors.New("connection refused")
+	err := &apierrors.NetworkError{Err: underlying}
+
+	expected := "network error: connection refused"
+	if err.Error() != expected {
+		t.Errorf("Error() = %s, want %s", err.Error(), expected)
+	}
+}
+
+func TestNetworkError_Unwrap(t *testing.T) {
+	underlying := errors.New("connection refused")
+	err := &apierrors.NetworkError{Err: underlying}
+
+	unwrapped := err.Unwrap()
+	if unwrapped != underlying {
+		t.Errorf("Unwrap() = %v, want %v", unwrapped, underlying)
+	}
+}
+
+func TestNetworkError_Is(t *testing.T) {
+	underlying := errors.New("connection refused")
+	err := &apierrors.NetworkError{Err: underlying}
+
+	if !errors.Is(err, underlying) {
+		t.Error("errors.Is() should match underlying error")
+	}
+}
+
+func TestNetworkError_As(t *testing.T) {
+	underlying := fmt.Errorf("wrapped: %w", errors.New("root error"))
+	err := &apierrors.NetworkError{Err: underlying}
+
+	var netErr *apierrors.NetworkError
+	if !errors.As(err, &netErr) {
+		t.Error("errors.As() should match NetworkError")
+	}
+}
+
+
+func TestSentinelErrors(t *testing.T) {
+	// Verify sentinel errors are properly defined
+	sentinels := []struct {
+		name string
+		err  error
+	}{
+		{"ErrUnauthorized", apierrors.ErrUnauthorized},
+		{"ErrInboxNotFound", apierrors.ErrInboxNotFound},
+		{"ErrEmailNotFound", apierrors.ErrEmailNotFound},
+		{"ErrInboxAlreadyExists", apierrors.ErrInboxAlreadyExists},
+		{"ErrRateLimited", apierrors.ErrRateLimited},
+	}
+
+	for _, s := range sentinels {
+		t.Run(s.name, func(t *testing.T) {
+			if s.err == nil {
+				t.Error("sentinel error is nil")
+			}
+			if s.err.Error() == "" {
+				t.Error("sentinel error has empty message")
+			}
+		})
+	}
+}
+
