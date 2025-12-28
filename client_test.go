@@ -1,6 +1,7 @@
 package vaultsandbox
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -94,7 +95,7 @@ func TestExportedInbox_JSONRoundtrip(t *testing.T) {
 func TestImportInboxFromFile_NotFound(t *testing.T) {
 	c := &Client{}
 
-	_, err := c.ImportInboxFromFile(nil, "/nonexistent/path/file.json")
+	_, err := c.ImportInboxFromFile(context.TODO(), "/nonexistent/path/file.json")
 	if err == nil {
 		t.Error("ImportInboxFromFile should return error for nonexistent file")
 	}
@@ -110,7 +111,7 @@ func TestImportInboxFromFile_InvalidJSON(t *testing.T) {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 
-	_, err := c.ImportInboxFromFile(nil, tmpFile)
+	_, err := c.ImportInboxFromFile(context.TODO(), tmpFile)
 	if err == nil {
 		t.Error("ImportInboxFromFile should return error for invalid JSON")
 	}
@@ -337,7 +338,7 @@ func TestImportInboxFromFile_EmptyFile(t *testing.T) {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 
-	_, err := c.ImportInboxFromFile(nil, tmpFile)
+	_, err := c.ImportInboxFromFile(context.TODO(), tmpFile)
 	if err == nil {
 		t.Error("ImportInboxFromFile should return error for empty file")
 	}
@@ -353,7 +354,7 @@ func TestImportInboxFromFile_ValidJSONWrongStructure(t *testing.T) {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 
-	_, err := c.ImportInboxFromFile(nil, tmpFile)
+	_, err := c.ImportInboxFromFile(context.TODO(), tmpFile)
 	if err == nil {
 		t.Error("ImportInboxFromFile should return error for wrong JSON structure")
 	}
