@@ -6,9 +6,9 @@ import (
 
 func TestValidate_AllPassing(t *testing.T) {
 	ar := &AuthResults{
-		SPF:   &SPFResult{Status: "pass", Domain: "example.com"},
-		DKIM:  []DKIMResult{{Status: "pass", Domain: "example.com"}},
-		DMARC: &DMARCResult{Status: "pass", Domain: "example.com"},
+		SPF:   &SPFResult{Result: "pass", Domain: "example.com"},
+		DKIM:  []DKIMResult{{Result: "pass", Domain: "example.com"}},
+		DMARC: &DMARCResult{Result: "pass", Domain: "example.com"},
 		ReverseDNS: &ReverseDNSResult{Verified: true, Hostname: "mail.example.com"},
 	}
 
@@ -36,9 +36,9 @@ func TestValidate_AllPassing(t *testing.T) {
 
 func TestValidate_SPFFailed(t *testing.T) {
 	ar := &AuthResults{
-		SPF:   &SPFResult{Status: "fail", Domain: "example.com"},
-		DKIM:  []DKIMResult{{Status: "pass", Domain: "example.com"}},
-		DMARC: &DMARCResult{Status: "pass", Domain: "example.com"},
+		SPF:   &SPFResult{Result: "fail", Domain: "example.com"},
+		DKIM:  []DKIMResult{{Result: "pass", Domain: "example.com"}},
+		DMARC: &DMARCResult{Result: "pass", Domain: "example.com"},
 	}
 
 	v := ar.Validate()
@@ -59,9 +59,9 @@ func TestValidate_SPFFailed(t *testing.T) {
 
 func TestValidate_DKIMFailed(t *testing.T) {
 	ar := &AuthResults{
-		SPF:   &SPFResult{Status: "pass", Domain: "example.com"},
-		DKIM:  []DKIMResult{{Status: "fail", Domain: "example.com"}},
-		DMARC: &DMARCResult{Status: "pass", Domain: "example.com"},
+		SPF:   &SPFResult{Result: "pass", Domain: "example.com"},
+		DKIM:  []DKIMResult{{Result: "fail", Domain: "example.com"}},
+		DMARC: &DMARCResult{Result: "pass", Domain: "example.com"},
 	}
 
 	v := ar.Validate()
@@ -79,12 +79,12 @@ func TestValidate_DKIMFailed(t *testing.T) {
 
 func TestValidate_DKIMOnePassing(t *testing.T) {
 	ar := &AuthResults{
-		SPF: &SPFResult{Status: "pass", Domain: "example.com"},
+		SPF: &SPFResult{Result: "pass", Domain: "example.com"},
 		DKIM: []DKIMResult{
-			{Status: "fail", Domain: "bad.com"},
-			{Status: "pass", Domain: "example.com"},
+			{Result: "fail", Domain: "bad.com"},
+			{Result: "pass", Domain: "example.com"},
 		},
-		DMARC: &DMARCResult{Status: "pass", Domain: "example.com"},
+		DMARC: &DMARCResult{Result: "pass", Domain: "example.com"},
 	}
 
 	v := ar.Validate()
@@ -99,9 +99,9 @@ func TestValidate_DKIMOnePassing(t *testing.T) {
 
 func TestValidate_DMARCFailed(t *testing.T) {
 	ar := &AuthResults{
-		SPF:   &SPFResult{Status: "pass", Domain: "example.com"},
-		DKIM:  []DKIMResult{{Status: "pass", Domain: "example.com"}},
-		DMARC: &DMARCResult{Status: "fail", Policy: "reject", Domain: "example.com"},
+		SPF:   &SPFResult{Result: "pass", Domain: "example.com"},
+		DKIM:  []DKIMResult{{Result: "pass", Domain: "example.com"}},
+		DMARC: &DMARCResult{Result: "fail", Policy: "reject", Domain: "example.com"},
 	}
 
 	v := ar.Validate()
@@ -122,9 +122,9 @@ func TestValidate_DMARCFailed(t *testing.T) {
 
 func TestValidate_ReverseDNSFailedDoesNotAffectPassed(t *testing.T) {
 	ar := &AuthResults{
-		SPF:        &SPFResult{Status: "pass", Domain: "example.com"},
-		DKIM:       []DKIMResult{{Status: "pass", Domain: "example.com"}},
-		DMARC:      &DMARCResult{Status: "pass", Domain: "example.com"},
+		SPF:        &SPFResult{Result: "pass", Domain: "example.com"},
+		DKIM:       []DKIMResult{{Result: "pass", Domain: "example.com"}},
+		DMARC:      &DMARCResult{Result: "pass", Domain: "example.com"},
 		ReverseDNS: &ReverseDNSResult{Verified: false, Hostname: "bad.example.com"},
 	}
 
@@ -185,9 +185,9 @@ func TestValidate_EmptyAuthResults(t *testing.T) {
 
 func TestValidate_FailuresIsNeverNil(t *testing.T) {
 	ar := &AuthResults{
-		SPF:   &SPFResult{Status: "pass"},
-		DKIM:  []DKIMResult{{Status: "pass"}},
-		DMARC: &DMARCResult{Status: "pass"},
+		SPF:   &SPFResult{Result: "pass"},
+		DKIM:  []DKIMResult{{Result: "pass"}},
+		DMARC: &DMARCResult{Result: "pass"},
 	}
 
 	v := ar.Validate()
@@ -206,27 +206,27 @@ func TestIsPassing_MatchesValidatePassed(t *testing.T) {
 		{
 			name: "all passing",
 			ar: &AuthResults{
-				SPF:   &SPFResult{Status: "pass"},
-				DKIM:  []DKIMResult{{Status: "pass"}},
-				DMARC: &DMARCResult{Status: "pass"},
+				SPF:   &SPFResult{Result: "pass"},
+				DKIM:  []DKIMResult{{Result: "pass"}},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			expected: true,
 		},
 		{
 			name: "SPF fail",
 			ar: &AuthResults{
-				SPF:   &SPFResult{Status: "fail"},
-				DKIM:  []DKIMResult{{Status: "pass"}},
-				DMARC: &DMARCResult{Status: "pass"},
+				SPF:   &SPFResult{Result: "fail"},
+				DKIM:  []DKIMResult{{Result: "pass"}},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			expected: false,
 		},
 		{
 			name: "ReverseDNS fail does not affect",
 			ar: &AuthResults{
-				SPF:        &SPFResult{Status: "pass"},
-				DKIM:       []DKIMResult{{Status: "pass"}},
-				DMARC:      &DMARCResult{Status: "pass"},
+				SPF:        &SPFResult{Result: "pass"},
+				DKIM:       []DKIMResult{{Result: "pass"}},
+				DMARC:      &DMARCResult{Result: "pass"},
 				ReverseDNS: &ReverseDNSResult{Verified: false},
 			},
 			expected: true,

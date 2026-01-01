@@ -43,14 +43,14 @@ func Validate(results *AuthResults) error {
 	var errs []string
 
 	// SPF must pass
-	if results.SPF == nil || results.SPF.Status != "pass" {
+	if results.SPF == nil || results.SPF.Result != "pass" {
 		errs = append(errs, "SPF did not pass")
 	}
 
 	// At least one DKIM must pass
 	dkimPassed := false
 	for _, dkim := range results.DKIM {
-		if dkim.Status == "pass" {
+		if dkim.Result == "pass" {
 			dkimPassed = true
 			break
 		}
@@ -60,12 +60,12 @@ func Validate(results *AuthResults) error {
 	}
 
 	// DMARC must pass
-	if results.DMARC == nil || results.DMARC.Status != "pass" {
+	if results.DMARC == nil || results.DMARC.Result != "pass" {
 		errs = append(errs, "DMARC did not pass")
 	}
 
 	// ReverseDNS must pass if present
-	if results.ReverseDNS != nil && results.ReverseDNS.Status() != "pass" {
+	if results.ReverseDNS != nil && !results.ReverseDNS.Verified {
 		errs = append(errs, "reverse DNS did not pass")
 	}
 
@@ -81,7 +81,7 @@ func ValidateSPF(results *AuthResults) error {
 	if results == nil || results.SPF == nil {
 		return ErrNoAuthResults
 	}
-	if results.SPF.Status != "pass" {
+	if results.SPF.Result != "pass" {
 		return ErrSPFFailed
 	}
 	return nil
@@ -94,7 +94,7 @@ func ValidateDKIM(results *AuthResults) error {
 		return ErrNoAuthResults
 	}
 	for _, dkim := range results.DKIM {
-		if dkim.Status == "pass" {
+		if dkim.Result == "pass" {
 			return nil
 		}
 	}
@@ -106,7 +106,7 @@ func ValidateDMARC(results *AuthResults) error {
 	if results == nil || results.DMARC == nil {
 		return ErrNoAuthResults
 	}
-	if results.DMARC.Status != "pass" {
+	if results.DMARC.Result != "pass" {
 		return ErrDMARCFailed
 	}
 	return nil
@@ -117,7 +117,7 @@ func ValidateReverseDNS(results *AuthResults) error {
 	if results == nil || results.ReverseDNS == nil {
 		return ErrNoAuthResults
 	}
-	if results.ReverseDNS.Status() != "pass" {
+	if !results.ReverseDNS.Verified {
 		return ErrReverseDNSFailed
 	}
 	return nil

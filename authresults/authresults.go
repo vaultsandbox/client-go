@@ -10,7 +10,7 @@ type AuthResults struct {
 
 // SPFResult represents an SPF check result.
 type SPFResult struct {
-	Status  string `json:"result"` // pass, fail, softfail, neutral, none, temperror, permerror
+	Result  string `json:"result"` // pass, fail, softfail, neutral, none, temperror, permerror
 	Domain  string `json:"domain,omitempty"`
 	IP      string `json:"ip,omitempty"`
 	Details string `json:"details,omitempty"`
@@ -18,7 +18,7 @@ type SPFResult struct {
 
 // DKIMResult represents a DKIM check result.
 type DKIMResult struct {
-	Status    string `json:"result"` // pass, fail, none
+	Result    string `json:"result"` // pass, fail, none
 	Domain    string `json:"domain,omitempty"`
 	Selector  string `json:"selector,omitempty"`
 	Signature string `json:"signature,omitempty"`
@@ -26,7 +26,7 @@ type DKIMResult struct {
 
 // DMARCResult represents a DMARC check result.
 type DMARCResult struct {
-	Status  string `json:"result"` // pass, fail, none
+	Result  string `json:"result"` // pass, fail, none
 	Policy  string `json:"policy,omitempty"` // none, quarantine, reject
 	Aligned bool   `json:"aligned,omitempty"`
 	Domain  string `json:"domain,omitempty"`
@@ -37,14 +37,6 @@ type ReverseDNSResult struct {
 	Verified bool   `json:"verified"`
 	IP       string `json:"ip,omitempty"`
 	Hostname string `json:"hostname,omitempty"`
-}
-
-// Status returns "pass" if Verified, otherwise "fail".
-func (r *ReverseDNSResult) Status() string {
-	if r.Verified {
-		return "pass"
-	}
-	return "fail"
 }
 
 // AuthValidation provides a summary of email authentication validation.
@@ -76,9 +68,9 @@ func (a *AuthResults) Validate() AuthValidation {
 	var failures []string
 
 	// Check SPF
-	spfPassed := a.SPF != nil && a.SPF.Status == "pass"
+	spfPassed := a.SPF != nil && a.SPF.Result == "pass"
 	if a.SPF != nil && !spfPassed {
-		msg := "SPF check failed: " + a.SPF.Status
+		msg := "SPF check failed: " + a.SPF.Result
 		if a.SPF.Domain != "" {
 			msg += " (domain: " + a.SPF.Domain + ")"
 		}
@@ -89,7 +81,7 @@ func (a *AuthResults) Validate() AuthValidation {
 	dkimPassed := false
 	if len(a.DKIM) > 0 {
 		for _, dkim := range a.DKIM {
-			if dkim.Status == "pass" {
+			if dkim.Result == "pass" {
 				dkimPassed = true
 				break
 			}
@@ -97,7 +89,7 @@ func (a *AuthResults) Validate() AuthValidation {
 		if !dkimPassed {
 			var failedDomains []string
 			for _, dkim := range a.DKIM {
-				if dkim.Status != "pass" && dkim.Domain != "" {
+				if dkim.Result != "pass" && dkim.Domain != "" {
 					failedDomains = append(failedDomains, dkim.Domain)
 				}
 			}
@@ -110,9 +102,9 @@ func (a *AuthResults) Validate() AuthValidation {
 	}
 
 	// Check DMARC
-	dmarcPassed := a.DMARC != nil && a.DMARC.Status == "pass"
+	dmarcPassed := a.DMARC != nil && a.DMARC.Result == "pass"
 	if a.DMARC != nil && !dmarcPassed {
-		msg := "DMARC policy: " + a.DMARC.Status
+		msg := "DMARC policy: " + a.DMARC.Result
 		if a.DMARC.Policy != "" {
 			msg += " (policy: " + a.DMARC.Policy + ")"
 		}
@@ -120,9 +112,9 @@ func (a *AuthResults) Validate() AuthValidation {
 	}
 
 	// Check Reverse DNS
-	reverseDNSPassed := a.ReverseDNS != nil && a.ReverseDNS.Status() == "pass"
+	reverseDNSPassed := a.ReverseDNS != nil && a.ReverseDNS.Verified
 	if a.ReverseDNS != nil && !reverseDNSPassed {
-		msg := "Reverse DNS check failed: " + a.ReverseDNS.Status()
+		msg := "Reverse DNS check failed"
 		if a.ReverseDNS.Hostname != "" {
 			msg += " (hostname: " + a.ReverseDNS.Hostname + ")"
 		}

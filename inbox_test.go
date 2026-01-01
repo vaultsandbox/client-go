@@ -275,8 +275,8 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 		if email.AuthResults.SPF == nil {
 			t.Fatal("SPF should not be nil")
 		}
-		if email.AuthResults.SPF.Status != "pass" {
-			t.Errorf("SPF.Status = %s, want pass", email.AuthResults.SPF.Status)
+		if email.AuthResults.SPF.Result != "pass" {
+			t.Errorf("SPF.Result = %s, want pass", email.AuthResults.SPF.Result)
 		}
 		if email.AuthResults.SPF.Domain != "example.com" {
 			t.Errorf("SPF.Domain = %s, want example.com", email.AuthResults.SPF.Domain)
@@ -284,20 +284,20 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 		if len(email.AuthResults.DKIM) != 1 {
 			t.Fatalf("DKIM length = %d, want 1", len(email.AuthResults.DKIM))
 		}
-		if email.AuthResults.DKIM[0].Status != "pass" {
-			t.Errorf("DKIM[0].Status = %s, want pass", email.AuthResults.DKIM[0].Status)
+		if email.AuthResults.DKIM[0].Result != "pass" {
+			t.Errorf("DKIM[0].Result = %s, want pass", email.AuthResults.DKIM[0].Result)
 		}
 		if email.AuthResults.DMARC == nil {
 			t.Fatal("DMARC should not be nil")
 		}
-		if email.AuthResults.DMARC.Status != "pass" {
-			t.Errorf("DMARC.Status = %s, want pass", email.AuthResults.DMARC.Status)
+		if email.AuthResults.DMARC.Result != "pass" {
+			t.Errorf("DMARC.Result = %s, want pass", email.AuthResults.DMARC.Result)
 		}
 		if email.AuthResults.ReverseDNS == nil {
 			t.Fatal("ReverseDNS should not be nil")
 		}
-		if email.AuthResults.ReverseDNS.Status() != "pass" {
-			t.Errorf("ReverseDNS.Status = %s, want pass", email.AuthResults.ReverseDNS.Status())
+		if !email.AuthResults.ReverseDNS.Verified {
+			t.Error("ReverseDNS.Verified = false, want true")
 		}
 	})
 

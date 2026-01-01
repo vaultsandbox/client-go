@@ -184,15 +184,15 @@ if !validation.Passed {
     }
 }
 
-// Or check individual results. Statuses can vary based on the sending source.
+// Or check individual results. Results can vary based on the sending source.
 if email.AuthResults.SPF != nil {
-    t.Logf("SPF status: %s", email.AuthResults.SPF.Status)
+    t.Logf("SPF result: %s", email.AuthResults.SPF.Result)
 }
 if len(email.AuthResults.DKIM) > 0 {
     t.Logf("DKIM signatures: %d", len(email.AuthResults.DKIM))
 }
 if email.AuthResults.DMARC != nil {
-    t.Logf("DMARC status: %s", email.AuthResults.DMARC.Status)
+    t.Logf("DMARC result: %s", email.AuthResults.DMARC.Result)
 }
 ```
 

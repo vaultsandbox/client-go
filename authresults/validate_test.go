@@ -79,18 +79,18 @@ func TestValidate(t *testing.T) {
 		{
 			name: "all passing",
 			results: &AuthResults{
-				SPF:   &SPFResult{Status: "pass"},
-				DKIM:  []DKIMResult{{Status: "pass"}},
-				DMARC: &DMARCResult{Status: "pass"},
+				SPF:   &SPFResult{Result: "pass"},
+				DKIM:  []DKIMResult{{Result: "pass"}},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			wantErr: false,
 		},
 		{
 			name: "all passing with reverse DNS",
 			results: &AuthResults{
-				SPF:        &SPFResult{Status: "pass"},
-				DKIM:       []DKIMResult{{Status: "pass"}},
-				DMARC:      &DMARCResult{Status: "pass"},
+				SPF:        &SPFResult{Result: "pass"},
+				DKIM:       []DKIMResult{{Result: "pass"}},
+				DMARC:      &DMARCResult{Result: "pass"},
 				ReverseDNS: &ReverseDNSResult{Verified: true},
 			},
 			wantErr: false,
@@ -98,9 +98,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "SPF fails",
 			results: &AuthResults{
-				SPF:   &SPFResult{Status: "fail"},
-				DKIM:  []DKIMResult{{Status: "pass"}},
-				DMARC: &DMARCResult{Status: "pass"},
+				SPF:   &SPFResult{Result: "fail"},
+				DKIM:  []DKIMResult{{Result: "pass"}},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			wantErr: true,
 			errMsgs: []string{"SPF"},
@@ -109,8 +109,8 @@ func TestValidate(t *testing.T) {
 			name: "SPF missing",
 			results: &AuthResults{
 				SPF:   nil,
-				DKIM:  []DKIMResult{{Status: "pass"}},
-				DMARC: &DMARCResult{Status: "pass"},
+				DKIM:  []DKIMResult{{Result: "pass"}},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			wantErr: true,
 			errMsgs: []string{"SPF"},
@@ -118,9 +118,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "DKIM fails",
 			results: &AuthResults{
-				SPF:   &SPFResult{Status: "pass"},
-				DKIM:  []DKIMResult{{Status: "fail"}},
-				DMARC: &DMARCResult{Status: "pass"},
+				SPF:   &SPFResult{Result: "pass"},
+				DKIM:  []DKIMResult{{Result: "fail"}},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			wantErr: true,
 			errMsgs: []string{"DKIM"},
@@ -128,9 +128,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "DKIM missing",
 			results: &AuthResults{
-				SPF:   &SPFResult{Status: "pass"},
+				SPF:   &SPFResult{Result: "pass"},
 				DKIM:  nil,
-				DMARC: &DMARCResult{Status: "pass"},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			wantErr: true,
 			errMsgs: []string{"DKIM"},
@@ -138,22 +138,22 @@ func TestValidate(t *testing.T) {
 		{
 			name: "multiple DKIM one passes",
 			results: &AuthResults{
-				SPF: &SPFResult{Status: "pass"},
+				SPF: &SPFResult{Result: "pass"},
 				DKIM: []DKIMResult{
-					{Status: "fail"},
-					{Status: "pass"},
-					{Status: "fail"},
+					{Result: "fail"},
+					{Result: "pass"},
+					{Result: "fail"},
 				},
-				DMARC: &DMARCResult{Status: "pass"},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			wantErr: false,
 		},
 		{
 			name: "DMARC fails",
 			results: &AuthResults{
-				SPF:   &SPFResult{Status: "pass"},
-				DKIM:  []DKIMResult{{Status: "pass"}},
-				DMARC: &DMARCResult{Status: "fail"},
+				SPF:   &SPFResult{Result: "pass"},
+				DKIM:  []DKIMResult{{Result: "pass"}},
+				DMARC: &DMARCResult{Result: "fail"},
 			},
 			wantErr: true,
 			errMsgs: []string{"DMARC"},
@@ -161,8 +161,8 @@ func TestValidate(t *testing.T) {
 		{
 			name: "DMARC missing",
 			results: &AuthResults{
-				SPF:   &SPFResult{Status: "pass"},
-				DKIM:  []DKIMResult{{Status: "pass"}},
+				SPF:   &SPFResult{Result: "pass"},
+				DKIM:  []DKIMResult{{Result: "pass"}},
 				DMARC: nil,
 			},
 			wantErr: true,
@@ -171,9 +171,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "reverse DNS fails",
 			results: &AuthResults{
-				SPF:        &SPFResult{Status: "pass"},
-				DKIM:       []DKIMResult{{Status: "pass"}},
-				DMARC:      &DMARCResult{Status: "pass"},
+				SPF:        &SPFResult{Result: "pass"},
+				DKIM:       []DKIMResult{{Result: "pass"}},
+				DMARC:      &DMARCResult{Result: "pass"},
 				ReverseDNS: &ReverseDNSResult{Verified: false},
 			},
 			wantErr: true,
@@ -182,9 +182,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "multiple failures",
 			results: &AuthResults{
-				SPF:   &SPFResult{Status: "fail"},
-				DKIM:  []DKIMResult{{Status: "fail"}},
-				DMARC: &DMARCResult{Status: "fail"},
+				SPF:   &SPFResult{Result: "fail"},
+				DKIM:  []DKIMResult{{Result: "fail"}},
+				DMARC: &DMARCResult{Result: "fail"},
 			},
 			wantErr: true,
 			errMsgs: []string{"SPF", "DKIM", "DMARC"},
@@ -228,27 +228,27 @@ func TestValidateSPF(t *testing.T) {
 		},
 		{
 			name:    "SPF pass",
-			results: &AuthResults{SPF: &SPFResult{Status: "pass"}},
+			results: &AuthResults{SPF: &SPFResult{Result: "pass"}},
 			wantErr: nil,
 		},
 		{
 			name:    "SPF fail",
-			results: &AuthResults{SPF: &SPFResult{Status: "fail"}},
+			results: &AuthResults{SPF: &SPFResult{Result: "fail"}},
 			wantErr: ErrSPFFailed,
 		},
 		{
 			name:    "SPF softfail",
-			results: &AuthResults{SPF: &SPFResult{Status: "softfail"}},
+			results: &AuthResults{SPF: &SPFResult{Result: "softfail"}},
 			wantErr: ErrSPFFailed,
 		},
 		{
 			name:    "SPF neutral",
-			results: &AuthResults{SPF: &SPFResult{Status: "neutral"}},
+			results: &AuthResults{SPF: &SPFResult{Result: "neutral"}},
 			wantErr: ErrSPFFailed,
 		},
 		{
 			name:    "SPF none",
-			results: &AuthResults{SPF: &SPFResult{Status: "none"}},
+			results: &AuthResults{SPF: &SPFResult{Result: "none"}},
 			wantErr: ErrSPFFailed,
 		},
 	}
@@ -286,27 +286,27 @@ func TestValidateDKIM(t *testing.T) {
 		},
 		{
 			name:    "DKIM pass",
-			results: &AuthResults{DKIM: []DKIMResult{{Status: "pass"}}},
+			results: &AuthResults{DKIM: []DKIMResult{{Result: "pass"}}},
 			wantErr: nil,
 		},
 		{
 			name:    "DKIM fail",
-			results: &AuthResults{DKIM: []DKIMResult{{Status: "fail"}}},
+			results: &AuthResults{DKIM: []DKIMResult{{Result: "fail"}}},
 			wantErr: ErrDKIMFailed,
 		},
 		{
 			name: "multiple DKIM one passes",
 			results: &AuthResults{DKIM: []DKIMResult{
-				{Status: "fail"},
-				{Status: "pass"},
+				{Result: "fail"},
+				{Result: "pass"},
 			}},
 			wantErr: nil,
 		},
 		{
 			name: "multiple DKIM all fail",
 			results: &AuthResults{DKIM: []DKIMResult{
-				{Status: "fail"},
-				{Status: "fail"},
+				{Result: "fail"},
+				{Result: "fail"},
 			}},
 			wantErr: ErrDKIMFailed,
 		},
@@ -340,17 +340,17 @@ func TestValidateDMARC(t *testing.T) {
 		},
 		{
 			name:    "DMARC pass",
-			results: &AuthResults{DMARC: &DMARCResult{Status: "pass"}},
+			results: &AuthResults{DMARC: &DMARCResult{Result: "pass"}},
 			wantErr: nil,
 		},
 		{
 			name:    "DMARC fail",
-			results: &AuthResults{DMARC: &DMARCResult{Status: "fail"}},
+			results: &AuthResults{DMARC: &DMARCResult{Result: "fail"}},
 			wantErr: ErrDMARCFailed,
 		},
 		{
 			name:    "DMARC none",
-			results: &AuthResults{DMARC: &DMARCResult{Status: "none"}},
+			results: &AuthResults{DMARC: &DMARCResult{Result: "none"}},
 			wantErr: ErrDMARCFailed,
 		},
 	}
@@ -427,9 +427,9 @@ func TestIsPassing(t *testing.T) {
 		{
 			name: "all passing",
 			results: &AuthResults{
-				SPF:        &SPFResult{Status: "pass"},
-				DKIM:       []DKIMResult{{Status: "pass"}},
-				DMARC:      &DMARCResult{Status: "pass"},
+				SPF:        &SPFResult{Result: "pass"},
+				DKIM:       []DKIMResult{{Result: "pass"}},
+				DMARC:      &DMARCResult{Result: "pass"},
 				ReverseDNS: &ReverseDNSResult{Verified: true},
 			},
 			expected: true,
@@ -437,21 +437,21 @@ func TestIsPassing(t *testing.T) {
 		{
 			name: "SPF fails",
 			results: &AuthResults{
-				SPF: &SPFResult{Status: "fail"},
+				SPF: &SPFResult{Result: "fail"},
 			},
 			expected: false,
 		},
 		{
 			name: "DKIM all fail",
 			results: &AuthResults{
-				DKIM: []DKIMResult{{Status: "fail"}},
+				DKIM: []DKIMResult{{Result: "fail"}},
 			},
 			expected: false,
 		},
 		{
 			name: "DMARC fails",
 			results: &AuthResults{
-				DMARC: &DMARCResult{Status: "fail"},
+				DMARC: &DMARCResult{Result: "fail"},
 			},
 			expected: false,
 		},
@@ -465,7 +465,7 @@ func TestIsPassing(t *testing.T) {
 		{
 			name: "only SPF present and passes",
 			results: &AuthResults{
-				SPF: &SPFResult{Status: "pass"},
+				SPF: &SPFResult{Result: "pass"},
 			},
 			expected: false, // DKIM and DMARC also required
 		},
@@ -473,8 +473,8 @@ func TestIsPassing(t *testing.T) {
 			name: "multiple DKIM one passes",
 			results: &AuthResults{
 				DKIM: []DKIMResult{
-					{Status: "fail"},
-					{Status: "pass"},
+					{Result: "fail"},
+					{Result: "pass"},
 				},
 			},
 			expected: false, // SPF and DMARC also required
@@ -482,12 +482,12 @@ func TestIsPassing(t *testing.T) {
 		{
 			name: "multiple DKIM one passes with all checks",
 			results: &AuthResults{
-				SPF: &SPFResult{Status: "pass"},
+				SPF: &SPFResult{Result: "pass"},
 				DKIM: []DKIMResult{
-					{Status: "fail"},
-					{Status: "pass"},
+					{Result: "fail"},
+					{Result: "pass"},
 				},
-				DMARC: &DMARCResult{Status: "pass"},
+				DMARC: &DMARCResult{Result: "pass"},
 			},
 			expected: true,
 		},
@@ -506,14 +506,14 @@ func TestIsPassing(t *testing.T) {
 func TestResultTypes_Fields(t *testing.T) {
 	t.Run("SPFResult", func(t *testing.T) {
 		spf := &SPFResult{
-			Status:  "pass",
+			Result:  "pass",
 			Domain:  "example.com",
 			IP:      "1.2.3.4",
 			Details: "SPF record found",
 		}
 
-		if spf.Status != "pass" {
-			t.Errorf("Status = %s, want pass", spf.Status)
+		if spf.Result != "pass" {
+			t.Errorf("Result = %s, want pass", spf.Result)
 		}
 		if spf.Domain != "example.com" {
 			t.Errorf("Domain = %s, want example.com", spf.Domain)
@@ -525,14 +525,14 @@ func TestResultTypes_Fields(t *testing.T) {
 
 	t.Run("DKIMResult", func(t *testing.T) {
 		dkim := DKIMResult{
-			Status:    "pass",
+			Result:    "pass",
 			Domain:    "example.com",
 			Selector:  "selector1",
 			Signature: "DKIM verified",
 		}
 
-		if dkim.Status != "pass" {
-			t.Errorf("Status = %s, want pass", dkim.Status)
+		if dkim.Result != "pass" {
+			t.Errorf("Result = %s, want pass", dkim.Result)
 		}
 		if dkim.Selector != "selector1" {
 			t.Errorf("Selector = %s, want selector1", dkim.Selector)
@@ -541,14 +541,14 @@ func TestResultTypes_Fields(t *testing.T) {
 
 	t.Run("DMARCResult", func(t *testing.T) {
 		dmarc := &DMARCResult{
-			Status:  "pass",
+			Result:  "pass",
 			Policy:  "reject",
 			Aligned: true,
 			Domain:  "example.com",
 		}
 
-		if dmarc.Status != "pass" {
-			t.Errorf("Status = %s, want pass", dmarc.Status)
+		if dmarc.Result != "pass" {
+			t.Errorf("Result = %s, want pass", dmarc.Result)
 		}
 		if dmarc.Policy != "reject" {
 			t.Errorf("Policy = %s, want reject", dmarc.Policy)
@@ -565,8 +565,8 @@ func TestResultTypes_Fields(t *testing.T) {
 			Hostname: "mail.example.com",
 		}
 
-		if rdns.Status() != "pass" {
-			t.Errorf("Status = %s, want pass", rdns.Status())
+		if !rdns.Verified {
+			t.Error("Verified = false, want true")
 		}
 		if rdns.Hostname != "mail.example.com" {
 			t.Errorf("Hostname = %s, want mail.example.com", rdns.Hostname)
