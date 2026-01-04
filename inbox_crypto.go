@@ -1,7 +1,6 @@
 package vaultsandbox
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,23 +11,13 @@ import (
 	"github.com/vaultsandbox/client-go/internal/crypto"
 )
 
-func (i *Inbox) decryptEmail(ctx context.Context, raw *api.RawEmail) (*Email, error) {
+func (i *Inbox) decryptEmail(raw *api.RawEmail) (*Email, error) {
 	if raw.EncryptedMetadata == nil {
 		return nil, fmt.Errorf("email has no encrypted metadata")
 	}
 
-	// Fetch full email if we don't have parsed content
-	emailData := raw
-	if raw.EncryptedParsed == nil {
-		fullEmail, err := i.client.apiClient.GetEmail(ctx, i.emailAddress, raw.ID)
-		if err != nil {
-			return nil, fmt.Errorf("fetch full email: %w", err)
-		}
-		emailData = fullEmail
-	}
-
 	// Verify and decrypt metadata
-	metadataPlaintext, err := i.verifyAndDecrypt(emailData.EncryptedMetadata)
+	metadataPlaintext, err := i.verifyAndDecrypt(raw.EncryptedMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -39,16 +28,49 @@ func (i *Inbox) decryptEmail(ctx context.Context, raw *api.RawEmail) (*Email, er
 	}
 
 	// Build decrypted email from metadata
-	decrypted := buildDecryptedEmail(emailData, metadata)
+	decrypted := buildDecryptedEmail(raw, metadata)
 
 	// Decrypt and apply parsed content if available
-	if emailData.EncryptedParsed != nil {
-		if err := i.applyParsedContent(emailData.EncryptedParsed, decrypted); err != nil {
+	if raw.EncryptedParsed != nil {
+		if err := i.applyParsedContent(raw.EncryptedParsed, decrypted); err != nil {
 			return nil, err
 		}
 	}
 
 	return i.convertDecryptedEmail(decrypted), nil
+}
+
+// decryptMetadata decrypts only the metadata from an email.
+func (i *Inbox) decryptMetadata(raw *api.RawEmail) (*EmailMetadata, error) {
+	if raw.EncryptedMetadata == nil {
+		return nil, fmt.Errorf("email has no encrypted metadata")
+	}
+
+	metadataPlaintext, err := i.verifyAndDecrypt(raw.EncryptedMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	metadata, err := parseMetadata(metadataPlaintext)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse receivedAt from metadata, fallback to API timestamp
+	receivedAt := raw.ReceivedAt
+	if metadata.ReceivedAt != "" {
+		if t, err := time.Parse(time.RFC3339, metadata.ReceivedAt); err == nil {
+			receivedAt = t
+		}
+	}
+
+	return &EmailMetadata{
+		ID:         raw.ID,
+		From:       metadata.From,
+		Subject:    metadata.Subject,
+		ReceivedAt: receivedAt,
+		IsRead:     raw.IsRead,
+	}, nil
 }
 
 // applyParsedContent decrypts parsed content and applies it to the decrypted email.

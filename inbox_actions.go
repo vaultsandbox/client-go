@@ -4,20 +4,40 @@ import (
 	"context"
 )
 
-// GetEmails fetches all emails in the inbox.
+// GetEmails fetches all emails in the inbox with full content.
 func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
-	resp, err := i.client.apiClient.GetEmails(ctx, i.emailAddress)
+	resp, err := i.client.apiClient.GetEmails(ctx, i.emailAddress, true)
 	if err != nil {
 		return nil, err
 	}
 
 	emails := make([]*Email, 0, len(resp.Emails))
 	for _, e := range resp.Emails {
-		email, err := i.decryptEmail(ctx, e)
+		email, err := i.decryptEmail(e)
 		if err != nil {
 			return nil, err
 		}
 		emails = append(emails, email)
+	}
+
+	return emails, nil
+}
+
+// GetEmailsMetadataOnly fetches email metadata without full content.
+// This is more efficient when you only need to display email summaries.
+func (i *Inbox) GetEmailsMetadataOnly(ctx context.Context) ([]*EmailMetadata, error) {
+	resp, err := i.client.apiClient.GetEmails(ctx, i.emailAddress, false)
+	if err != nil {
+		return nil, err
+	}
+
+	emails := make([]*EmailMetadata, 0, len(resp.Emails))
+	for _, e := range resp.Emails {
+		metadata, err := i.decryptMetadata(e)
+		if err != nil {
+			return nil, err
+		}
+		emails = append(emails, metadata)
 	}
 
 	return emails, nil
@@ -30,7 +50,7 @@ func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
 		return nil, err
 	}
 
-	return i.decryptEmail(ctx, resp)
+	return i.decryptEmail(resp)
 }
 
 // GetRawEmail fetches the raw email content for a specific email.

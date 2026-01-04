@@ -155,9 +155,13 @@ type GetEmailsResponse struct {
 }
 
 // GetEmails returns all emails in an inbox.
-func (c *Client) GetEmails(ctx context.Context, emailAddress string) (*GetEmailsResponse, error) {
+// If includeContent is true, the server returns full email content.
+func (c *Client) GetEmails(ctx context.Context, emailAddress string, includeContent bool) (*GetEmailsResponse, error) {
 	var resp []*RawEmail
 	path := fmt.Sprintf("/api/inboxes/%s/emails", url.PathEscape(emailAddress))
+	if includeContent {
+		path += "?includeContent=true"
+	}
 	if err := c.Do(ctx, http.MethodGet, path, nil, &resp); err != nil {
 		// This endpoint can fail due to inbox not found
 		return nil, apierrors.WithResourceType(err, apierrors.ResourceInbox)

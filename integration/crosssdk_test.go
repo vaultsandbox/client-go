@@ -14,13 +14,15 @@ import (
 )
 
 // ExternalExportedInbox represents the expected export format for cross-SDK compatibility.
+// Per VaultSandbox spec Section 9, the format includes version and does NOT include publicKey
+// (it can be derived from secretKey).
 type ExternalExportedInbox struct {
+	Version      int    `json:"version"`
 	EmailAddress string `json:"emailAddress"`
 	ExpiresAt    string `json:"expiresAt"`
 	InboxHash    string `json:"inboxHash"`
 	ServerSigPk  string `json:"serverSigPk"`
-	PublicKeyB64 string `json:"publicKeyB64"`
-	SecretKeyB64 string `json:"secretKeyB64"`
+	SecretKey    string `json:"secretKey"`
 	ExportedAt   string `json:"exportedAt"`
 }
 
@@ -52,7 +54,10 @@ func TestCrossSDK_ExportFormatCompatibility(t *testing.T) {
 		t.Fatalf("Failed to parse as external format: %v", err)
 	}
 
-	// Verify all fields are present and valid
+	// Verify all fields are present and valid (per VaultSandbox spec Section 9)
+	if externalFormat.Version != exported.Version {
+		t.Errorf("version mismatch: got %d, want %d", externalFormat.Version, exported.Version)
+	}
 	if externalFormat.EmailAddress != exported.EmailAddress {
 		t.Errorf("emailAddress mismatch: got %s, want %s", externalFormat.EmailAddress, exported.EmailAddress)
 	}
@@ -62,11 +67,8 @@ func TestCrossSDK_ExportFormatCompatibility(t *testing.T) {
 	if externalFormat.ServerSigPk != exported.ServerSigPk {
 		t.Errorf("serverSigPk mismatch: got %s, want %s", externalFormat.ServerSigPk, exported.ServerSigPk)
 	}
-	if externalFormat.PublicKeyB64 != exported.PublicKeyB64 {
-		t.Errorf("publicKeyB64 mismatch: got %s, want %s", externalFormat.PublicKeyB64, exported.PublicKeyB64)
-	}
-	if externalFormat.SecretKeyB64 != exported.SecretKeyB64 {
-		t.Errorf("secretKeyB64 mismatch: got %s, want %s", externalFormat.SecretKeyB64, exported.SecretKeyB64)
+	if externalFormat.SecretKey != exported.SecretKey {
+		t.Errorf("secretKey mismatch: got %s, want %s", externalFormat.SecretKey, exported.SecretKey)
 	}
 
 	// Verify timestamps can be parsed
@@ -185,15 +187,15 @@ func TestCrossSDK_Base64Compatibility(t *testing.T) {
 	}
 }
 
-// TestCrossSDK_ExportedInboxJSONFields verifies JSON field naming is correct.
+// TestCrossSDK_ExportedInboxJSONFields verifies JSON field naming is correct per spec Section 9.
 func TestCrossSDK_ExportedInboxJSONFields(t *testing.T) {
 	exported := &vaultsandbox.ExportedInbox{
+		Version:      vaultsandbox.ExportVersion,
 		EmailAddress: "test@example.com",
 		ExpiresAt:    time.Now().Add(time.Hour),
 		InboxHash:    "hash123",
 		ServerSigPk:  "sigpk",
-		PublicKeyB64: "pubkey",
-		SecretKeyB64: "seckey",
+		SecretKey:    "seckey",
 		ExportedAt:   time.Now(),
 	}
 
@@ -208,14 +210,14 @@ func TestCrossSDK_ExportedInboxJSONFields(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 
-	// Verify expected field names (camelCase for cross-SDK compatibility)
+	// Verify expected field names per VaultSandbox spec Section 9
 	expectedFields := []string{
+		"version",
 		"emailAddress",
 		"expiresAt",
 		"inboxHash",
 		"serverSigPk",
-		"publicKeyB64",
-		"secretKeyB64",
+		"secretKey",
 		"exportedAt",
 	}
 
@@ -229,6 +231,14 @@ func TestCrossSDK_ExportedInboxJSONFields(t *testing.T) {
 	if len(fields) != len(expectedFields) {
 		t.Errorf("Got %d fields, want %d", len(fields), len(expectedFields))
 		t.Logf("Fields: %v", fields)
+	}
+
+	// Verify old field names are NOT present
+	removedFields := []string{"publicKeyB64", "secretKeyB64"}
+	for _, field := range removedFields {
+		if _, ok := fields[field]; ok {
+			t.Errorf("Removed field still present: %s", field)
+		}
 	}
 }
 
@@ -300,22 +310,25 @@ func TestCrossSDK_CompareExports(t *testing.T) {
 	}
 
 	t.Log("=== Go Export ===")
+	t.Logf("Version: %d", goExport.Version)
 	t.Logf("EmailAddress: %s", goExport.EmailAddress)
 	t.Logf("InboxHash: %s", goExport.InboxHash)
-	t.Logf("SecretKeyB64: %s...%s", goExport.SecretKeyB64[:20], goExport.SecretKeyB64[len(goExport.SecretKeyB64)-20:])
+	if len(goExport.SecretKey) >= 40 {
+		t.Logf("SecretKey: %s...%s", goExport.SecretKey[:20], goExport.SecretKey[len(goExport.SecretKey)-20:])
+	}
 
 	t.Log("=== External Export ===")
+	t.Logf("Version: %d", externalExport.Version)
 	t.Logf("EmailAddress: %s", externalExport.EmailAddress)
 	t.Logf("InboxHash: %s", externalExport.InboxHash)
-	t.Logf("SecretKeyB64: %s...%s", externalExport.SecretKeyB64[:20], externalExport.SecretKeyB64[len(externalExport.SecretKeyB64)-20:])
+	if len(externalExport.SecretKey) >= 40 {
+		t.Logf("SecretKey: %s...%s", externalExport.SecretKey[:20], externalExport.SecretKey[len(externalExport.SecretKey)-20:])
+	}
 
 	// If they're the same inbox, verify keys match
 	if goExport.EmailAddress == externalExport.EmailAddress {
-		if goExport.SecretKeyB64 != externalExport.SecretKeyB64 {
-			t.Error("Same inbox but secretKeyB64 differs")
-		}
-		if goExport.PublicKeyB64 != externalExport.PublicKeyB64 {
-			t.Error("Same inbox but publicKeyB64 differs")
+		if goExport.SecretKey != externalExport.SecretKey {
+			t.Error("Same inbox but secretKey differs")
 		}
 	}
 }

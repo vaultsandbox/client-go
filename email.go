@@ -39,3 +39,13 @@ type Attachment struct {
 	Content            []byte
 	Checksum           string
 }
+
+// EmailMetadata represents email metadata without full content.
+// Use this for efficient email list displays when you don't need body/attachments.
+type EmailMetadata struct {
+	ID         string
+	From       string
+	Subject    string
+	ReceivedAt time.Time
+	IsRead     bool
+}

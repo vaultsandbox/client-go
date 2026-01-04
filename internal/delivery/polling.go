@@ -236,7 +236,7 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 	inbox.lastHash = sync.EmailsHash
 	inbox.interval = p.initialInterval // Reset backoff
 
-	resp, err := p.apiClient.GetEmails(ctx, inbox.emailAddress)
+	resp, err := p.apiClient.GetEmails(ctx, inbox.emailAddress, true)
 	if err != nil {
 		p.mu.RLock()
 		onError := p.onError

@@ -27,4 +27,15 @@ var (
 
 	// ErrInvalidNonceSize is returned when the nonce size is invalid.
 	ErrInvalidNonceSize = errors.New("invalid nonce size")
+
+	// ErrInvalidPayload is returned when the encrypted payload structure is invalid.
+	// This includes malformed JSON, missing required fields, or invalid encoding.
+	ErrInvalidPayload = errors.New("invalid payload")
+
+	// ErrInvalidAlgorithm is returned when an unrecognized or unsupported
+	// algorithm is specified in the payload.
+	ErrInvalidAlgorithm = errors.New("invalid algorithm")
+
+	// ErrInvalidSize is returned when a decoded field has an incorrect size.
+	ErrInvalidSize = errors.New("invalid size")
 )

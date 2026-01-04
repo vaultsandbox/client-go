@@ -53,12 +53,12 @@ func TestExportInboxToFile_NilInbox(t *testing.T) {
 
 func TestExportedInbox_JSONRoundtrip(t *testing.T) {
 	original := &ExportedInbox{
+		Version:      ExportVersion,
 		EmailAddress: "test@example.com",
 		ExpiresAt:    time.Now().Add(time.Hour),
 		InboxHash:    "hash123",
 		ServerSigPk:  "serverkey",
-		PublicKeyB64: "publickey",
-		SecretKeyB64: "secretkey",
+		SecretKey:    "secretkey",
 		ExportedAt:   time.Now(),
 	}
 
@@ -75,6 +75,9 @@ func TestExportedInbox_JSONRoundtrip(t *testing.T) {
 	}
 
 	// Verify fields
+	if parsed.Version != original.Version {
+		t.Errorf("Version = %d, want %d", parsed.Version, original.Version)
+	}
 	if parsed.EmailAddress != original.EmailAddress {
 		t.Errorf("EmailAddress = %q, want %q", parsed.EmailAddress, original.EmailAddress)
 	}
@@ -84,11 +87,8 @@ func TestExportedInbox_JSONRoundtrip(t *testing.T) {
 	if parsed.ServerSigPk != original.ServerSigPk {
 		t.Errorf("ServerSigPk = %q, want %q", parsed.ServerSigPk, original.ServerSigPk)
 	}
-	if parsed.PublicKeyB64 != original.PublicKeyB64 {
-		t.Errorf("PublicKeyB64 = %q, want %q", parsed.PublicKeyB64, original.PublicKeyB64)
-	}
-	if parsed.SecretKeyB64 != original.SecretKeyB64 {
-		t.Errorf("SecretKeyB64 = %q, want %q", parsed.SecretKeyB64, original.SecretKeyB64)
+	if parsed.SecretKey != original.SecretKey {
+		t.Errorf("SecretKey = %q, want %q", parsed.SecretKey, original.SecretKey)
 	}
 }
 
@@ -123,15 +123,9 @@ func TestExportedInbox_Validate_InvalidBase64(t *testing.T) {
 		modifier func(*ExportedInbox)
 	}{
 		{
-			name: "invalid SecretKeyB64",
+			name: "invalid SecretKey",
 			modifier: func(e *ExportedInbox) {
-				e.SecretKeyB64 = "!!!not-valid-base64!!!"
-			},
-		},
-		{
-			name: "invalid PublicKeyB64",
-			modifier: func(e *ExportedInbox) {
-				e.PublicKeyB64 = "!!!not-valid-base64!!!"
+				e.SecretKey = "!!!not-valid-base64!!!"
 			},
 		},
 		{
@@ -141,9 +135,9 @@ func TestExportedInbox_Validate_InvalidBase64(t *testing.T) {
 			},
 		},
 		{
-			name: "valid base64 but wrong padding in SecretKeyB64",
+			name: "valid base64 but wrong padding in SecretKey",
 			modifier: func(e *ExportedInbox) {
-				e.SecretKeyB64 = "YWJjZA==" // valid base64 but wrong size
+				e.SecretKey = "YWJjZA==" // valid base64 but wrong size
 			},
 		},
 	}
@@ -151,27 +145,26 @@ func TestExportedInbox_Validate_InvalidBase64(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create valid export data
-			validSecretKey := make([]byte, 2400)  // MLKEMSecretKeySize
-			validPublicKey := make([]byte, 1184)  // MLKEMPublicKeySize
-			validServerSig := make([]byte, 1952)  // MLDSAPublicKeySize
+			validSecretKey := make([]byte, 2400) // MLKEMSecretKeySize
+			validServerSig := make([]byte, 1952) // MLDSAPublicKeySize
 
 			data := &ExportedInbox{
+				Version:      ExportVersion,
 				EmailAddress: "test@example.com",
 				ExpiresAt:    time.Now().Add(time.Hour),
 				InboxHash:    "hash123",
 				ServerSigPk:  base64.RawURLEncoding.EncodeToString(validServerSig),
-				PublicKeyB64: base64.RawURLEncoding.EncodeToString(validPublicKey),
-				SecretKeyB64: base64.RawURLEncoding.EncodeToString(validSecretKey),
+				SecretKey:    base64.RawURLEncoding.EncodeToString(validSecretKey),
 				ExportedAt:   time.Now(),
 			}
 
 			// Apply modification
 			tt.modifier(data)
 
-			// Try to create inbox from export
-			_, err := newInboxFromExport(data, nil)
+			// Validation should fail
+			err := data.Validate()
 			if err == nil {
-				t.Error("newInboxFromExport() should return error for invalid base64")
+				t.Error("Validate() should return error for invalid base64")
 			}
 		})
 	}
@@ -191,7 +184,19 @@ func TestExportedInbox_Validate_MissingFields(t *testing.T) {
 		{
 			name: "empty secret key",
 			modifier: func(e *ExportedInbox) {
-				e.SecretKeyB64 = ""
+				e.SecretKey = ""
+			},
+		},
+		{
+			name: "empty inbox hash",
+			modifier: func(e *ExportedInbox) {
+				e.InboxHash = ""
+			},
+		},
+		{
+			name: "invalid version",
+			modifier: func(e *ExportedInbox) {
+				e.Version = 0
 			},
 		},
 	}
@@ -199,14 +204,15 @@ func TestExportedInbox_Validate_MissingFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			validSecretKey := make([]byte, 2400)
+			validServerSig := make([]byte, 1952)
 
 			data := &ExportedInbox{
+				Version:      ExportVersion,
 				EmailAddress: "test@example.com",
 				ExpiresAt:    time.Now().Add(time.Hour),
 				InboxHash:    "hash123",
-				ServerSigPk:  "serverpk",
-				PublicKeyB64: "pubkey",
-				SecretKeyB64: base64.RawURLEncoding.EncodeToString(validSecretKey),
+				ServerSigPk:  base64.RawURLEncoding.EncodeToString(validServerSig),
+				SecretKey:    base64.RawURLEncoding.EncodeToString(validSecretKey),
 				ExportedAt:   time.Now(),
 			}
 
@@ -233,14 +239,15 @@ func TestExportedInbox_Validate_WrongKeySizes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			secretKey := make([]byte, tt.secretKeyLen)
+			validServerSig := make([]byte, 1952)
 
 			data := &ExportedInbox{
+				Version:      ExportVersion,
 				EmailAddress: "test@example.com",
 				ExpiresAt:    time.Now().Add(time.Hour),
 				InboxHash:    "hash123",
-				ServerSigPk:  "serverpk",
-				PublicKeyB64: "pubkey",
-				SecretKeyB64: base64.RawURLEncoding.EncodeToString(secretKey),
+				ServerSigPk:  base64.RawURLEncoding.EncodeToString(validServerSig),
+				SecretKey:    base64.RawURLEncoding.EncodeToString(secretKey),
 				ExportedAt:   time.Now(),
 			}
 
@@ -252,25 +259,25 @@ func TestExportedInbox_Validate_WrongKeySizes(t *testing.T) {
 	}
 }
 
-func TestNewInboxFromExport_InvalidPublicKeySize(t *testing.T) {
-	// Valid secret key, but wrong size public key
-	validSecretKey := make([]byte, 2400)  // MLKEMSecretKeySize
-	invalidPublicKey := make([]byte, 100) // Wrong size
-	validServerSig := make([]byte, 1952)  // MLDSAPublicKeySize
+func TestNewInboxFromExport_InvalidServerSigPkSize(t *testing.T) {
+	// Valid secret key, but wrong size server sig pk
+	validSecretKey := make([]byte, 2400)    // MLKEMSecretKeySize
+	invalidServerSig := make([]byte, 100)   // Wrong size
 
 	data := &ExportedInbox{
+		Version:      ExportVersion,
 		EmailAddress: "test@example.com",
 		ExpiresAt:    time.Now().Add(time.Hour),
 		InboxHash:    "hash123",
-		ServerSigPk:  base64.RawURLEncoding.EncodeToString(validServerSig),
-		PublicKeyB64: base64.RawURLEncoding.EncodeToString(invalidPublicKey),
-		SecretKeyB64: base64.RawURLEncoding.EncodeToString(validSecretKey),
+		ServerSigPk:  base64.RawURLEncoding.EncodeToString(invalidServerSig),
+		SecretKey:    base64.RawURLEncoding.EncodeToString(validSecretKey),
 		ExportedAt:   time.Now(),
 	}
 
-	_, err := newInboxFromExport(data, nil)
-	if err == nil {
-		t.Error("newInboxFromExport() should fail for invalid public key size")
+	// Validation should fail due to invalid server sig pk size
+	err := data.Validate()
+	if !errors.Is(err, ErrInvalidImportData) {
+		t.Errorf("Validate() error = %v, want ErrInvalidImportData", err)
 	}
 }
 
@@ -280,17 +287,16 @@ func TestExportInboxToFile_FormattedJSON(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "export.json")
 
 	// Create mock inbox data
-	validSecretKey := make([]byte, 2400)  // MLKEMSecretKeySize
-	validPublicKey := make([]byte, 1184)  // MLKEMPublicKeySize
-	validServerSig := make([]byte, 1952)  // MLDSAPublicKeySize
+	validSecretKey := make([]byte, 2400) // MLKEMSecretKeySize
+	validServerSig := make([]byte, 1952) // MLDSAPublicKeySize
 
 	exported := &ExportedInbox{
+		Version:      ExportVersion,
 		EmailAddress: "test@example.com",
 		ExpiresAt:    time.Now().Add(time.Hour),
 		InboxHash:    "hash123",
 		ServerSigPk:  base64.RawURLEncoding.EncodeToString(validServerSig),
-		PublicKeyB64: base64.RawURLEncoding.EncodeToString(validPublicKey),
-		SecretKeyB64: base64.RawURLEncoding.EncodeToString(validSecretKey),
+		SecretKey:    base64.RawURLEncoding.EncodeToString(validSecretKey),
 		ExportedAt:   time.Now(),
 	}
 
@@ -311,7 +317,7 @@ func TestExportInboxToFile_FormattedJSON(t *testing.T) {
 	}
 
 	// Check for indentation (2 spaces)
-	if !strings.Contains(string(content), "  \"emailAddress\"") {
+	if !strings.Contains(string(content), "  \"version\"") {
 		t.Error("JSON should be indented with 2 spaces")
 	}
 
@@ -365,12 +371,12 @@ func TestExportedInbox_JSONTimestampFormat(t *testing.T) {
 	expires := now.Add(time.Hour)
 
 	data := &ExportedInbox{
+		Version:      ExportVersion,
 		EmailAddress: "test@example.com",
 		ExpiresAt:    expires,
 		InboxHash:    "hash123",
 		ServerSigPk:  "serverkey",
-		PublicKeyB64: "publickey",
-		SecretKeyB64: "secretkey",
+		SecretKey:    "secretkey",
 		ExportedAt:   now,
 	}
 
@@ -384,6 +390,12 @@ func TestExportedInbox_JSONTimestampFormat(t *testing.T) {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(jsonData, &raw); err != nil {
 		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+
+	// Check that version is present
+	version, ok := raw["version"].(float64) // JSON numbers are float64
+	if !ok || int(version) != ExportVersion {
+		t.Errorf("version = %v, want %d", version, ExportVersion)
 	}
 
 	// Check that timestamps are strings (ISO 8601 format)
@@ -411,12 +423,12 @@ func TestExportedInbox_JSONTimestampFormat(t *testing.T) {
 
 func TestExportedInbox_JSONFieldNames(t *testing.T) {
 	data := &ExportedInbox{
+		Version:      ExportVersion,
 		EmailAddress: "test@example.com",
 		ExpiresAt:    time.Now(),
 		InboxHash:    "hash",
 		ServerSigPk:  "sig",
-		PublicKeyB64: "pub",
-		SecretKeyB64: "sec",
+		SecretKey:    "sec",
 		ExportedAt:   time.Now(),
 	}
 
@@ -427,20 +439,28 @@ func TestExportedInbox_JSONFieldNames(t *testing.T) {
 
 	jsonStr := string(jsonData)
 
-	// Check expected field names (camelCase as per JSON tags)
+	// Check expected field names per VaultSandbox spec Section 9
 	expectedFields := []string{
+		"version",
 		"emailAddress",
 		"expiresAt",
 		"inboxHash",
 		"serverSigPk",
-		"publicKeyB64",
-		"secretKeyB64",
+		"secretKey",
 		"exportedAt",
 	}
 
 	for _, field := range expectedFields {
 		if !strings.Contains(jsonStr, `"`+field+`"`) {
 			t.Errorf("JSON should contain field %q", field)
+		}
+	}
+
+	// Ensure old field names are NOT present
+	removedFields := []string{"publicKeyB64", "secretKeyB64"}
+	for _, field := range removedFields {
+		if strings.Contains(jsonStr, `"`+field+`"`) {
+			t.Errorf("JSON should NOT contain removed field %q", field)
 		}
 	}
 }

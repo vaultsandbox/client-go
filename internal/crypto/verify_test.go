@@ -287,7 +287,7 @@ func TestVerifySignature_ServerKeyMismatch(t *testing.T) {
 	}
 	pubBytes2, _ := pub2.MarshalBinary()
 
-	// Create payload with pub1's key
+	// Create payload with pub1's key and correct field sizes
 	payload := &EncryptedPayload{
 		V: 1,
 		Algs: AlgorithmSuite{
@@ -296,8 +296,8 @@ func TestVerifySignature_ServerKeyMismatch(t *testing.T) {
 			AEAD: "AES-256-GCM",
 			KDF:  "HKDF-SHA-512",
 		},
-		CtKem:       ToBase64URL([]byte("kem")),
-		Nonce:       ToBase64URL([]byte("nonce")),
+		CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)), // 1088 bytes
+		Nonce:       ToBase64URL(make([]byte, AESNonceSize)),        // 12 bytes
 		AAD:         ToBase64URL([]byte("aad")),
 		Ciphertext:  ToBase64URL([]byte("ct")),
 		ServerSigPk: ToBase64URL(pubBytes1), // Payload contains pub1
@@ -323,6 +323,7 @@ func TestVerifySignature_InvalidSignature(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Use correct field sizes for validation to pass
 	payload := &EncryptedPayload{
 		V: 1,
 		Algs: AlgorithmSuite{
@@ -331,8 +332,8 @@ func TestVerifySignature_InvalidSignature(t *testing.T) {
 			AEAD: "AES-256-GCM",
 			KDF:  "HKDF-SHA-512",
 		},
-		CtKem:       ToBase64URL([]byte("kem")),
-		Nonce:       ToBase64URL([]byte("nonce")),
+		CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)), // 1088 bytes
+		Nonce:       ToBase64URL(make([]byte, AESNonceSize)),        // 12 bytes
 		AAD:         ToBase64URL([]byte("aad")),
 		Ciphertext:  ToBase64URL([]byte("ct")),
 		ServerSigPk: ToBase64URL(pubBytes),
@@ -370,6 +371,10 @@ func TestVerifySignatureSafe(t *testing.T) {
 		}
 		pubBytes, _ := pub.MarshalBinary()
 
+		// Use correct field sizes for validation to pass
+		ctKem := make([]byte, MLKEMCiphertextSize)
+		nonce := make([]byte, AESNonceSize)
+
 		payload := &EncryptedPayload{
 			V: 1,
 			Algs: AlgorithmSuite{
@@ -378,8 +383,8 @@ func TestVerifySignatureSafe(t *testing.T) {
 				AEAD: "AES-256-GCM",
 				KDF:  "HKDF-SHA-512",
 			},
-			CtKem:       ToBase64URL([]byte("kem")),
-			Nonce:       ToBase64URL([]byte("nonce")),
+			CtKem:       ToBase64URL(ctKem),
+			Nonce:       ToBase64URL(nonce),
 			AAD:         ToBase64URL([]byte("aad")),
 			Ciphertext:  ToBase64URL([]byte("ct")),
 			ServerSigPk: ToBase64URL(pubBytes),
@@ -398,6 +403,10 @@ func TestVerifySignatureSafe(t *testing.T) {
 		}
 		pubBytes, _ := pub.MarshalBinary()
 
+		// Use correct field sizes
+		ctKem := make([]byte, MLKEMCiphertextSize)
+		nonce := make([]byte, AESNonceSize)
+
 		// Build payload
 		payload := &EncryptedPayload{
 			V: 1,
@@ -407,8 +416,8 @@ func TestVerifySignatureSafe(t *testing.T) {
 				AEAD: "AES-256-GCM",
 				KDF:  "HKDF-SHA-512",
 			},
-			CtKem:       ToBase64URL([]byte("kem")),
-			Nonce:       ToBase64URL([]byte("nonce")),
+			CtKem:       ToBase64URL(ctKem),
+			Nonce:       ToBase64URL(nonce),
 			AAD:         ToBase64URL([]byte("aad")),
 			Ciphertext:  ToBase64URL([]byte("ct")),
 			ServerSigPk: ToBase64URL(pubBytes),
@@ -418,8 +427,8 @@ func TestVerifySignatureSafe(t *testing.T) {
 		transcript := buildTranscript(
 			payload.V,
 			payload.Algs,
-			[]byte("kem"),
-			[]byte("nonce"),
+			ctKem,
+			nonce,
 			[]byte("aad"),
 			[]byte("ct"),
 			pubBytes,

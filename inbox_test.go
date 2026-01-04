@@ -26,45 +26,129 @@ func TestExportedInbox_Validate(t *testing.T) {
 		{
 			name: "valid data",
 			data: &ExportedInbox{
+				Version:      ExportVersion,
 				EmailAddress: "test@example.com",
 				ExpiresAt:    time.Now().Add(time.Hour),
 				InboxHash:    "hash123",
 				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
-				PublicKeyB64: crypto.ToBase64URL(kp.PublicKey),
-				SecretKeyB64: crypto.ToBase64URL(kp.SecretKey),
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
 				ExportedAt:   time.Now(),
 			},
 			wantErr: false,
 		},
 		{
+			name: "invalid version",
+			data: &ExportedInbox{
+				Version:      0,
+				EmailAddress: "test@example.com",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+			},
+			wantErr: true,
+		},
+		{
 			name: "missing email address",
 			data: &ExportedInbox{
-				EmailAddress: "",
-				SecretKeyB64: crypto.ToBase64URL(kp.SecretKey),
+				Version:   ExportVersion,
+				SecretKey: crypto.ToBase64URL(kp.SecretKey),
+			},
+			wantErr: true,
+		},
+		{
+			name: "email without @",
+			data: &ExportedInbox{
+				Version:      ExportVersion,
+				EmailAddress: "testexample.com",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+			},
+			wantErr: true,
+		},
+		{
+			name: "email with multiple @",
+			data: &ExportedInbox{
+				Version:      ExportVersion,
+				EmailAddress: "test@example@com",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing inbox hash",
+			data: &ExportedInbox{
+				Version:      ExportVersion,
+				EmailAddress: "test@example.com",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "",
+				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing secret key",
 			data: &ExportedInbox{
+				Version:      ExportVersion,
 				EmailAddress: "test@example.com",
-				SecretKeyB64: "",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
+				SecretKey:    "",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid secret key size",
 			data: &ExportedInbox{
+				Version:      ExportVersion,
 				EmailAddress: "test@example.com",
-				SecretKeyB64: crypto.ToBase64URL([]byte("too short")),
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
+				SecretKey:    crypto.ToBase64URL([]byte("too short")),
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid base64 secret key",
 			data: &ExportedInbox{
+				Version:      ExportVersion,
 				EmailAddress: "test@example.com",
-				SecretKeyB64: "!!!invalid base64!!!",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
+				SecretKey:    "!!!invalid base64!!!",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid server sig pk size",
+			data: &ExportedInbox{
+				Version:      ExportVersion,
+				EmailAddress: "test@example.com",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  crypto.ToBase64URL([]byte("too short")),
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero expires at",
+			data: &ExportedInbox{
+				Version:      ExportVersion,
+				EmailAddress: "test@example.com",
+				ExpiresAt:    time.Time{},
+				InboxHash:    "hash123",
+				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
 			},
 			wantErr: true,
 		},
@@ -86,15 +170,18 @@ func TestExportedInbox_Validate(t *testing.T) {
 func TestExportedInbox_Fields(t *testing.T) {
 	now := time.Now()
 	data := &ExportedInbox{
+		Version:      ExportVersion,
 		EmailAddress: "test@example.com",
 		ExpiresAt:    now.Add(time.Hour),
 		InboxHash:    "hash123",
 		ServerSigPk:  "sigpk",
-		PublicKeyB64: "pubkey",
-		SecretKeyB64: "seckey",
+		SecretKey:    "seckey",
 		ExportedAt:   now,
 	}
 
+	if data.Version != ExportVersion {
+		t.Errorf("Version = %d, want %d", data.Version, ExportVersion)
+	}
 	if data.EmailAddress != "test@example.com" {
 		t.Errorf("EmailAddress = %s, want test@example.com", data.EmailAddress)
 	}
@@ -124,8 +211,11 @@ func TestInbox_Export(t *testing.T) {
 
 	exported := inbox.Export()
 
-	// Test all required fields are present
+	// Test all required fields are present (per VaultSandbox spec Section 9)
 	t.Run("required fields present", func(t *testing.T) {
+		if exported.Version != ExportVersion {
+			t.Errorf("Version = %d, want %d", exported.Version, ExportVersion)
+		}
 		if exported.EmailAddress == "" {
 			t.Error("EmailAddress should not be empty")
 		}
@@ -135,11 +225,8 @@ func TestInbox_Export(t *testing.T) {
 		if exported.ServerSigPk == "" {
 			t.Error("ServerSigPk should not be empty")
 		}
-		if exported.PublicKeyB64 == "" {
-			t.Error("PublicKeyB64 should not be empty")
-		}
-		if exported.SecretKeyB64 == "" {
-			t.Error("SecretKeyB64 should not be empty")
+		if exported.SecretKey == "" {
+			t.Error("SecretKey should not be empty")
 		}
 		if exported.ExportedAt.IsZero() {
 			t.Error("ExportedAt should not be zero")
@@ -171,26 +258,21 @@ func TestInbox_Export(t *testing.T) {
 		if time.Since(exported.ExportedAt) > time.Second {
 			t.Errorf("ExportedAt too far from now: %v", exported.ExportedAt)
 		}
+		// ExportedAt should be UTC
+		if exported.ExportedAt.Location() != time.UTC {
+			t.Errorf("ExportedAt should be in UTC, got %v", exported.ExportedAt.Location())
+		}
 	})
 
 	// Test valid base64 keys
 	t.Run("valid base64 keys", func(t *testing.T) {
-		// PublicKeyB64
-		pubKey, err := crypto.FromBase64URL(exported.PublicKeyB64)
+		// SecretKey (public key is NOT exported per spec Section 9, derived from secret)
+		secKey, err := crypto.FromBase64URL(exported.SecretKey)
 		if err != nil {
-			t.Errorf("PublicKeyB64 is not valid base64: %v", err)
-		}
-		if len(pubKey) != crypto.MLKEMPublicKeySize {
-			t.Errorf("PublicKeyB64 decoded length = %d, want %d", len(pubKey), crypto.MLKEMPublicKeySize)
-		}
-
-		// SecretKeyB64
-		secKey, err := crypto.FromBase64URL(exported.SecretKeyB64)
-		if err != nil {
-			t.Errorf("SecretKeyB64 is not valid base64: %v", err)
+			t.Errorf("SecretKey is not valid base64: %v", err)
 		}
 		if len(secKey) != crypto.MLKEMSecretKeySize {
-			t.Errorf("SecretKeyB64 decoded length = %d, want %d", len(secKey), crypto.MLKEMSecretKeySize)
+			t.Errorf("SecretKey decoded length = %d, want %d", len(secKey), crypto.MLKEMSecretKeySize)
 		}
 
 		// ServerSigPk

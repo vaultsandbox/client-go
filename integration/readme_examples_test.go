@@ -1045,8 +1045,11 @@ func TestREADME_ExportImport(t *testing.T) {
 	if exported.EmailAddress != inbox.EmailAddress() {
 		t.Errorf("exported.EmailAddress = %s, want %s", exported.EmailAddress, inbox.EmailAddress())
 	}
-	if exported.SecretKeyB64 == "" {
-		t.Error("exported.SecretKeyB64 is empty")
+	if exported.SecretKey == "" {
+		t.Error("exported.SecretKey is empty")
+	}
+	if exported.Version != vaultsandbox.ExportVersion {
+		t.Errorf("exported.Version = %d, want %d", exported.Version, vaultsandbox.ExportVersion)
 	}
 
 	// Validate export

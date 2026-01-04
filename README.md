@@ -4,6 +4,8 @@
   <img alt="VaultSandbox" src="./assets/logo-dark.svg">
 </picture>
 
+> **VaultSandbox is in Public Beta.** Join the journey to 1.0. Share feedback on [GitHub](https://github.com/vaultsandbox/gateway/discussions).
+
 # VaultSandbox Go Client
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/vaultsandbox/client-go.svg)](https://pkg.go.dev/github.com/vaultsandbox/client-go)
