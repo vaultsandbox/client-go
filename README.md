@@ -476,7 +476,7 @@ func New(apiKey string, opts ...Option) (*Client, error)
 
 - `WithBaseURL(url string)` — Gateway URL (default: `https://api.vaultsandbox.com`)
 - `WithHTTPClient(client *http.Client)` — Custom HTTP client
-- `WithDeliveryStrategy(strategy DeliveryStrategy)` — Delivery strategy: `StrategyAuto`, `StrategySSE`, or `StrategyPolling` (default: `StrategyAuto`)
+- `WithDeliveryStrategy(strategy DeliveryStrategy)` — Delivery strategy: `StrategySSE` or `StrategyPolling` (default: `StrategySSE`)
 - `WithTimeout(timeout time.Duration)` — Operation timeout
 - `WithRetries(count int)` — Max retry attempts for HTTP requests (default: 3)
 - `WithRetryOn(statusCodes []int)` — HTTP status codes that trigger a retry (default: 408, 429, 500, 502, 503, 504)
@@ -484,7 +484,6 @@ func New(apiKey string, opts ...Option) (*Client, error)
 - `WithPollingMaxBackoff(maxBackoff time.Duration)` — Maximum polling backoff interval (default: 30s)
 - `WithPollingBackoffMultiplier(multiplier float64)` — Backoff multiplier (default: 1.5)
 - `WithPollingJitterFactor(factor float64)` — Jitter factor for polling intervals (default: 0.3)
-- `WithSSEConnectionTimeout(timeout time.Duration)` — SSE connection timeout for auto mode fallback (default: 5s)
 
 #### Methods
 
@@ -807,6 +806,9 @@ for {
 
 # Verbose output
 ./scripts/test.sh -v
+
+# Open HTML coverage report in browser
+./scripts/test.sh --html
 
 # Unit tests only, no coverage
 ./scripts/test.sh --skip-integration --skip-coverage

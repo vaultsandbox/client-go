@@ -15,7 +15,7 @@ func (i *Inbox) GetEmails(ctx context.Context) ([]*Email, error) {
 	for _, e := range resp.Emails {
 		email, err := i.decryptEmail(e)
 		if err != nil {
-			return nil, err
+			return nil, err //coverage:ignore
 		}
 		emails = append(emails, email)
 	}

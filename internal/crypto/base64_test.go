@@ -119,6 +119,35 @@ func TestDecodeBase64_MultipleFormats(t *testing.T) {
 	}
 }
 
+func TestDecodeBase64_StandardEncodings(t *testing.T) {
+	// Test data that produces + and / in standard base64, which will fail
+	// URL-safe decoding and exercise the standard encoding fallback paths.
+	// 0xfb, 0xff encodes to "+/8=" in standard base64 (contains + and /)
+	original := []byte{0xfb, 0xff}
+
+	tests := []struct {
+		name    string
+		encoded string
+	}{
+		// Contains + and /, no padding - exercises RawStdEncoding path
+		{"standard without padding", "+/8"},
+		// Contains + and /, with padding - exercises StdEncoding path
+		{"standard with padding", "+/8="},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decoded, err := DecodeBase64(tt.encoded)
+			if err != nil {
+				t.Fatalf("DecodeBase64() error = %v", err)
+			}
+			if !bytes.Equal(decoded, original) {
+				t.Errorf("DecodeBase64() = %v, want %v", decoded, original)
+			}
+		})
+	}
+}
+
 func TestDecodeBase64_URLSafeChars(t *testing.T) {
 	// Test decoding with URL-safe characters
 	// "-" and "_" should work (URL-safe replacements for "+" and "/")

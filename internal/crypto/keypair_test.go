@@ -5,7 +5,30 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 )
+
+// failingReader is an io.Reader that always returns an error
+type failingReader struct{}
+
+func (f failingReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("random source failure")
+}
+
+func TestGenerateKeypair_RandomFailure(t *testing.T) {
+	// Save original and restore after test
+	original := randReader
+	defer func() { randReader = original }()
+
+	// Set failing reader
+	randReader = failingReader{}
+
+	_, err := GenerateKeypair()
+	if err == nil {
+		t.Error("expected error when random source fails, got nil")
+	}
+}
 
 func TestGenerateKeypair(t *testing.T) {
 	kp, err := GenerateKeypair()
@@ -139,14 +162,31 @@ func TestNewKeypairFromBytes_InvalidPublicKeySize(t *testing.T) {
 	}
 }
 
+func TestNewKeypairFromBytes_InvalidPrivateKeyBytes(t *testing.T) {
+	// Correct size but invalid/malformed private key bytes
+	invalidPrivKey := make([]byte, MLKEMSecretKeySize)
+	validPubKey := make([]byte, MLKEMPublicKeySize)
+
+	// Generate a valid public key to use
+	kp, err := GenerateKeypair()
+	if err != nil {
+		t.Fatalf("GenerateKeypair() error = %v", err)
+	}
+	copy(validPubKey, kp.PublicKey)
+
+	_, err = NewKeypairFromBytes(invalidPrivKey, validPubKey)
+	if err == nil {
+		t.Error("expected error for invalid private key bytes, got nil")
+	}
+}
+
+
 func TestKeypair_Decapsulate(t *testing.T) {
 	kp, err := GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)
 	}
 
-	// We can't easily test decapsulation without encapsulation,
-	// but we can test error cases
 	t.Run("invalid ciphertext size", func(t *testing.T) {
 		_, err := kp.Decapsulate([]byte("too short"))
 		if !errors.Is(err, ErrInvalidCiphertextSize) {
@@ -158,6 +198,49 @@ func TestKeypair_Decapsulate(t *testing.T) {
 		_, err := kp.Decapsulate(make([]byte, MLKEMCiphertextSize-1))
 		if !errors.Is(err, ErrInvalidCiphertextSize) {
 			t.Errorf("expected ErrInvalidCiphertextSize, got %v", err)
+		}
+	})
+
+	t.Run("invalid secret key in keypair", func(t *testing.T) {
+		// Create a keypair with valid sizes but invalid secret key bytes
+		invalidKp := &Keypair{
+			SecretKey: make([]byte, MLKEMSecretKeySize), // Zero bytes - invalid
+			PublicKey: kp.PublicKey,
+		}
+		validCiphertext := make([]byte, MLKEMCiphertextSize)
+
+		_, err := invalidKp.Decapsulate(validCiphertext)
+		if err == nil {
+			t.Error("expected error for invalid secret key, got nil")
+		}
+	})
+
+	t.Run("successful decapsulation", func(t *testing.T) {
+		// Parse the public key for encapsulation
+		var pubKey mlkem768.PublicKey
+		if err := pubKey.Unpack(kp.PublicKey); err != nil {
+			t.Fatalf("failed to unpack public key: %v", err)
+		}
+
+		// Encapsulate to get ciphertext and shared secret
+		ciphertext := make([]byte, MLKEMCiphertextSize)
+		sharedSecret := make([]byte, MLKEMSharedKeySize)
+		pubKey.EncapsulateTo(ciphertext, sharedSecret, nil)
+
+		// Decapsulate using our keypair method
+		decapsulatedSecret, err := kp.Decapsulate(ciphertext)
+		if err != nil {
+			t.Fatalf("Decapsulate() error = %v", err)
+		}
+
+		// Shared secrets should match
+		if !bytes.Equal(sharedSecret, decapsulatedSecret) {
+			t.Error("decapsulated shared secret does not match encapsulated shared secret")
+		}
+
+		// Verify shared secret has expected size
+		if len(decapsulatedSecret) != MLKEMSharedKeySize {
+			t.Errorf("shared secret size = %d, want %d", len(decapsulatedSecret), MLKEMSharedKeySize)
 		}
 	})
 }
@@ -252,6 +335,29 @@ func TestValidateKeypair(t *testing.T) {
 		kp.PublicKeyB64 = ToBase64URL(make([]byte, MLKEMPublicKeySize)) // Different key
 		if ValidateKeypair(kp) {
 			t.Error("ValidateKeypair() returned true for mismatched PublicKeyB64")
+		}
+	})
+
+	t.Run("invalid base64 in public key b64", func(t *testing.T) {
+		kp, err := GenerateKeypair()
+		if err != nil {
+			t.Fatalf("GenerateKeypair() error = %v", err)
+		}
+		kp.PublicKeyB64 = "!!!invalid-base64!!!"
+		if ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned true for invalid base64")
+		}
+	})
+
+	t.Run("base64 decodes to wrong length", func(t *testing.T) {
+		kp, err := GenerateKeypair()
+		if err != nil {
+			t.Fatalf("GenerateKeypair() error = %v", err)
+		}
+		// Encode a shorter byte slice
+		kp.PublicKeyB64 = ToBase64URL([]byte("short"))
+		if ValidateKeypair(kp) {
+			t.Error("ValidateKeypair() returned true for wrong decoded length")
 		}
 	})
 }

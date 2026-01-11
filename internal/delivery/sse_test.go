@@ -2,6 +2,9 @@ package delivery
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -129,6 +132,44 @@ func TestSSEStrategy_LastError(t *testing.T) {
 	// Should be nil initially
 	if s.LastError() != nil {
 		t.Error("LastError should be nil initially")
+	}
+}
+
+func TestSSEStrategy_Inboxes(t *testing.T) {
+	s := NewSSEStrategy(Config{})
+
+	// Initially empty
+	inboxes := s.Inboxes()
+	if len(inboxes) != 0 {
+		t.Errorf("Inboxes() returned %d items, want 0", len(inboxes))
+	}
+
+	// Add some inboxes
+	s.AddInbox(InboxInfo{Hash: "hash1", EmailAddress: "test1@example.com"})
+	s.AddInbox(InboxInfo{Hash: "hash2", EmailAddress: "test2@example.com"})
+	s.AddInbox(InboxInfo{Hash: "hash3", EmailAddress: "test3@example.com"})
+
+	inboxes = s.Inboxes()
+	if len(inboxes) != 3 {
+		t.Errorf("Inboxes() returned %d items, want 3", len(inboxes))
+	}
+
+	// Verify all hashes are present
+	hashes := make(map[string]bool)
+	for _, inbox := range inboxes {
+		hashes[inbox.Hash] = true
+	}
+	for _, expected := range []string{"hash1", "hash2", "hash3"} {
+		if !hashes[expected] {
+			t.Errorf("Inboxes() missing hash %s", expected)
+		}
+	}
+
+	// Remove one and verify
+	s.RemoveInbox("hash2")
+	inboxes = s.Inboxes()
+	if len(inboxes) != 2 {
+		t.Errorf("Inboxes() returned %d items after removal, want 2", len(inboxes))
 	}
 }
 
@@ -342,5 +383,129 @@ func TestSSEStrategy_ConcurrentSubscriptions(t *testing.T) {
 
 	if count != 0 {
 		t.Errorf("inboxHashes count = %d, want 0", count)
+	}
+}
+
+func TestSSEStrategy_MaxReconnectAttempts(t *testing.T) {
+	// Test that strategy gives up after SSEMaxReconnectAttempts failures
+	s := NewSSEStrategy(Config{})
+
+	// Set attempts to just below the max so we hit the threshold quickly
+	s.attempts = SSEMaxReconnectAttempts - 1
+	s.reconnectWait = 1 * time.Millisecond // Speed up test
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := func(ctx context.Context, event *api.SSEEvent) error {
+		return nil
+	}
+
+	// Start with an inbox (nil apiClient will cause connection failures)
+	if err := s.Start(ctx, []InboxInfo{{Hash: "hash1"}}, handler); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Wait for the strategy to hit max attempts and exit
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify attempts reached max
+	if s.attempts < SSEMaxReconnectAttempts {
+		t.Errorf("attempts = %d, want >= %d", s.attempts, SSEMaxReconnectAttempts)
+	}
+}
+
+func TestSSEStrategy_ConnectWithNoHashes(t *testing.T) {
+	// Test the edge case where connect() is called with empty hashes
+	// This can happen if inboxes are removed between connectLoop check and connect call
+	s := NewSSEStrategy(Config{})
+
+	ctx := context.Background()
+
+	// Call connect directly with no inboxes in the map
+	err := s.connect(ctx)
+
+	if err == nil {
+		t.Error("connect() should return error when no inboxes")
+	}
+	if err.Error() != "no inboxes to monitor" {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSSEStrategy_MalformedSSEEvent(t *testing.T) {
+	// Test that malformed JSON in SSE events is skipped gracefully
+	// Use httptest to create a server that sends malformed SSE data
+
+	var requestCount int
+	var reqMu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqMu.Lock()
+		requestCount++
+		reqNum := requestCount
+		reqMu.Unlock()
+
+		// Only respond on first request
+		if reqNum > 1 {
+			time.Sleep(500 * time.Millisecond)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("expected http.Flusher")
+		}
+
+		// Send malformed JSON (should be skipped)
+		fmt.Fprintf(w, "data: {invalid json}\n\n")
+		flusher.Flush()
+
+		// Send valid JSON
+		fmt.Fprintf(w, "data: {\"inbox_id\":\"inbox1\",\"email_id\":\"email1\"}\n\n")
+		flusher.Flush()
+
+		// Keep connection open briefly then close
+		time.Sleep(50 * time.Millisecond)
+	}))
+	defer server.Close()
+
+	apiClient, err := api.New("test-api-key", api.WithBaseURL(server.URL))
+	if err != nil {
+		t.Fatalf("failed to create api client: %v", err)
+	}
+
+	s := NewSSEStrategy(Config{APIClient: apiClient})
+
+	var mu sync.Mutex
+	var receivedEvents int
+	handler := func(ctx context.Context, event *api.SSEEvent) error {
+		mu.Lock()
+		receivedEvents++
+		mu.Unlock()
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := s.Start(ctx, []InboxInfo{{Hash: "hash1"}}, handler); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	// Wait for events to be processed
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	count := receivedEvents
+	mu.Unlock()
+
+	// Should have received only 1 event (the valid one, malformed should be skipped)
+	if count != 1 {
+		t.Errorf("receivedEvents = %d, want 1 (malformed should be skipped)", count)
 	}
 }

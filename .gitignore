@@ -15,6 +15,7 @@
 
 # Test binary
 *.test
+testhelper/
 
 # Output of go coverage
 *.out

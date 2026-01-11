@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.1] - 2026-01-11
+
+### Removed
+
+- `StrategyAuto` delivery strategy (use `StrategySSE` or `StrategyPolling` explicitly)
+- `SSEConnectionTimeout` from `PollingConfig`
+
 ## [0.6.0] - 2026-01-04
 
 ### Added

@@ -4,24 +4,21 @@
 //
 // # Delivery Strategies
 //
-// The package implements three delivery strategies:
-//
-//   - [PollingStrategy]: Periodically polls the API for new emails. Uses adaptive
-//     backoff to reduce API calls when no new emails arrive. Most reliable but
-//     higher latency than SSE.
+// The package implements two delivery strategies:
 //
 //   - [SSEStrategy]: Uses Server-Sent Events for real-time push notifications.
-//     Lowest latency but requires persistent HTTP connection support.
+//     Lowest latency, recommended for most use cases.
 //
-//   - [AutoStrategy]: Automatically selects between SSE and polling. Tries SSE
-//     first with a timeout, then falls back to polling if SSE fails to connect.
+//   - [PollingStrategy]: Periodically polls the API for new emails. Uses adaptive
+//     backoff to reduce API calls when no new emails arrive. Use when SSE is not
+//     available or for edge cases requiring explicit polling.
 //
 // # Usage
 //
 // All strategies implement the [Strategy] interface for event-driven delivery:
 //
 //	cfg := delivery.Config{APIClient: apiClient}
-//	strategy := delivery.NewAutoStrategy(cfg)
+//	strategy := delivery.NewSSEStrategy(cfg)
 //
 //	inboxes := []delivery.InboxInfo{{Hash: hash, EmailAddress: email}}
 //	strategy.Start(ctx, inboxes, func(event *api.SSEEvent) error {

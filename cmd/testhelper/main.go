@@ -11,68 +11,99 @@ import (
 	vaultsandbox "github.com/vaultsandbox/client-go"
 )
 
-func main() {
-	if len(os.Args) < 2 {
-		fatal("usage: testhelper <command> [args]")
+// ClientInterface defines the client operations used by testhelper.
+// This allows for easy mocking in tests.
+type ClientInterface interface {
+	CreateInbox(ctx context.Context, opts ...vaultsandbox.InboxOption) (*vaultsandbox.Inbox, error)
+	ImportInbox(ctx context.Context, data *vaultsandbox.ExportedInbox) (*vaultsandbox.Inbox, error)
+	DeleteInbox(ctx context.Context, emailAddress string) error
+}
+
+// Config holds the I/O configuration for the testhelper commands.
+type Config struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// DefaultConfig returns a Config using standard I/O.
+func DefaultConfig() *Config {
+	return &Config{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+}
+
+// clientFactory creates a vaultsandbox client. Can be replaced in tests.
+var clientFactory = func() (ClientInterface, error) {
+	return vaultsandbox.New(
+		os.Getenv("VAULTSANDBOX_API_KEY"),
+		vaultsandbox.WithBaseURL(os.Getenv("VAULTSANDBOX_URL")),
+	)
+}
+
+func run(args []string, cfg *Config) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: testhelper <command> [args]")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	client, err := vaultsandbox.New(
-		os.Getenv("VAULTSANDBOX_API_KEY"),
-		vaultsandbox.WithBaseURL(os.Getenv("VAULTSANDBOX_URL")),
-	)
+	client, err := clientFactory()
 	if err != nil {
-		fatal("create client: %v", err)
+		return fmt.Errorf("create client: %w", err)
 	}
 
-	switch os.Args[1] {
+	switch args[1] {
 	case "create-inbox":
-		createInbox(ctx, client)
+		return runCreateInbox(ctx, client, cfg)
 	case "import-inbox":
-		importInbox(ctx, client)
+		return runImportInbox(ctx, client, cfg)
 	case "read-emails":
-		readEmails(ctx, client)
+		return runReadEmails(ctx, client, cfg)
 	case "cleanup":
-		if len(os.Args) < 3 {
-			fatal("usage: testhelper cleanup <address>")
+		if len(args) < 3 {
+			return fmt.Errorf("usage: testhelper cleanup <address>")
 		}
-		cleanup(ctx, client, os.Args[2])
+		return runCleanup(ctx, client, cfg, args[2])
 	default:
-		fatal("unknown command: %s", os.Args[1])
+		return fmt.Errorf("unknown command: %s", args[1])
 	}
 }
 
-func createInbox(ctx context.Context, client *vaultsandbox.Client) {
+func runCreateInbox(ctx context.Context, client ClientInterface, cfg *Config) error {
 	inbox, err := client.CreateInbox(ctx)
 	if err != nil {
-		fatal("create inbox: %v", err)
+		return fmt.Errorf("create inbox: %w", err)
 	}
 
 	exported := inbox.Export()
-	if err := json.NewEncoder(os.Stdout).Encode(exported); err != nil {
-		fatal("encode export: %v", err)
+	if err := json.NewEncoder(cfg.Stdout).Encode(exported); err != nil {
+		return fmt.Errorf("encode export: %w", err)
 	}
+	return nil
 }
 
-func importInbox(ctx context.Context, client *vaultsandbox.Client) {
-	data, err := io.ReadAll(os.Stdin)
+func runImportInbox(ctx context.Context, client ClientInterface, cfg *Config) error {
+	data, err := io.ReadAll(cfg.Stdin)
 	if err != nil {
-		fatal("read stdin: %v", err)
+		return fmt.Errorf("read stdin: %w", err)
 	}
 
 	var exportData vaultsandbox.ExportedInbox
 	if err := json.Unmarshal(data, &exportData); err != nil {
-		fatal("parse export: %v", err)
+		return fmt.Errorf("parse export: %w", err)
 	}
 
 	_, err = client.ImportInbox(ctx, &exportData)
 	if err != nil {
-		fatal("import inbox: %v", err)
+		return fmt.Errorf("import inbox: %w", err)
 	}
 
-	json.NewEncoder(os.Stdout).Encode(map[string]bool{"success": true})
+	json.NewEncoder(cfg.Stdout).Encode(map[string]bool{"success": true})
+	return nil
 }
 
 type EmailOutput struct {
@@ -92,33 +123,9 @@ type AttachmentOutput struct {
 	Size        int    `json:"size"`
 }
 
-func readEmails(ctx context.Context, client *vaultsandbox.Client) {
-	data, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		fatal("read stdin: %v", err)
-	}
-
-	var exportData vaultsandbox.ExportedInbox
-	if err := json.Unmarshal(data, &exportData); err != nil {
-		fatal("parse export: %v", err)
-	}
-
-	inbox, err := client.ImportInbox(ctx, &exportData)
-	if err != nil {
-		fatal("import inbox: %v", err)
-	}
-
-	emails, err := inbox.GetEmails(ctx)
-	if err != nil {
-		fatal("list emails: %v", err)
-	}
-
-	output := struct {
-		Emails []EmailOutput `json:"emails"`
-	}{
-		Emails: make([]EmailOutput, 0, len(emails)),
-	}
-
+// convertEmails converts vaultsandbox.Email slice to EmailOutput slice.
+func convertEmails(emails []*vaultsandbox.Email) []EmailOutput {
+	output := make([]EmailOutput, 0, len(emails))
 	for _, email := range emails {
 		e := EmailOutput{
 			ID:         email.ID,
@@ -136,22 +143,56 @@ func readEmails(ctx context.Context, client *vaultsandbox.Client) {
 				Size:        len(att.Content),
 			})
 		}
-		output.Emails = append(output.Emails, e)
+		output = append(output, e)
 	}
-
-	if err := json.NewEncoder(os.Stdout).Encode(output); err != nil {
-		fatal("encode output: %v", err)
-	}
+	return output
 }
 
-func cleanup(ctx context.Context, client *vaultsandbox.Client, address string) {
+func runReadEmails(ctx context.Context, client ClientInterface, cfg *Config) error {
+	data, err := io.ReadAll(cfg.Stdin)
+	if err != nil {
+		return fmt.Errorf("read stdin: %w", err)
+	}
+
+	var exportData vaultsandbox.ExportedInbox
+	if err := json.Unmarshal(data, &exportData); err != nil {
+		return fmt.Errorf("parse export: %w", err)
+	}
+
+	inbox, err := client.ImportInbox(ctx, &exportData)
+	if err != nil {
+		return fmt.Errorf("import inbox: %w", err)
+	}
+
+	emails, err := inbox.GetEmails(ctx)
+	if err != nil {
+		return fmt.Errorf("list emails: %w", err)
+	}
+
+	output := struct {
+		Emails []EmailOutput `json:"emails"`
+	}{
+		Emails: convertEmails(emails),
+	}
+
+	if err := json.NewEncoder(cfg.Stdout).Encode(output); err != nil {
+		return fmt.Errorf("encode output: %w", err)
+	}
+	return nil
+}
+
+func runCleanup(ctx context.Context, client ClientInterface, cfg *Config, address string) error {
 	if err := client.DeleteInbox(ctx, address); err != nil {
-		fatal("delete inbox: %v", err)
+		return fmt.Errorf("delete inbox: %w", err)
 	}
-	json.NewEncoder(os.Stdout).Encode(map[string]bool{"success": true})
+	json.NewEncoder(cfg.Stdout).Encode(map[string]bool{"success": true})
+	return nil
 }
+
+// exitFunc is the function called to exit the program. Can be replaced in tests.
+var exitFunc = os.Exit
 
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
-	os.Exit(1)
+	exitFunc(1)
 }

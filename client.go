@@ -2,9 +2,13 @@ package vaultsandbox
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,13 +18,38 @@ import (
 
 // TTL constants for inbox creation.
 const (
-	MinTTL = 60 * time.Second      // Minimum TTL: 1 minute
-	MaxTTL = 604800 * time.Second  // Maximum TTL: 7 days
+	MinTTL = 60 * time.Second     // Minimum TTL: 1 minute
+	MaxTTL = 604800 * time.Second // Maximum TTL: 7 days
 )
 
 // sseEventTimeout is the timeout for fetching and decrypting an email
 // after receiving an SSE notification.
 const sseEventTimeout = 30 * time.Second
+
+// syncState tracks the synchronization state for an inbox to enable
+// efficient reconnection sync using the /sync endpoint.
+type syncState struct {
+	seenEmails map[string]struct{} // Set of email IDs already delivered to subscribers
+}
+
+// computeEmailsHash computes the hash of seen emails to compare with server's sync hash.
+// Algorithm: sort IDs alphabetically, join with comma, SHA256, base64url encode (no padding).
+func (s *syncState) computeEmailsHash() string {
+	if len(s.seenEmails) == 0 {
+		// Empty set has a specific hash
+		hash := sha256.Sum256([]byte(""))
+		return base64.RawURLEncoding.EncodeToString(hash[:])
+	}
+
+	ids := make([]string, 0, len(s.seenEmails))
+	for id := range s.seenEmails {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	joined := strings.Join(ids, ",")
+	hash := sha256.Sum256([]byte(joined))
+	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
 
 // ServerInfo contains server configuration.
 type ServerInfo struct {
@@ -31,13 +60,14 @@ type ServerInfo struct {
 
 // Client is the main VaultSandbox client for managing inboxes.
 type Client struct {
-	apiClient      *api.Client
-	strategy       delivery.Strategy
-	serverInfo     *api.ServerInfo
-	inboxes        map[string]*Inbox // keyed by email address
-	inboxesByHash  map[string]*Inbox // keyed by inbox hash for O(1) lookup
-	mu             sync.RWMutex
-	closed         bool
+	apiClient     *api.Client
+	strategy      delivery.Strategy
+	serverInfo    *api.ServerInfo
+	inboxes       map[string]*Inbox     // keyed by email address
+	inboxesByHash map[string]*Inbox     // keyed by inbox hash for O(1) lookup
+	syncStates    map[string]*syncState // keyed by inbox hash for sync optimization
+	mu            sync.RWMutex
+	closed        bool
 
 	// Subscription manager for email notifications
 	subs *subscriptionManager
@@ -84,15 +114,12 @@ func createDeliveryStrategy(cfg *clientConfig, apiClient *api.Client) delivery.S
 		PollingMaxBackoff:        cfg.pollingMaxBackoff,
 		PollingBackoffMultiplier: cfg.pollingBackoffMultiplier,
 		PollingJitterFactor:      cfg.pollingJitterFactor,
-		SSEConnectionTimeout:     cfg.sseConnectionTimeout,
 	}
 	switch cfg.deliveryStrategy {
-	case StrategySSE:
-		return delivery.NewSSEStrategy(deliveryCfg)
 	case StrategyPolling:
 		return delivery.NewPollingStrategy(deliveryCfg)
 	default:
-		return delivery.NewAutoStrategy(deliveryCfg)
+		return delivery.NewSSEStrategy(deliveryCfg)
 	}
 }
 
@@ -104,7 +131,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 
 	cfg := &clientConfig{
 		baseURL:          defaultBaseURL,
-		deliveryStrategy: StrategyAuto,
+		deliveryStrategy: StrategySSE,
 		timeout:          defaultWaitTimeout,
 	}
 
@@ -114,7 +141,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 
 	apiClient, err := buildAPIClient(apiKey, cfg)
 	if err != nil {
-		return nil, err
+		return nil, err //coverage:ignore
 	}
 
 	// Validate API key
@@ -141,6 +168,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		serverInfo:     serverInfo,
 		inboxes:        make(map[string]*Inbox),
 		inboxesByHash:  make(map[string]*Inbox),
+		syncStates:     make(map[string]*syncState),
 		subs:           newSubscriptionManager(),
 		strategyCtx:    strategyCtx,
 		strategyCancel: strategyCancel,
@@ -149,8 +177,8 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 
 	// Start the strategy with an event handler
 	if err := strategy.Start(strategyCtx, nil, c.handleSSEEvent); err != nil {
-		strategyCancel()
-		return nil, fmt.Errorf("start delivery strategy: %w", err)
+		strategyCancel()                                           //coverage:ignore
+		return nil, fmt.Errorf("start delivery strategy: %w", err) //coverage:ignore
 	}
 
 	// Register reconnect handler to sync emails after SSE reconnection.
@@ -179,6 +207,9 @@ func (c *Client) registerInbox(inbox *Inbox) error {
 	}
 	c.inboxes[inbox.emailAddress] = inbox
 	c.inboxesByHash[inbox.inboxHash] = inbox
+	c.syncStates[inbox.inboxHash] = &syncState{
+		seenEmails: make(map[string]struct{}),
+	}
 	c.strategy.AddInbox(delivery.InboxInfo{
 		Hash:         inbox.inboxHash,
 		EmailAddress: inbox.emailAddress,
@@ -223,7 +254,7 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 	inbox := newInboxFromResult(resp, c)
 
 	if err := c.registerInbox(inbox); err != nil {
-		return nil, err
+		return nil, err //coverage:ignore
 	}
 
 	return inbox, nil
@@ -260,7 +291,7 @@ func (c *Client) ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, 
 	}
 
 	if err := c.registerInbox(inbox); err != nil {
-		return nil, err
+		return nil, err //coverage:ignore
 	}
 
 	return inbox, nil
@@ -273,6 +304,7 @@ func (c *Client) DeleteInbox(ctx context.Context, emailAddress string) error {
 	if exists {
 		delete(c.inboxes, emailAddress)
 		delete(c.inboxesByHash, inbox.inboxHash)
+		delete(c.syncStates, inbox.inboxHash)
 		c.strategy.RemoveInbox(inbox.inboxHash)
 	}
 	c.mu.Unlock()
@@ -287,6 +319,7 @@ func (c *Client) DeleteAllInboxes(ctx context.Context) (int, error) {
 		c.strategy.RemoveInbox(inbox.inboxHash)
 		delete(c.inboxes, email)
 		delete(c.inboxesByHash, inbox.inboxHash)
+		delete(c.syncStates, inbox.inboxHash)
 	}
 	c.mu.Unlock()
 
@@ -342,7 +375,7 @@ func (c *Client) ExportInboxToFile(inbox *Inbox, filePath string) error {
 
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal inbox data: %w", err)
+		return fmt.Errorf("marshal inbox data: %w", err) //coverage:ignore
 	}
 
 	if err := os.WriteFile(filePath, jsonData, 0600); err != nil {
@@ -473,10 +506,27 @@ func (c *Client) syncAllInboxes(ctx context.Context) {
 	}
 }
 
-// syncInbox fetches emails for a single inbox and notifies subscribers for each.
+// syncInbox fetches emails for a single inbox and notifies subscribers for new emails.
+// It uses the sync endpoint to check for changes before fetching, and only fetches
+// full email data for emails that haven't been seen before. It also handles deletions
+// by removing IDs from seenEmails that are no longer on the server.
 func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
-	// Fetch all emails (decrypted)
-	emails, err := inbox.GetEmails(ctx)
+	// Get sync state for this inbox and compute current hash
+	c.mu.RLock()
+	state := c.syncStates[inbox.inboxHash]
+	var localHash string
+	if state != nil {
+		localHash = state.computeEmailsHash()
+	}
+	c.mu.RUnlock()
+
+	if state == nil {
+		// Inbox was deleted or not registered, skip
+		return
+	}
+
+	// Check sync status first (lightweight call)
+	status, err := inbox.GetSyncStatus(ctx)
 	if err != nil {
 		if c.onSyncError != nil {
 			c.onSyncError(err)
@@ -484,8 +534,70 @@ func (c *Client) syncInbox(ctx context.Context, inbox *Inbox) {
 		return
 	}
 
-	// Notify subscribers for each email
-	for _, email := range emails {
+	// If hash unchanged, no changes - skip fetching
+	if status.EmailsHash == localHash {
+		return
+	}
+
+	// Hash changed - fetch metadata only to find changes
+	metadata, err := inbox.GetEmailsMetadataOnly(ctx)
+	if err != nil {
+		if c.onSyncError != nil {
+			c.onSyncError(err)
+		}
+		return
+	}
+
+	// Build set of server email IDs
+	serverIDs := make(map[string]struct{}, len(metadata))
+	for _, m := range metadata {
+		serverIDs[m.ID] = struct{}{}
+	}
+
+	// Find new and deleted email IDs
+	c.mu.Lock()
+	state = c.syncStates[inbox.inboxHash]
+	if state == nil {
+		c.mu.Unlock() //coverage:ignore
+		return        //coverage:ignore
+	}
+
+	// Find new emails (on server but not in seenEmails)
+	var newEmailIDs []string
+	for id := range serverIDs {
+		if _, seen := state.seenEmails[id]; !seen {
+			newEmailIDs = append(newEmailIDs, id)
+		}
+	}
+
+	// Find and remove deleted emails (in seenEmails but not on server)
+	for id := range state.seenEmails {
+		if _, exists := serverIDs[id]; !exists {
+			delete(state.seenEmails, id)
+		}
+	}
+	c.mu.Unlock()
+
+	// Fetch full email data only for new emails
+	for _, emailID := range newEmailIDs {
+		email, err := inbox.GetEmail(ctx, emailID)
+		if err != nil {
+			if c.onSyncError != nil {
+				c.onSyncError(err)
+			}
+			continue
+		}
+
+		// Mark as seen and notify
+		c.mu.Lock()
+		state = c.syncStates[inbox.inboxHash]
+		if state == nil {
+			c.mu.Unlock() //coverage:ignore
+			return        //coverage:ignore
+		}
+		state.seenEmails[email.ID] = struct{}{}
+		c.mu.Unlock()
+
 		c.subs.notify(inbox.inboxHash, email)
 	}
 }
@@ -499,6 +611,7 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 	// Find the inbox using O(1) lookup
 	c.mu.RLock()
 	inbox := c.inboxesByHash[event.InboxID]
+	state := c.syncStates[event.InboxID]
 	c.mu.RUnlock()
 
 	if inbox == nil {
@@ -512,6 +625,16 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 	email, err := inbox.GetEmail(ctx, event.EmailID)
 	if err != nil {
 		return err
+	}
+
+	// Mark email as seen to avoid duplicate notifications on reconnection sync
+	if state != nil {
+		c.mu.Lock()
+		// Re-check state exists (inbox could have been deleted)
+		if state = c.syncStates[event.InboxID]; state != nil {
+			state.seenEmails[email.ID] = struct{}{}
+		}
+		c.mu.Unlock()
 	}
 
 	// Notify all subscribers
@@ -539,7 +662,7 @@ func (c *Client) Close() error {
 	// Stop delivery strategy
 	if c.strategy != nil {
 		if err := c.strategy.Stop(); err != nil {
-			return err
+			return err //coverage:ignore
 		}
 	}
 

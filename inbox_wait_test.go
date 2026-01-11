@@ -2,6 +2,7 @@ package vaultsandbox
 
 import (
 	"context"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -460,5 +461,211 @@ func TestInboxEvent_Fields(t *testing.T) {
 	}
 	if event.Email != email {
 		t.Error("event.Email should match")
+	}
+}
+
+func TestInbox_WatchFunc_ReceivesEmails(t *testing.T) {
+	client := &Client{
+		subs: newSubscriptionManager(),
+	}
+	inbox := &Inbox{
+		inboxHash: "test-hash",
+		client:    client,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var received []*Email
+	var mu sync.Mutex
+	done := make(chan struct{})
+
+	go func() {
+		inbox.WatchFunc(ctx, func(email *Email) {
+			mu.Lock()
+			received = append(received, email)
+			mu.Unlock()
+			if len(received) >= 2 {
+				cancel()
+			}
+		})
+		close(done)
+	}()
+
+	// Give WatchFunc time to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Send emails
+	client.subs.notify("test-hash", &Email{ID: "email-1", Subject: "First"})
+	client.subs.notify("test-hash", &Email{ID: "email-2", Subject: "Second"})
+
+	// Wait for WatchFunc to finish
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("WatchFunc did not terminate")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(received) < 2 {
+		t.Errorf("received %d emails, want at least 2", len(received))
+	}
+}
+
+func TestInbox_WatchFunc_ContextCancellation(t *testing.T) {
+	client := &Client{
+		subs: newSubscriptionManager(),
+	}
+	inbox := &Inbox{
+		inboxHash: "test-hash",
+		client:    client,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	go func() {
+		inbox.WatchFunc(ctx, func(email *Email) {
+			t.Error("callback should not be called")
+		})
+		close(done)
+	}()
+
+	// Cancel immediately
+	cancel()
+
+	// WatchFunc should return promptly
+	select {
+	case <-done:
+		// Expected: WatchFunc returned after cancel
+	case <-time.After(100 * time.Millisecond):
+		t.Error("WatchFunc did not return after context cancel")
+	}
+}
+
+func TestInbox_WatchFunc_NilEmailHandling(t *testing.T) {
+	client := &Client{
+		subs: newSubscriptionManager(),
+	}
+	inbox := &Inbox{
+		inboxHash: "test-hash",
+		client:    client,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	callbackCalled := false
+	var mu sync.Mutex
+	done := make(chan struct{})
+
+	go func() {
+		inbox.WatchFunc(ctx, func(email *Email) {
+			mu.Lock()
+			callbackCalled = true
+			mu.Unlock()
+		})
+		close(done)
+	}()
+
+	// Give WatchFunc time to start
+	time.Sleep(10 * time.Millisecond)
+
+	// Send nil email (should be ignored)
+	client.subs.notify("test-hash", nil)
+
+	// Give time for processing
+	time.Sleep(20 * time.Millisecond)
+
+	mu.Lock()
+	called := callbackCalled
+	mu.Unlock()
+
+	if called {
+		t.Error("callback should not be called for nil email")
+	}
+
+	cancel()
+	<-done
+}
+
+func TestWaitForEmailCount_NegativeCount(t *testing.T) {
+	client := &Client{
+		subs: newSubscriptionManager(),
+	}
+	inbox := &Inbox{
+		inboxHash: "test-hash",
+		client:    client,
+	}
+
+	ctx := context.Background()
+	_, err := inbox.WaitForEmailCount(ctx, -1)
+
+	if err == nil {
+		t.Fatal("expected error for negative count")
+	}
+	if err.Error() != "count must be non-negative, got -1" {
+		t.Errorf("error = %q, want %q", err.Error(), "count must be non-negative, got -1")
+	}
+}
+
+func TestWaitForEmailCount_ZeroCount(t *testing.T) {
+	client := &Client{
+		subs: newSubscriptionManager(),
+	}
+	inbox := &Inbox{
+		inboxHash: "test-hash",
+		client:    client,
+	}
+
+	ctx := context.Background()
+	result, err := inbox.WaitForEmailCount(ctx, 0)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("result should not be nil")
+	}
+	if len(result) != 0 {
+		t.Errorf("result length = %d, want 0", len(result))
+	}
+}
+
+func TestWaitConfig_MatchesFromRegex(t *testing.T) {
+	cfg := &waitConfig{
+		fromRegex: regexp.MustCompile(`.*@example\.com$`),
+	}
+
+	matching := &Email{ID: "1", From: "sender@example.com"}
+	nonMatching := &Email{ID: "2", From: "sender@other.com"}
+
+	if !cfg.Matches(matching) {
+		t.Error("config should match email from example.com")
+	}
+	if cfg.Matches(nonMatching) {
+		t.Error("config should not match email from other.com")
+	}
+}
+
+func TestWaitConfig_MultipleFilters(t *testing.T) {
+	cfg := &waitConfig{
+		subject: "Welcome",
+		from:    "noreply@example.com",
+	}
+
+	matchesBoth := &Email{ID: "1", Subject: "Welcome", From: "noreply@example.com"}
+	matchesSubjectOnly := &Email{ID: "2", Subject: "Welcome", From: "other@example.com"}
+	matchesFromOnly := &Email{ID: "3", Subject: "Goodbye", From: "noreply@example.com"}
+
+	if !cfg.Matches(matchesBoth) {
+		t.Error("config should match email with both subject and from matching")
+	}
+	if cfg.Matches(matchesSubjectOnly) {
+		t.Error("config should not match email with only subject matching")
+	}
+	if cfg.Matches(matchesFromOnly) {
+		t.Error("config should not match email with only from matching")
 	}
 }

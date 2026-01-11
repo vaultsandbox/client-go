@@ -932,7 +932,7 @@ func TestREADME_ClientOptions(t *testing.T) {
 		vaultsandbox.WithTimeout(30*time.Second),
 		vaultsandbox.WithRetries(3),
 		vaultsandbox.WithRetryOn([]int{408, 429, 500, 502, 503, 504}),
-		vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategyAuto),
+		vaultsandbox.WithDeliveryStrategy(vaultsandbox.StrategySSE),
 	)
 	if err != nil {
 		t.Fatal(err)

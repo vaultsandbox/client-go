@@ -8,9 +8,6 @@ import (
 )
 
 func TestDeliveryStrategy_Constants(t *testing.T) {
-	if StrategyAuto != "auto" {
-		t.Errorf("StrategyAuto = %s, want auto", StrategyAuto)
-	}
 	if StrategySSE != "sse" {
 		t.Errorf("StrategySSE = %s, want sse", StrategySSE)
 	}
@@ -49,7 +46,6 @@ func TestWithDeliveryStrategy(t *testing.T) {
 	tests := []struct {
 		strategy DeliveryStrategy
 	}{
-		{StrategyAuto},
 		{StrategySSE},
 		{StrategyPolling},
 	}
@@ -290,11 +286,10 @@ func TestWithPollingConfig(t *testing.T) {
 		{
 			name: "all fields set",
 			config: PollingConfig{
-				InitialInterval:      1 * time.Second,
-				MaxBackoff:           10 * time.Second,
-				BackoffMultiplier:    2.0,
-				JitterFactor:         0.5,
-				SSEConnectionTimeout: 3 * time.Second,
+				InitialInterval:   1 * time.Second,
+				MaxBackoff:        10 * time.Second,
+				BackoffMultiplier: 2.0,
+				JitterFactor:      0.5,
 			},
 			validate: func(t *testing.T, cfg *clientConfig) {
 				if cfg.pollingInitialInterval != 1*time.Second {
@@ -308,9 +303,6 @@ func TestWithPollingConfig(t *testing.T) {
 				}
 				if cfg.pollingJitterFactor != 0.5 {
 					t.Errorf("pollingJitterFactor = %v, want 0.5", cfg.pollingJitterFactor)
-				}
-				if cfg.sseConnectionTimeout != 3*time.Second {
-					t.Errorf("sseConnectionTimeout = %v, want 3s", cfg.sseConnectionTimeout)
 				}
 			},
 		},

@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -224,6 +225,82 @@ func TestDecryptAESGCM_WithAAD(t *testing.T) {
 			t.Errorf("expected ErrInvalidNonceSize, got %v", err)
 		}
 	})
+}
+
+func TestEncryptAES_CipherCreationError(t *testing.T) {
+	origNewCipher := newCipher
+	defer func() { newCipher = origNewCipher }()
+
+	newCipher = func(key []byte) (cipher.Block, error) {
+		return nil, errors.New("cipher creation failed")
+	}
+
+	key := make([]byte, AESKeySize)
+	nonce := make([]byte, AESNonceSize)
+	_, err := EncryptAES(key, []byte("test"), nonce)
+	if err == nil {
+		t.Error("expected error from cipher creation")
+	}
+	if err.Error() != "failed to create cipher: cipher creation failed" {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestEncryptAES_GCMCreationError(t *testing.T) {
+	origNewGCM := newGCM
+	defer func() { newGCM = origNewGCM }()
+
+	newGCM = func(c cipher.Block) (cipher.AEAD, error) {
+		return nil, errors.New("GCM creation failed")
+	}
+
+	key := make([]byte, AESKeySize)
+	nonce := make([]byte, AESNonceSize)
+	_, err := EncryptAES(key, []byte("test"), nonce)
+	if err == nil {
+		t.Error("expected error from GCM creation")
+	}
+	if err.Error() != "failed to create GCM: GCM creation failed" {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestDecryptAESGCM_CipherCreationError(t *testing.T) {
+	origNewCipher := newCipher
+	defer func() { newCipher = origNewCipher }()
+
+	newCipher = func(key []byte) (cipher.Block, error) {
+		return nil, errors.New("cipher creation failed")
+	}
+
+	key := make([]byte, AESKeySize)
+	nonce := make([]byte, AESNonceSize)
+	_, err := decryptAESGCM(key, nonce, nil, []byte("test"))
+	if err == nil {
+		t.Error("expected error from cipher creation")
+	}
+	if err.Error() != "cipher creation failed" {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestDecryptAESGCM_GCMCreationError(t *testing.T) {
+	origNewGCM := newGCM
+	defer func() { newGCM = origNewGCM }()
+
+	newGCM = func(c cipher.Block) (cipher.AEAD, error) {
+		return nil, errors.New("GCM creation failed")
+	}
+
+	key := make([]byte, AESKeySize)
+	nonce := make([]byte, AESNonceSize)
+	_, err := decryptAESGCM(key, nonce, nil, []byte("test"))
+	if err == nil {
+		t.Error("expected error from GCM creation")
+	}
+	if err.Error() != "GCM creation failed" {
+		t.Errorf("unexpected error: %v", err)
+	}
 }
 
 func BenchmarkEncryptAES(b *testing.B) {

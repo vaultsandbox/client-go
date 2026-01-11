@@ -25,7 +25,7 @@ type InboxInfo struct {
 type EventHandler func(ctx context.Context, event *api.SSEEvent) error
 
 // Strategy defines the interface for email delivery mechanisms.
-// Implementations include PollingStrategy, SSEStrategy, and AutoStrategy.
+// Implementations: [SSEStrategy], [PollingStrategy].
 //
 // The typical lifecycle is:
 //  1. Create a strategy with NewXxxStrategy(cfg)
@@ -88,11 +88,6 @@ type Config struct {
 	// poll intervals (as a fraction of the interval).
 	// If zero, defaults to DefaultPollingJitterFactor.
 	PollingJitterFactor float64
-
-	// SSEConnectionTimeout is the maximum time to wait for an SSE connection
-	// to be established before falling back to polling (when using auto mode).
-	// If zero, defaults to DefaultSSEConnectionTimeout.
-	SSEConnectionTimeout time.Duration
 }
 
 // Default polling configuration values.
@@ -101,6 +96,5 @@ const (
 	DefaultPollingMaxBackoff        = 30 * time.Second
 	DefaultPollingBackoffMultiplier = 1.5
 	DefaultPollingJitterFactor      = 0.3
-	DefaultSSEConnectionTimeout     = 5 * time.Second
 )
 

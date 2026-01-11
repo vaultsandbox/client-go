@@ -21,6 +21,7 @@ SKIP_UNIT=false
 SKIP_INTEGRATION=false
 SKIP_COVERAGE=false
 VERBOSE=false
+HTML_REPORT=false
 
 for arg in "$@"; do
     case $arg in
@@ -36,6 +37,9 @@ for arg in "$@"; do
         -v|--verbose)
             VERBOSE=true
             ;;
+        --html)
+            HTML_REPORT=true
+            ;;
         --help)
             echo "Usage: $0 [options]"
             echo ""
@@ -46,6 +50,7 @@ for arg in "$@"; do
             echo "  --skip-integration  Skip integration tests"
             echo "  --skip-coverage     Skip coverage collection"
             echo "  -v, --verbose       Verbose output"
+            echo "  --html              Open HTML coverage report in browser"
             echo "  --help              Show this help"
             exit 0
             ;;
@@ -60,8 +65,13 @@ if [ "$VERBOSE" = true ]; then
 fi
 
 if [ "$SKIP_COVERAGE" = false ]; then
-    CMD="$CMD -coverprofile=coverage.out -covermode=atomic -coverpkg=./..."
+    # Remove old coverage file to prevent stale data
+    rm -f coverage.out
+    # Use -count=1 to disable test caching (cache doesn't include coverage data)
+    CMD="$CMD -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg=./..."
 fi
+
+TAGS="testcoverage"
 
 if [ "$SKIP_INTEGRATION" = false ]; then
     if [ -z "$VAULTSANDBOX_API_KEY" ]; then
@@ -75,8 +85,11 @@ if [ "$SKIP_INTEGRATION" = false ]; then
         exit 1
     fi
     echo "Using API URL: $VAULTSANDBOX_URL"
-    CMD="$CMD -tags=integration -timeout 10m"
+    TAGS="$TAGS,integration"
+    CMD="$CMD -timeout 10m"
 fi
+
+CMD="$CMD -tags=$TAGS"
 
 CMD="$CMD ./..."
 
@@ -85,8 +98,21 @@ $CMD
 
 if [ "$SKIP_COVERAGE" = false ]; then
     echo ""
+    # Install go-ignore-cov if not available, then apply coverage:ignore comments
+    GOBIN="$(go env GOPATH)/bin"
+    if ! command -v go-ignore-cov &> /dev/null && [ ! -f "$GOBIN/go-ignore-cov" ]; then
+        echo "Installing go-ignore-cov..."
+        go install github.com/hexira/go-ignore-cov@latest
+    fi
+    "$GOBIN/go-ignore-cov" --file coverage.out --root "$PROJECT_DIR"
     echo "Coverage summary:"
     go tool cover -func=coverage.out | tail -1
-    echo ""
-    echo "To view HTML report: go tool cover -html=coverage.out"
+    if [ "$HTML_REPORT" = true ]; then
+        echo ""
+        echo "Opening HTML coverage report..."
+        go tool cover -html=coverage.out
+    else
+        echo ""
+        echo "To view HTML report: go tool cover -html=coverage.out"
+    fi
 fi

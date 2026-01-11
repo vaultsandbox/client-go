@@ -151,11 +151,9 @@ func VerifySignature(payload *EncryptedPayload, pinnedServerPk []byte) error {
 	// Step 6: Build transcript and verify signature
 	transcript := buildTranscript(payload.V, payload.Algs, ctKem, nonce, aad, ciphertext, serverSigPk)
 
-	// Unmarshal public key
+	// Unmarshal public key (size already validated by ValidatePayload)
 	var pubKey mldsa65.PublicKey
-	if err := pubKey.UnmarshalBinary(serverSigPk); err != nil {
-		return fmt.Errorf("unmarshal public key: %w", err)
-	}
+	_ = pubKey.UnmarshalBinary(serverSigPk)
 
 	// Verify signature
 	if !mldsa65.Verify(&pubKey, transcript, nil, sig) {

@@ -484,6 +484,331 @@ func TestValidateServerPublicKey(t *testing.T) {
 	})
 }
 
+func TestValidatePayload_InvalidVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		version int
+	}{
+		{"version 0", 0},
+		{"version 2", 2},
+		{"version 255", 255},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := &EncryptedPayload{
+				V: tt.version,
+				Algs: AlgorithmSuite{
+					KEM:  ExpectedKEM,
+					Sig:  ExpectedSig,
+					AEAD: ExpectedAEAD,
+					KDF:  ExpectedKDF,
+				},
+				CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+				Nonce:       ToBase64URL(make([]byte, AESNonceSize)),
+				AAD:         ToBase64URL([]byte("aad")),
+				Ciphertext:  ToBase64URL([]byte("ct")),
+				ServerSigPk: ToBase64URL(make([]byte, MLDSAPublicKeySize)),
+				Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+			}
+			err := ValidatePayload(payload)
+			if err == nil {
+				t.Errorf("expected error for version %d", tt.version)
+			}
+			if !errors.Is(err, ErrInvalidPayload) {
+				t.Errorf("expected ErrInvalidPayload, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_InvalidAlgorithms(t *testing.T) {
+	validPayload := func() *EncryptedPayload {
+		return &EncryptedPayload{
+			V: 1,
+			Algs: AlgorithmSuite{
+				KEM:  ExpectedKEM,
+				Sig:  ExpectedSig,
+				AEAD: ExpectedAEAD,
+				KDF:  ExpectedKDF,
+			},
+			CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+			Nonce:       ToBase64URL(make([]byte, AESNonceSize)),
+			AAD:         ToBase64URL([]byte("aad")),
+			Ciphertext:  ToBase64URL([]byte("ct")),
+			ServerSigPk: ToBase64URL(make([]byte, MLDSAPublicKeySize)),
+			Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+		}
+	}
+
+	tests := []struct {
+		name   string
+		modify func(*EncryptedPayload)
+	}{
+		{
+			name: "invalid KEM",
+			modify: func(p *EncryptedPayload) {
+				p.Algs.KEM = "INVALID-KEM"
+			},
+		},
+		{
+			name: "invalid Sig",
+			modify: func(p *EncryptedPayload) {
+				p.Algs.Sig = "INVALID-SIG"
+			},
+		},
+		{
+			name: "invalid AEAD",
+			modify: func(p *EncryptedPayload) {
+				p.Algs.AEAD = "INVALID-AEAD"
+			},
+		},
+		{
+			name: "invalid KDF",
+			modify: func(p *EncryptedPayload) {
+				p.Algs.KDF = "INVALID-KDF"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := validPayload()
+			tt.modify(payload)
+			err := ValidatePayload(payload)
+			if err == nil {
+				t.Error("expected error for invalid algorithm")
+			}
+			if !errors.Is(err, ErrInvalidAlgorithm) {
+				t.Errorf("expected ErrInvalidAlgorithm, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_InvalidBase64Encoding(t *testing.T) {
+	validPayload := func() *EncryptedPayload {
+		return &EncryptedPayload{
+			V: 1,
+			Algs: AlgorithmSuite{
+				KEM:  ExpectedKEM,
+				Sig:  ExpectedSig,
+				AEAD: ExpectedAEAD,
+				KDF:  ExpectedKDF,
+			},
+			CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+			Nonce:       ToBase64URL(make([]byte, AESNonceSize)),
+			AAD:         ToBase64URL([]byte("aad")),
+			Ciphertext:  ToBase64URL([]byte("ct")),
+			ServerSigPk: ToBase64URL(make([]byte, MLDSAPublicKeySize)),
+			Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+		}
+	}
+
+	tests := []struct {
+		name   string
+		modify func(*EncryptedPayload)
+	}{
+		{
+			name: "invalid ct_kem encoding",
+			modify: func(p *EncryptedPayload) {
+				p.CtKem = "!!!invalid-base64!!!"
+			},
+		},
+		{
+			name: "invalid nonce encoding",
+			modify: func(p *EncryptedPayload) {
+				p.Nonce = "!!!invalid-base64!!!"
+			},
+		},
+		{
+			name: "invalid sig encoding",
+			modify: func(p *EncryptedPayload) {
+				p.Sig = "!!!invalid-base64!!!"
+			},
+		},
+		{
+			name: "invalid server_sig_pk encoding",
+			modify: func(p *EncryptedPayload) {
+				p.ServerSigPk = "!!!invalid-base64!!!"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := validPayload()
+			tt.modify(payload)
+			err := ValidatePayload(payload)
+			if err == nil {
+				t.Error("expected error for invalid base64 encoding")
+			}
+			if !errors.Is(err, ErrInvalidPayload) {
+				t.Errorf("expected ErrInvalidPayload, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_InvalidSizes(t *testing.T) {
+	validPayload := func() *EncryptedPayload {
+		return &EncryptedPayload{
+			V: 1,
+			Algs: AlgorithmSuite{
+				KEM:  ExpectedKEM,
+				Sig:  ExpectedSig,
+				AEAD: ExpectedAEAD,
+				KDF:  ExpectedKDF,
+			},
+			CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+			Nonce:       ToBase64URL(make([]byte, AESNonceSize)),
+			AAD:         ToBase64URL([]byte("aad")),
+			Ciphertext:  ToBase64URL([]byte("ct")),
+			ServerSigPk: ToBase64URL(make([]byte, MLDSAPublicKeySize)),
+			Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+		}
+	}
+
+	tests := []struct {
+		name   string
+		modify func(*EncryptedPayload)
+	}{
+		{
+			name: "ct_kem wrong size",
+			modify: func(p *EncryptedPayload) {
+				p.CtKem = ToBase64URL(make([]byte, 100)) // wrong size
+			},
+		},
+		{
+			name: "nonce wrong size",
+			modify: func(p *EncryptedPayload) {
+				p.Nonce = ToBase64URL(make([]byte, 8)) // wrong size
+			},
+		},
+		{
+			name: "sig wrong size",
+			modify: func(p *EncryptedPayload) {
+				p.Sig = ToBase64URL(make([]byte, 100)) // wrong size
+			},
+		},
+		{
+			name: "server_sig_pk wrong size",
+			modify: func(p *EncryptedPayload) {
+				p.ServerSigPk = ToBase64URL(make([]byte, 100)) // wrong size
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := validPayload()
+			tt.modify(payload)
+			err := ValidatePayload(payload)
+			if err == nil {
+				t.Error("expected error for invalid size")
+			}
+			if !errors.Is(err, ErrInvalidSize) {
+				t.Errorf("expected ErrInvalidSize, got %v", err)
+			}
+		})
+	}
+}
+
+func TestVerifySignature_InvalidAADBase64(t *testing.T) {
+	pub, _, err := mldsa65.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubBytes, _ := pub.MarshalBinary()
+
+	payload := &EncryptedPayload{
+		V: 1,
+		Algs: AlgorithmSuite{
+			KEM:  ExpectedKEM,
+			Sig:  ExpectedSig,
+			AEAD: ExpectedAEAD,
+			KDF:  ExpectedKDF,
+		},
+		CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+		Nonce:       ToBase64URL(make([]byte, AESNonceSize)),
+		AAD:         "!!!invalid-base64!!!",
+		Ciphertext:  ToBase64URL([]byte("ct")),
+		ServerSigPk: ToBase64URL(pubBytes),
+		Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+	}
+
+	err = VerifySignature(payload, pubBytes)
+	if err == nil {
+		t.Error("expected error for invalid AAD base64")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("decode aad")) {
+		t.Errorf("expected error about decoding aad, got: %v", err)
+	}
+}
+
+func TestVerifySignature_InvalidCiphertextBase64(t *testing.T) {
+	pub, _, err := mldsa65.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubBytes, _ := pub.MarshalBinary()
+
+	payload := &EncryptedPayload{
+		V: 1,
+		Algs: AlgorithmSuite{
+			KEM:  ExpectedKEM,
+			Sig:  ExpectedSig,
+			AEAD: ExpectedAEAD,
+			KDF:  ExpectedKDF,
+		},
+		CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+		Nonce:       ToBase64URL(make([]byte, AESNonceSize)),
+		AAD:         ToBase64URL([]byte("aad")),
+		Ciphertext:  "!!!invalid-base64!!!",
+		ServerSigPk: ToBase64URL(pubBytes),
+		Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+	}
+
+	err = VerifySignature(payload, pubBytes)
+	if err == nil {
+		t.Error("expected error for invalid ciphertext base64")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("decode ciphertext")) {
+		t.Errorf("expected error about decoding ciphertext, got: %v", err)
+	}
+}
+
+func TestVerifySignature_ServerKeyLengthMismatch(t *testing.T) {
+	pub, _, err := mldsa65.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubBytes, _ := pub.MarshalBinary()
+
+	payload := &EncryptedPayload{
+		V: 1,
+		Algs: AlgorithmSuite{
+			KEM:  ExpectedKEM,
+			Sig:  ExpectedSig,
+			AEAD: ExpectedAEAD,
+			KDF:  ExpectedKDF,
+		},
+		CtKem:       ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+		Nonce:       ToBase64URL(make([]byte, AESNonceSize)),
+		AAD:         ToBase64URL([]byte("aad")),
+		Ciphertext:  ToBase64URL([]byte("ct")),
+		ServerSigPk: ToBase64URL(pubBytes),
+		Sig:         ToBase64URL(make([]byte, MLDSASignatureSize)),
+	}
+
+	// Pass a pinned key with different length
+	shortPinnedKey := make([]byte, 100)
+	err = VerifySignature(payload, shortPinnedKey)
+	if !errors.Is(err, ErrServerKeyMismatch) {
+		t.Errorf("expected ErrServerKeyMismatch for length mismatch, got %v", err)
+	}
+}
+
 func BenchmarkVerify(b *testing.B) {
 	pub, priv, _ := mldsa65.GenerateKey(nil)
 	pubBytes, _ := pub.MarshalBinary()

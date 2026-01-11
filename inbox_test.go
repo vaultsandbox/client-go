@@ -141,6 +141,30 @@ func TestExportedInbox_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "missing server sig pk",
+			data: &ExportedInbox{
+				Version:      ExportVersion,
+				EmailAddress: "test@example.com",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  "",
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid base64 server sig pk",
+			data: &ExportedInbox{
+				Version:      ExportVersion,
+				EmailAddress: "test@example.com",
+				ExpiresAt:    time.Now().Add(time.Hour),
+				InboxHash:    "hash123",
+				ServerSigPk:  "!!!invalid base64!!!",
+				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+			},
+			wantErr: true,
+		},
+		{
 			name: "zero expires at",
 			data: &ExportedInbox{
 				Version:      ExportVersion,

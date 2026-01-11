@@ -10,8 +10,6 @@ import (
 type DeliveryStrategy string
 
 const (
-	// StrategyAuto tries SSE first, falls back to polling.
-	StrategyAuto DeliveryStrategy = "auto"
 	// StrategySSE uses Server-Sent Events for real-time push notifications.
 	StrategySSE DeliveryStrategy = "sse"
 	// StrategyPolling uses periodic API calls with exponential backoff.
@@ -37,7 +35,6 @@ type clientConfig struct {
 	pollingMaxBackoff        time.Duration
 	pollingBackoffMultiplier float64
 	pollingJitterFactor      float64
-	sseConnectionTimeout     time.Duration
 
 	// Error callback for background sync failures
 	onSyncError func(error)
@@ -142,11 +139,6 @@ type PollingConfig struct {
 	// JitterFactor adds randomness to prevent synchronized polling.
 	// Default: 0.3 (30%)
 	JitterFactor float64
-
-	// SSEConnectionTimeout is how long to wait for SSE before falling back to polling.
-	// Only applies when using StrategyAuto.
-	// Default: 5 seconds
-	SSEConnectionTimeout time.Duration
 }
 
 // WithPollingConfig sets all polling-related options at once.
@@ -173,9 +165,6 @@ func WithPollingConfig(cfg PollingConfig) Option {
 		}
 		if cfg.JitterFactor > 0 {
 			c.pollingJitterFactor = cfg.JitterFactor
-		}
-		if cfg.SSEConnectionTimeout > 0 {
-			c.sseConnectionTimeout = cfg.SSEConnectionTimeout
 		}
 	}
 }

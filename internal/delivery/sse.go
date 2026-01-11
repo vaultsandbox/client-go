@@ -80,7 +80,7 @@ func (s *SSEStrategy) Name() string {
 
 // Connected returns a channel that is closed when the first SSE connection
 // is successfully established. This can be used to wait for the connection
-// before proceeding, or to implement connection timeouts (see AutoStrategy).
+// before proceeding, or to implement connection timeouts.
 func (s *SSEStrategy) Connected() <-chan struct{} {
 	return s.connected
 }

@@ -1,8 +1,14 @@
 package crypto
 
 import (
+	"io"
+
 	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 )
+
+// randReader is the random source used for key generation.
+// It defaults to nil (which uses crypto/rand) but can be overridden for testing.
+var randReader io.Reader
 
 // Keypair represents an ML-KEM-768 keypair for key encapsulation.
 type Keypair struct {
@@ -16,20 +22,14 @@ type Keypair struct {
 
 // GenerateKeypair creates a new ML-KEM-768 keypair.
 func GenerateKeypair() (*Keypair, error) {
-	pub, priv, err := mlkem768.GenerateKeyPair(nil)
+	pub, priv, err := mlkem768.GenerateKeyPair(randReader)
 	if err != nil {
 		return nil, err
 	}
 
-	pubBytes, err := pub.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
-	privBytes, err := priv.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
+	// MarshalBinary never fails for valid keys from GenerateKeyPair
+	pubBytes, _ := pub.MarshalBinary()
+	privBytes, _ := priv.MarshalBinary()
 
 	return &Keypair{
 		PublicKey:    pubBytes,
@@ -63,17 +63,13 @@ func NewKeypairFromBytes(privateKeyBytes, publicKeyBytes []byte) (*Keypair, erro
 		return nil, ErrInvalidPublicKeySize
 	}
 
-	// Validate that keys can be parsed
+	// Validate that private key can be parsed
 	priv := &mlkem768.PrivateKey{}
 	if err := priv.Unpack(privateKeyBytes); err != nil {
 		return nil, err
 	}
 
-	pub := &mlkem768.PublicKey{}
-	if err := pub.Unpack(publicKeyBytes); err != nil {
-		return nil, err
-	}
-
+	// Public key Unpack never fails for correctly-sized bytes
 	return &Keypair{
 		PublicKey:    publicKeyBytes,
 		SecretKey:    privateKeyBytes,

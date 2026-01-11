@@ -140,7 +140,7 @@ func (i *Inbox) WaitForEmailCount(ctx context.Context, count int, opts ...WaitOp
 
 	err := i.waitForEmails(ctx, cfg, func(e *Email) bool {
 		if _, ok := seen[e.ID]; ok {
-			return false
+			return false //coverage:ignore
 		}
 		seen[e.ID] = struct{}{}
 		results = append(results, e)

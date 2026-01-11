@@ -2,9 +2,13 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"encoding/json"
 	"testing"
+
+	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 )
 
 func TestDeriveKey(t *testing.T) {
@@ -57,6 +61,19 @@ func TestDeriveKey_Deterministic(t *testing.T) {
 
 	if !bytes.Equal(key1, key2) {
 		t.Error("DeriveKey not deterministic: same inputs produced different outputs")
+	}
+}
+
+func TestDeriveKey_ExceedsMaxLength(t *testing.T) {
+	secret := []byte("test secret")
+	salt := []byte("test salt")
+	info := []byte("test info")
+
+	// HKDF-SHA-512 can produce at most 255 * 64 = 16320 bytes
+	// Requesting more should fail
+	_, err := DeriveKey(secret, salt, info, 16321)
+	if err == nil {
+		t.Error("expected error when requesting more than HKDF max output")
 	}
 }
 
@@ -171,6 +188,24 @@ func TestBase64Bytes_UnmarshalJSON(t *testing.T) {
 			expected: []byte("test"),
 			wantErr:  false,
 		},
+		{
+			name:     "url-safe base64 with special chars",
+			input:    `"PDw_Pj4-"`, // "<<?>>>" encoded with URL-safe base64 (has - and _)
+			expected: []byte("<<?>>>"),
+			wantErr:  false,
+		},
+		{
+			name:     "invalid base64 both standard and url-safe",
+			input:    `"!!!totally-invalid-base64!!!"`,
+			expected: nil,
+			wantErr:  true,
+		},
+		{
+			name:     "raw json bytes (unquoted)",
+			input:    `123`,
+			expected: []byte("123"),
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -252,6 +287,102 @@ func TestDecryptedAttachment_JSONUnmarshal_OptionalFields(t *testing.T) {
 	}
 }
 
+
+func TestDecrypt_Success(t *testing.T) {
+	// Generate a keypair for testing
+	kp, err := GenerateKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Prepare the plaintext
+	plaintext := []byte(`{"from":"test@example.com","subject":"Test"}`)
+
+	// Create an encrypted payload manually using the crypto primitives
+	// 1. Encapsulate to get shared secret and KEM ciphertext
+	var pubKey mlkem768.PublicKey
+	pubKey.Unpack(kp.PublicKey)
+
+	ctKem := make([]byte, MLKEMCiphertextSize)
+	sharedSecret := make([]byte, MLKEMSharedKeySize)
+	pubKey.EncapsulateTo(ctKem, sharedSecret, nil)
+
+	// 2. Derive AES key using the same method as deriveKey
+	aad := []byte("test-aad")
+	aesKey := deriveKey(sharedSecret, aad, ctKem)
+
+	// 3. Encrypt with AES-GCM
+	nonce := make([]byte, AESNonceSize)
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatal(err)
+	}
+
+	block, _ := aes.NewCipher(aesKey)
+	gcm, _ := cipher.NewGCM(block)
+	ciphertext := gcm.Seal(nil, nonce, plaintext, aad)
+
+	// 4. Create the encrypted payload
+	payload := &EncryptedPayload{
+		V:          1,
+		CtKem:      ToBase64URL(ctKem),
+		Nonce:      ToBase64URL(nonce),
+		AAD:        ToBase64URL(aad),
+		Ciphertext: ToBase64URL(ciphertext),
+	}
+
+	// 5. Decrypt
+	result, err := Decrypt(payload, kp)
+	if err != nil {
+		t.Fatalf("Decrypt() error = %v", err)
+	}
+
+	if !bytes.Equal(result, plaintext) {
+		t.Errorf("Decrypt() = %s, want %s", string(result), string(plaintext))
+	}
+}
+
+func TestDecrypt_InvalidPrivateKey(t *testing.T) {
+	// Create a keypair with invalid secret key
+	invalidKp := &Keypair{
+		SecretKey: make([]byte, 10), // Wrong size - will fail Unpack
+		PublicKey: make([]byte, MLKEMPublicKeySize),
+	}
+
+	payload := &EncryptedPayload{
+		V:          1,
+		CtKem:      ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+		Nonce:      ToBase64URL(make([]byte, AESNonceSize)),
+		AAD:        ToBase64URL([]byte("aad")),
+		Ciphertext: ToBase64URL(make([]byte, 100)),
+	}
+
+	_, err := Decrypt(payload, invalidKp)
+	if err == nil {
+		t.Error("expected error for invalid private key")
+	}
+}
+
+func TestDecrypt_DecryptionFailed(t *testing.T) {
+	// Generate a valid keypair
+	kp, err := GenerateKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a payload with mismatched ciphertext (wrong key or tampered data)
+	payload := &EncryptedPayload{
+		V:          1,
+		CtKem:      ToBase64URL(make([]byte, MLKEMCiphertextSize)),
+		Nonce:      ToBase64URL(make([]byte, AESNonceSize)),
+		AAD:        ToBase64URL([]byte("aad")),
+		Ciphertext: ToBase64URL(make([]byte, 100)), // Invalid ciphertext
+	}
+
+	_, err = Decrypt(payload, kp)
+	if err == nil {
+		t.Error("expected decryption error for invalid ciphertext")
+	}
+}
 
 func TestDecrypt_InvalidBase64(t *testing.T) {
 	kp, _ := GenerateKeypair()

@@ -6,6 +6,12 @@ import (
 	"fmt"
 )
 
+// Package-level variables for testing error paths.
+var (
+	newCipher = aes.NewCipher
+	newGCM    = cipher.NewGCM
+)
+
 // decryptAESGCM decrypts data using AES-256-GCM with authenticated additional data.
 //
 // Parameters:
@@ -24,12 +30,12 @@ func decryptAESGCM(key, nonce, aad, ciphertext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w: got %d, want %d", ErrInvalidNonceSize, len(nonce), AESNonceSize)
 	}
 
-	block, err := aes.NewCipher(key)
+	block, err := newCipher(key)
 	if err != nil {
 		return nil, err
 	}
 
-	aesGCM, err := cipher.NewGCM(block)
+	aesGCM, err := newGCM(block)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +95,12 @@ func EncryptAES(key, plaintext, nonce []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w: got %d, want %d", ErrInvalidNonceSize, len(nonce), AESNonceSize)
 	}
 
-	block, err := aes.NewCipher(key)
+	block, err := newCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := newGCM(block)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GCM: %w", err)
 	}

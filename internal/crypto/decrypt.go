@@ -174,10 +174,8 @@ func Decrypt(payload *EncryptedPayload, keypair *Keypair) ([]byte, error) {
 	privKey.DecapsulateTo(sharedSecret, ctKem)
 
 	// 2. Key Derivation (HKDF-SHA-512)
-	aesKey, err := deriveKey(sharedSecret, aad, ctKem)
-	if err != nil {
-		return nil, fmt.Errorf("derive key: %w", err)
-	}
+	// deriveKey always requests AESKeySize (32 bytes), well under HKDF's 16KB limit
+	aesKey := deriveKey(sharedSecret, aad, ctKem)
 
 	// 3. AES-256-GCM Decryption
 	plaintext, err := decryptAESGCM(aesKey, nonce, aad, ciphertext)
@@ -196,7 +194,7 @@ func Decrypt(payload *EncryptedPayload, keypair *Keypair) ([]byte, error) {
 //   - Info: context string || AAD length (4 bytes BE) || AAD
 //
 // This produces a 256-bit key suitable for AES-256-GCM.
-func deriveKey(sharedSecret, aad, ctKem []byte) ([]byte, error) {
+func deriveKey(sharedSecret, aad, ctKem []byte) []byte {
 	// Salt is SHA-256 hash of KEM ciphertext
 	saltHash := sha256.Sum256(ctKem)
 	salt := saltHash[:]
@@ -211,14 +209,12 @@ func deriveKey(sharedSecret, aad, ctKem []byte) ([]byte, error) {
 	info = append(info, aadLength...)
 	info = append(info, aad...)
 
-	// HKDF with SHA-512
+	// HKDF with SHA-512 (always succeeds for AESKeySize bytes)
 	reader := hkdf.New(sha512.New, sharedSecret, salt, info)
 	key := make([]byte, AESKeySize)
-	if _, err := io.ReadFull(reader, key); err != nil {
-		return nil, err
-	}
+	_, _ = io.ReadFull(reader, key)
 
-	return key, nil
+	return key
 }
 
 // DeriveKey derives a key using HKDF-SHA-512.

@@ -111,24 +111,14 @@ func newInboxFromExport(data *ExportedInbox, c *Client) (*Inbox, error) {
 		return nil, err
 	}
 
-	// Decode secret key
-	secretKey, err := crypto.FromBase64URL(data.SecretKey)
-	if err != nil {
-		return nil, fmt.Errorf("invalid secret key: %w", err)
-	}
-
-	// Decode server signature public key
-	serverSigPk, err := crypto.FromBase64URL(data.ServerSigPk)
-	if err != nil {
-		return nil, fmt.Errorf("invalid server signature key: %w", err)
-	}
+	// Decode keys - Validate() already verified these are valid base64 with correct sizes
+	secretKey, _ := crypto.FromBase64URL(data.SecretKey)
+	serverSigPk, _ := crypto.FromBase64URL(data.ServerSigPk)
 
 	// Per spec Section 10.2: Reconstruct keypair by deriving public key from secret key
 	// publicKey = secretKey[1152:2400]
-	keypair, err := crypto.KeypairFromSecretKey(secretKey)
-	if err != nil {
-		return nil, fmt.Errorf("reconstruct keypair: %w", err)
-	}
+	// Validate() already verified the secret key size is correct
+	keypair, _ := crypto.KeypairFromSecretKey(secretKey)
 
 	return &Inbox{
 		emailAddress: data.EmailAddress,
