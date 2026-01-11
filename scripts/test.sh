@@ -22,6 +22,7 @@ SKIP_INTEGRATION=false
 SKIP_COVERAGE=false
 VERBOSE=false
 HTML_REPORT=false
+RACE=false
 
 for arg in "$@"; do
     case $arg in
@@ -40,6 +41,9 @@ for arg in "$@"; do
         --html)
             HTML_REPORT=true
             ;;
+        --race)
+            RACE=true
+            ;;
         --help)
             echo "Usage: $0 [options]"
             echo ""
@@ -51,6 +55,7 @@ for arg in "$@"; do
             echo "  --skip-coverage     Skip coverage collection"
             echo "  -v, --verbose       Verbose output"
             echo "  --html              Open HTML coverage report in browser"
+            echo "  --race              Enable race detector"
             echo "  --help              Show this help"
             exit 0
             ;;
@@ -62,6 +67,10 @@ CMD="go test"
 
 if [ "$VERBOSE" = true ]; then
     CMD="$CMD -v"
+fi
+
+if [ "$RACE" = true ]; then
+    CMD="$CMD -race"
 fi
 
 if [ "$SKIP_COVERAGE" = false ]; then

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1136,6 +1137,7 @@ func TestClient_SyncInbox_WithMockServer(t *testing.T) {
 func TestClient_SyncInbox_OnSyncError(t *testing.T) {
 	var errorCount atomic.Int32
 	var receivedError error
+	var mu sync.Mutex
 
 	// Create a mock server that returns errors for sync
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1171,7 +1173,9 @@ func TestClient_SyncInbox_OnSyncError(t *testing.T) {
 		WithBaseURL(server.URL),
 		WithOnSyncError(func(err error) {
 			errorCount.Add(1)
+			mu.Lock()
 			receivedError = err
+			mu.Unlock()
 		}),
 	)
 	if err != nil {
@@ -1193,9 +1197,11 @@ func TestClient_SyncInbox_OnSyncError(t *testing.T) {
 	if errorCount.Load() == 0 {
 		t.Error("onSyncError callback was not called")
 	}
+	mu.Lock()
 	if receivedError == nil {
 		t.Error("onSyncError callback received nil error")
 	}
+	mu.Unlock()
 }
 
 // TestClient_SyncInbox_MetadataError tests error handling when GetEmailsMetadataOnly fails
