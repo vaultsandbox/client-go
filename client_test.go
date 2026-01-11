@@ -2070,7 +2070,7 @@ func TestClient_WatchInboxesFunc_EventDelivery(t *testing.T) {
 	select {
 	case event := <-receivedEvent:
 		if event == nil {
-			t.Error("received nil event")
+			t.Fatal("received nil event")
 		}
 		if event.Email.ID != "email-123" {
 			t.Errorf("event email ID = %q, want %q", event.Email.ID, "email-123")
