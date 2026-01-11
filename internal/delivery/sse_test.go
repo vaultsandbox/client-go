@@ -391,7 +391,7 @@ func TestSSEStrategy_MaxReconnectAttempts(t *testing.T) {
 	s := NewSSEStrategy(Config{})
 
 	// Set attempts to just below the max so we hit the threshold quickly
-	s.attempts = SSEMaxReconnectAttempts - 1
+	s.attempts.Store(SSEMaxReconnectAttempts - 1)
 	s.reconnectWait = 1 * time.Millisecond // Speed up test
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -410,8 +410,8 @@ func TestSSEStrategy_MaxReconnectAttempts(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify attempts reached max
-	if s.attempts < SSEMaxReconnectAttempts {
-		t.Errorf("attempts = %d, want >= %d", s.attempts, SSEMaxReconnectAttempts)
+	if s.attempts.Load() < SSEMaxReconnectAttempts {
+		t.Errorf("attempts = %d, want >= %d", s.attempts.Load(), SSEMaxReconnectAttempts)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/vaultsandbox/client-go/internal/api"
@@ -52,7 +53,7 @@ type SSEStrategy struct {
 	connCancel    context.CancelFunc   // Cancels the current connection (for reconnection).
 	mu            sync.RWMutex         // Protects inboxHashes, handler, and connCancel.
 	reconnectWait time.Duration        // Base interval for reconnection backoff.
-	attempts      int                  // Consecutive failed connection attempts.
+	attempts      atomic.Int32         // Consecutive failed connection attempts.
 	started       bool                 // Whether the strategy is active.
 	connected     chan struct{}        // Closed when first connection succeeds.
 	connectedOnce sync.Once            // Ensures connected is closed only once.
@@ -239,18 +240,18 @@ func (s *SSEStrategy) connectLoop(ctx context.Context) {
 		// Check if this was a context.Canceled error from AddInbox/RemoveInbox
 		// triggering a reconnection - in that case, reconnect immediately without backoff
 		if errors.Is(err, context.Canceled) {
-			s.attempts = 0
+			s.attempts.Store(0)
 			continue
 		}
 
 		// Handle reconnection with backoff for real errors
-		s.attempts++
-		if s.attempts >= SSEMaxReconnectAttempts {
+		attempts := s.attempts.Add(1)
+		if attempts >= SSEMaxReconnectAttempts {
 			// Max attempts reached, give up
 			return
 		}
 
-		wait := s.reconnectWait * time.Duration(1<<(s.attempts-1))
+		wait := s.reconnectWait * time.Duration(1<<(attempts-1))
 		select {
 		case <-ctx.Done():
 			return
@@ -308,7 +309,7 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 	defer resp.Body.Close()
 
 	// Reset attempts on successful connection
-	s.attempts = 0
+	s.attempts.Store(0)
 
 	// Signal that connection is established
 	s.connectedOnce.Do(func() {
