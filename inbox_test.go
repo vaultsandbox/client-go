@@ -101,6 +101,7 @@ func TestExportedInbox_Validate(t *testing.T) {
 				InboxHash:    "hash123",
 				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
 				SecretKey:    "",
+				Encrypted:    true, // Key validation only runs for encrypted inboxes
 			},
 			wantErr: true,
 		},
@@ -113,6 +114,7 @@ func TestExportedInbox_Validate(t *testing.T) {
 				InboxHash:    "hash123",
 				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
 				SecretKey:    crypto.ToBase64URL([]byte("too short")),
+				Encrypted:    true, // Key validation only runs for encrypted inboxes
 			},
 			wantErr: true,
 		},
@@ -125,6 +127,7 @@ func TestExportedInbox_Validate(t *testing.T) {
 				InboxHash:    "hash123",
 				ServerSigPk:  crypto.ToBase64URL(make([]byte, crypto.MLDSAPublicKeySize)),
 				SecretKey:    "!!!invalid base64!!!",
+				Encrypted:    true, // Key validation only runs for encrypted inboxes
 			},
 			wantErr: true,
 		},
@@ -137,6 +140,7 @@ func TestExportedInbox_Validate(t *testing.T) {
 				InboxHash:    "hash123",
 				ServerSigPk:  crypto.ToBase64URL([]byte("too short")),
 				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+				Encrypted:    true, // Key validation only runs for encrypted inboxes
 			},
 			wantErr: true,
 		},
@@ -149,6 +153,7 @@ func TestExportedInbox_Validate(t *testing.T) {
 				InboxHash:    "hash123",
 				ServerSigPk:  "",
 				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+				Encrypted:    true, // Key validation only runs for encrypted inboxes
 			},
 			wantErr: true,
 		},
@@ -161,6 +166,7 @@ func TestExportedInbox_Validate(t *testing.T) {
 				InboxHash:    "hash123",
 				ServerSigPk:  "!!!invalid base64!!!",
 				SecretKey:    crypto.ToBase64URL(kp.SecretKey),
+				Encrypted:    true, // Key validation only runs for encrypted inboxes
 			},
 			wantErr: true,
 		},
@@ -231,6 +237,7 @@ func TestInbox_Export(t *testing.T) {
 		inboxHash:    "hash123abc",
 		serverSigPk:  serverSigPk,
 		keypair:      kp,
+		encrypted:    true, // Set as encrypted inbox to export keys
 	}
 
 	exported := inbox.Export()
@@ -362,7 +369,7 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 			"spf": {"result": "pass", "domain": "example.com"},
 			"dkim": [{"result": "pass", "domain": "example.com", "selector": "default"}],
 			"dmarc": {"result": "pass", "policy": "reject"},
-			"reverseDns": {"verified": true, "hostname": "mail.example.com"}
+			"reverseDns": {"result": "pass", "hostname": "mail.example.com"}
 		}`)
 
 		decrypted := &crypto.DecryptedEmail{
@@ -402,8 +409,8 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 		if email.AuthResults.ReverseDNS == nil {
 			t.Fatal("ReverseDNS should not be nil")
 		}
-		if !email.AuthResults.ReverseDNS.Verified {
-			t.Error("ReverseDNS.Verified = false, want true")
+		if email.AuthResults.ReverseDNS.Result != "pass" {
+			t.Errorf("ReverseDNS.Result = %s, want pass", email.AuthResults.ReverseDNS.Result)
 		}
 	})
 

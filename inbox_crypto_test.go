@@ -1,6 +1,7 @@
 package vaultsandbox
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -8,6 +9,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -228,33 +231,40 @@ func TestConvertDecryptedEmail_WithAttachments(t *testing.T) {
 
 func TestDecryptMetadata_NilEncryptedMetadata(t *testing.T) {
 	inbox := &Inbox{}
-	rawEmail := &api.RawEmail{
-		ID:                "email-123",
-		EncryptedMetadata: nil,
-	}
+	// When EncryptedMetadata is nil, the email is treated as plain format
+	// Testing both cases:
+	t.Run("plain email with no metadata", func(t *testing.T) {
+		rawEmail := &api.RawEmail{
+			ID:                "email-123",
+			EncryptedMetadata: nil,
+			Metadata:          "", // No plain metadata either
+		}
 
-	_, err := inbox.decryptMetadata(rawEmail)
-	if err == nil {
-		t.Error("expected error for nil encrypted metadata")
-	}
-	if err.Error() != "email has no encrypted metadata" {
-		t.Errorf("error = %q, want 'email has no encrypted metadata'", err.Error())
-	}
+		_, err := inbox.decryptMetadata(rawEmail)
+		if err == nil {
+			t.Error("expected error for plain email with no metadata")
+		}
+		if err.Error() != "plain email has no metadata" {
+			t.Errorf("error = %q, want 'plain email has no metadata'", err.Error())
+		}
+	})
 }
 
 func TestDecryptEmail_NilEncryptedMetadata(t *testing.T) {
 	inbox := &Inbox{}
+	// When EncryptedMetadata is nil, the email is treated as plain format
 	rawEmail := &api.RawEmail{
 		ID:                "email-123",
 		EncryptedMetadata: nil,
+		Metadata:          "", // No plain metadata either
 	}
 
 	_, err := inbox.decryptEmail(rawEmail)
 	if err == nil {
-		t.Error("expected error for nil encrypted metadata")
+		t.Error("expected error for plain email with no metadata")
 	}
-	if err.Error() != "email has no encrypted metadata" {
-		t.Errorf("error = %q, want 'email has no encrypted metadata'", err.Error())
+	if err.Error() != "plain email has no metadata" {
+		t.Errorf("error = %q, want 'plain email has no metadata'", err.Error())
 	}
 }
 
@@ -894,5 +904,624 @@ func TestVerifyAndDecrypt_SignatureError(t *testing.T) {
 	var sigErr *SignatureVerificationError
 	if !errors.As(err, &sigErr) {
 		t.Errorf("expected SignatureVerificationError, got %T: %v", err, err)
+	}
+}
+
+// =============================================================================
+// Plain Email Tests (non-encrypted)
+// =============================================================================
+
+func TestDecodePlainEmail_Success(t *testing.T) {
+	inbox := &Inbox{}
+
+	// Create Base64-encoded metadata
+	metadata := map[string]interface{}{
+		"from":       "sender@example.com",
+		"to":         "recipient@example.com",
+		"subject":    "Test Plain Email",
+		"receivedAt": "2024-01-15T10:30:00Z",
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	metadataB64 := crypto.ToBase64URL(metadataJSON)
+
+	apiReceivedAt := time.Now().Truncate(time.Second)
+	rawEmail := &api.RawEmail{
+		ID:         "plain-email-123",
+		ReceivedAt: apiReceivedAt,
+		IsRead:     true,
+		Metadata:   metadataB64,
+		// No Parsed content - metadata only
+	}
+
+	result, err := inbox.decodePlainEmail(rawEmail)
+	if err != nil {
+		t.Fatalf("decodePlainEmail() error = %v", err)
+	}
+
+	if result.ID != "plain-email-123" {
+		t.Errorf("ID = %s, want plain-email-123", result.ID)
+	}
+	if result.From != "sender@example.com" {
+		t.Errorf("From = %s, want sender@example.com", result.From)
+	}
+	if result.Subject != "Test Plain Email" {
+		t.Errorf("Subject = %s, want Test Plain Email", result.Subject)
+	}
+	if result.IsRead != true {
+		t.Error("IsRead = false, want true")
+	}
+
+	// ReceivedAt should be from metadata
+	expected, _ := time.Parse(time.RFC3339, "2024-01-15T10:30:00Z")
+	if !result.ReceivedAt.Equal(expected) {
+		t.Errorf("ReceivedAt = %v, want %v", result.ReceivedAt, expected)
+	}
+}
+
+func TestDecodePlainEmail_WithParsedContent(t *testing.T) {
+	inbox := &Inbox{}
+
+	// Create Base64-encoded metadata
+	metadata := map[string]interface{}{
+		"from":       "sender@example.com",
+		"to":         "recipient@example.com",
+		"subject":    "Test Plain Email with Body",
+		"receivedAt": "2024-01-15T10:30:00Z",
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	metadataB64 := crypto.ToBase64URL(metadataJSON)
+
+	// Create Base64-encoded parsed content
+	parsed := map[string]interface{}{
+		"text": "This is the plain text body",
+		"html": "<p>This is the HTML body</p>",
+		"headers": map[string]interface{}{
+			"X-Custom-Header": "custom-value",
+			"X-Priority":      "high",
+		},
+		"links": []string{"https://example.com", "https://test.com"},
+		"attachments": []map[string]interface{}{
+			{
+				"filename":    "doc.pdf",
+				"contentType": "application/pdf",
+				"size":        1024,
+			},
+		},
+	}
+	parsedJSON, _ := json.Marshal(parsed)
+	parsedB64 := crypto.ToBase64URL(parsedJSON)
+
+	rawEmail := &api.RawEmail{
+		ID:         "plain-email-456",
+		ReceivedAt: time.Now(),
+		IsRead:     false,
+		Metadata:   metadataB64,
+		Parsed:     parsedB64,
+	}
+
+	result, err := inbox.decodePlainEmail(rawEmail)
+	if err != nil {
+		t.Fatalf("decodePlainEmail() error = %v", err)
+	}
+
+	if result.Text != "This is the plain text body" {
+		t.Errorf("Text = %s, want 'This is the plain text body'", result.Text)
+	}
+	if result.HTML != "<p>This is the HTML body</p>" {
+		t.Errorf("HTML = %s, want '<p>This is the HTML body</p>'", result.HTML)
+	}
+	if len(result.Links) != 2 {
+		t.Errorf("Links length = %d, want 2", len(result.Links))
+	}
+	if result.Headers["X-Custom-Header"] != "custom-value" {
+		t.Errorf("Headers[X-Custom-Header] = %s, want custom-value", result.Headers["X-Custom-Header"])
+	}
+	if len(result.Attachments) != 1 {
+		t.Fatalf("Attachments length = %d, want 1", len(result.Attachments))
+	}
+	if result.Attachments[0].Filename != "doc.pdf" {
+		t.Errorf("Attachments[0].Filename = %s, want doc.pdf", result.Attachments[0].Filename)
+	}
+}
+
+func TestDecodePlainEmail_WithAuthResults(t *testing.T) {
+	inbox := &Inbox{}
+
+	metadata := map[string]interface{}{
+		"from":    "sender@example.com",
+		"to":      "recipient@example.com",
+		"subject": "Auth Results Test",
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	metadataB64 := crypto.ToBase64URL(metadataJSON)
+
+	// Create parsed content with auth results
+	parsed := map[string]interface{}{
+		"text": "body",
+		"html": "",
+		"authResults": map[string]interface{}{
+			"spf":  map[string]interface{}{"result": "pass", "domain": "example.com"},
+			"dkim": []map[string]interface{}{{"result": "pass", "domain": "example.com"}},
+		},
+	}
+	parsedJSON, _ := json.Marshal(parsed)
+	parsedB64 := crypto.ToBase64URL(parsedJSON)
+
+	rawEmail := &api.RawEmail{
+		ID:         "plain-email-auth",
+		ReceivedAt: time.Now(),
+		Metadata:   metadataB64,
+		Parsed:     parsedB64,
+	}
+
+	result, err := inbox.decodePlainEmail(rawEmail)
+	if err != nil {
+		t.Fatalf("decodePlainEmail() error = %v", err)
+	}
+
+	if result.AuthResults == nil {
+		t.Fatal("AuthResults should not be nil")
+	}
+	if result.AuthResults.SPF == nil {
+		t.Fatal("SPF should not be nil")
+	}
+	if result.AuthResults.SPF.Result != "pass" {
+		t.Errorf("SPF.Result = %s, want pass", result.AuthResults.SPF.Result)
+	}
+}
+
+func TestDecodePlainEmail_NoMetadata(t *testing.T) {
+	inbox := &Inbox{}
+
+	rawEmail := &api.RawEmail{
+		ID:       "plain-email-no-meta",
+		Metadata: "",
+	}
+
+	_, err := inbox.decodePlainEmail(rawEmail)
+	if err == nil {
+		t.Error("expected error for plain email with no metadata")
+	}
+	if err.Error() != "plain email has no metadata" {
+		t.Errorf("error = %q, want 'plain email has no metadata'", err.Error())
+	}
+}
+
+func TestDecodePlainEmail_InvalidBase64Metadata(t *testing.T) {
+	inbox := &Inbox{}
+
+	rawEmail := &api.RawEmail{
+		ID:       "plain-email-bad-b64",
+		Metadata: "!!!invalid-base64!!!",
+	}
+
+	_, err := inbox.decodePlainEmail(rawEmail)
+	if err == nil {
+		t.Error("expected error for invalid Base64 metadata")
+	}
+}
+
+func TestDecodePlainEmail_InvalidJSONMetadata(t *testing.T) {
+	inbox := &Inbox{}
+
+	// Valid Base64 but invalid JSON
+	invalidJSON := crypto.ToBase64URL([]byte("{invalid json"))
+
+	rawEmail := &api.RawEmail{
+		ID:       "plain-email-bad-json",
+		Metadata: invalidJSON,
+	}
+
+	_, err := inbox.decodePlainEmail(rawEmail)
+	if err == nil {
+		t.Error("expected error for invalid JSON metadata")
+	}
+}
+
+func TestDecodePlainEmail_InvalidBase64Parsed(t *testing.T) {
+	inbox := &Inbox{}
+
+	// Valid metadata
+	metadata := map[string]interface{}{
+		"from":    "sender@example.com",
+		"to":      "recipient@example.com",
+		"subject": "Test",
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	metadataB64 := crypto.ToBase64URL(metadataJSON)
+
+	rawEmail := &api.RawEmail{
+		ID:       "plain-email-bad-parsed-b64",
+		Metadata: metadataB64,
+		Parsed:   "!!!invalid-base64!!!",
+	}
+
+	_, err := inbox.decodePlainEmail(rawEmail)
+	if err == nil {
+		t.Error("expected error for invalid Base64 parsed content")
+	}
+}
+
+func TestDecodePlainEmail_InvalidJSONParsed(t *testing.T) {
+	inbox := &Inbox{}
+
+	// Valid metadata
+	metadata := map[string]interface{}{
+		"from":    "sender@example.com",
+		"to":      "recipient@example.com",
+		"subject": "Test",
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	metadataB64 := crypto.ToBase64URL(metadataJSON)
+
+	// Valid Base64 but invalid JSON for parsed content
+	invalidJSON := crypto.ToBase64URL([]byte("{invalid json"))
+
+	rawEmail := &api.RawEmail{
+		ID:       "plain-email-bad-parsed-json",
+		Metadata: metadataB64,
+		Parsed:   invalidJSON,
+	}
+
+	_, err := inbox.decodePlainEmail(rawEmail)
+	if err == nil {
+		t.Error("expected error for invalid JSON parsed content")
+	}
+}
+
+func TestDecryptMetadata_PlainEmail_Success(t *testing.T) {
+	inbox := &Inbox{}
+
+	// Create Base64-encoded metadata for plain email
+	metadata := map[string]interface{}{
+		"from":       "sender@example.com",
+		"to":         "recipient@example.com",
+		"subject":    "Plain Metadata Test",
+		"receivedAt": "2024-01-15T10:30:00Z",
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	metadataB64 := crypto.ToBase64URL(metadataJSON)
+
+	apiReceivedAt := time.Now().Truncate(time.Second)
+	rawEmail := &api.RawEmail{
+		ID:                "plain-meta-123",
+		ReceivedAt:        apiReceivedAt,
+		IsRead:            true,
+		EncryptedMetadata: nil, // Makes it a plain email
+		Metadata:          metadataB64,
+	}
+
+	result, err := inbox.decryptMetadata(rawEmail)
+	if err != nil {
+		t.Fatalf("decryptMetadata() error = %v", err)
+	}
+
+	if result.ID != "plain-meta-123" {
+		t.Errorf("ID = %s, want plain-meta-123", result.ID)
+	}
+	if result.From != "sender@example.com" {
+		t.Errorf("From = %s, want sender@example.com", result.From)
+	}
+	if result.Subject != "Plain Metadata Test" {
+		t.Errorf("Subject = %s, want Plain Metadata Test", result.Subject)
+	}
+	if result.IsRead != true {
+		t.Error("IsRead = false, want true")
+	}
+
+	// ReceivedAt should be from metadata
+	expected, _ := time.Parse(time.RFC3339, "2024-01-15T10:30:00Z")
+	if !result.ReceivedAt.Equal(expected) {
+		t.Errorf("ReceivedAt = %v, want %v", result.ReceivedAt, expected)
+	}
+}
+
+func TestDecryptMetadata_PlainEmail_InvalidBase64(t *testing.T) {
+	inbox := &Inbox{}
+
+	rawEmail := &api.RawEmail{
+		ID:                "plain-meta-bad-b64",
+		EncryptedMetadata: nil,
+		Metadata:          "!!!invalid-base64!!!",
+	}
+
+	_, err := inbox.decryptMetadata(rawEmail)
+	if err == nil {
+		t.Error("expected error for invalid Base64 metadata")
+	}
+}
+
+func TestDecryptMetadata_PlainEmail_InvalidJSON(t *testing.T) {
+	inbox := &Inbox{}
+
+	invalidJSON := crypto.ToBase64URL([]byte("{invalid json"))
+
+	rawEmail := &api.RawEmail{
+		ID:                "plain-meta-bad-json",
+		EncryptedMetadata: nil,
+		Metadata:          invalidJSON,
+	}
+
+	_, err := inbox.decryptMetadata(rawEmail)
+	if err == nil {
+		t.Error("expected error for invalid JSON metadata")
+	}
+}
+
+func TestDecryptMetadata_PlainEmail_ReceivedAtFallback(t *testing.T) {
+	inbox := &Inbox{}
+
+	// Create metadata without receivedAt
+	metadata := map[string]interface{}{
+		"from":    "sender@example.com",
+		"to":      "recipient@example.com",
+		"subject": "No Timestamp",
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	metadataB64 := crypto.ToBase64URL(metadataJSON)
+
+	apiReceivedAt := time.Now().Truncate(time.Second)
+	rawEmail := &api.RawEmail{
+		ID:                "plain-meta-fallback",
+		ReceivedAt:        apiReceivedAt,
+		EncryptedMetadata: nil,
+		Metadata:          metadataB64,
+	}
+
+	result, err := inbox.decryptMetadata(rawEmail)
+	if err != nil {
+		t.Fatalf("decryptMetadata() error = %v", err)
+	}
+
+	// ReceivedAt should fallback to API timestamp
+	if !result.ReceivedAt.Equal(apiReceivedAt) {
+		t.Errorf("ReceivedAt = %v, want %v (API fallback)", result.ReceivedAt, apiReceivedAt)
+	}
+}
+
+func TestDecryptEmail_PlainEmail_ViaDecryptEmail(t *testing.T) {
+	// Test that decryptEmail correctly routes plain emails to decodePlainEmail
+	inbox := &Inbox{}
+
+	metadata := map[string]interface{}{
+		"from":       "sender@example.com",
+		"to":         "recipient@example.com",
+		"subject":    "Plain Email via decryptEmail",
+		"receivedAt": "2024-01-15T10:30:00Z",
+	}
+	metadataJSON, _ := json.Marshal(metadata)
+	metadataB64 := crypto.ToBase64URL(metadataJSON)
+
+	parsed := map[string]interface{}{
+		"text": "Plain text body",
+		"html": "<p>HTML body</p>",
+	}
+	parsedJSON, _ := json.Marshal(parsed)
+	parsedB64 := crypto.ToBase64URL(parsedJSON)
+
+	rawEmail := &api.RawEmail{
+		ID:                "plain-via-decrypt",
+		ReceivedAt:        time.Now(),
+		IsRead:            true,
+		EncryptedMetadata: nil, // Plain email
+		Metadata:          metadataB64,
+		Parsed:            parsedB64,
+	}
+
+	result, err := inbox.decryptEmail(rawEmail)
+	if err != nil {
+		t.Fatalf("decryptEmail() error = %v", err)
+	}
+
+	if result.ID != "plain-via-decrypt" {
+		t.Errorf("ID = %s, want plain-via-decrypt", result.ID)
+	}
+	if result.From != "sender@example.com" {
+		t.Errorf("From = %s, want sender@example.com", result.From)
+	}
+	if result.Text != "Plain text body" {
+		t.Errorf("Text = %s, want 'Plain text body'", result.Text)
+	}
+}
+
+// =============================================================================
+// GetRawEmail Tests (using httptest)
+// =============================================================================
+
+func TestGetRawEmail_PlainEmail_Success(t *testing.T) {
+	rawEmailContent := "From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nHello World"
+	rawB64 := crypto.ToBase64URL([]byte(rawEmailContent))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":  "email-123",
+			"raw": rawB64,
+			// No encryptedRaw - this is a plain email
+		})
+	}))
+	defer server.Close()
+
+	apiClient, _ := api.New("test-key", api.WithBaseURL(server.URL), api.WithRetries(0))
+	client := &Client{apiClient: apiClient}
+	inbox := &Inbox{
+		emailAddress: "test@example.com",
+		client:       client,
+		encrypted:    false,
+	}
+
+	result, err := inbox.GetRawEmail(context.Background(), "email-123")
+	if err != nil {
+		t.Fatalf("GetRawEmail() error = %v", err)
+	}
+
+	if result != rawEmailContent {
+		t.Errorf("GetRawEmail() = %q, want %q", result, rawEmailContent)
+	}
+}
+
+func TestGetRawEmail_PlainEmail_EmptyRaw(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":  "email-123",
+			"raw": "", // Empty raw content
+		})
+	}))
+	defer server.Close()
+
+	apiClient, _ := api.New("test-key", api.WithBaseURL(server.URL), api.WithRetries(0))
+	client := &Client{apiClient: apiClient}
+	inbox := &Inbox{
+		emailAddress: "test@example.com",
+		client:       client,
+		encrypted:    false,
+	}
+
+	_, err := inbox.GetRawEmail(context.Background(), "email-123")
+	if err == nil {
+		t.Fatal("GetRawEmail() expected error for empty raw content")
+	}
+	if err.Error() != "plain email has no raw content" {
+		t.Errorf("error = %q, want 'plain email has no raw content'", err.Error())
+	}
+}
+
+func TestGetRawEmail_PlainEmail_InvalidBase64(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":  "email-123",
+			"raw": "!!!invalid-base64!!!", // Invalid base64
+		})
+	}))
+	defer server.Close()
+
+	apiClient, _ := api.New("test-key", api.WithBaseURL(server.URL), api.WithRetries(0))
+	client := &Client{apiClient: apiClient}
+	inbox := &Inbox{
+		emailAddress: "test@example.com",
+		client:       client,
+		encrypted:    false,
+	}
+
+	_, err := inbox.GetRawEmail(context.Background(), "email-123")
+	if err == nil {
+		t.Fatal("GetRawEmail() expected error for invalid base64")
+	}
+}
+
+// =============================================================================
+// GetRawEmail Encrypted Tests
+// =============================================================================
+
+func TestGetRawEmail_EncryptedEmail_Success(t *testing.T) {
+	// Same raw email content as plain test - should get identical result
+	rawEmailContent := "From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nHello World"
+	rawB64 := crypto.ToBase64URL([]byte(rawEmailContent))
+
+	// Generate keypair for encryption
+	kp, err := crypto.GenerateKeypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create encrypted payload containing the base64-encoded raw email
+	encryptedRaw, serverPk := createTestEncryptedPayload(t, []byte(rawB64), kp)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":           "email-123",
+			"encryptedRaw": encryptedRaw,
+			// No plain raw - this is an encrypted email
+		})
+	}))
+	defer server.Close()
+
+	apiClient, _ := api.New("test-key", api.WithBaseURL(server.URL), api.WithRetries(0))
+	client := &Client{apiClient: apiClient}
+	inbox := &Inbox{
+		emailAddress: "test@example.com",
+		client:       client,
+		keypair:      kp,
+		serverSigPk:  serverPk,
+		encrypted:    true,
+	}
+
+	result, err := inbox.GetRawEmail(context.Background(), "email-123")
+	if err != nil {
+		t.Fatalf("GetRawEmail() error = %v", err)
+	}
+
+	// Should get the exact same content as plain email test
+	if result != rawEmailContent {
+		t.Errorf("GetRawEmail() = %q, want %q", result, rawEmailContent)
+	}
+}
+
+func TestGetRawEmail_EncryptedEmail_DecryptionError(t *testing.T) {
+	// Create encrypted payload with one keypair
+	kp, _ := crypto.GenerateKeypair()
+	rawB64 := crypto.ToBase64URL([]byte("raw email content"))
+	encryptedRaw, _ := createTestEncryptedPayload(t, []byte(rawB64), kp)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":           "email-123",
+			"encryptedRaw": encryptedRaw,
+		})
+	}))
+	defer server.Close()
+
+	// Use a different server key - decryption should fail
+	differentServerPk := make([]byte, crypto.MLDSAPublicKeySize)
+
+	apiClient, _ := api.New("test-key", api.WithBaseURL(server.URL), api.WithRetries(0))
+	client := &Client{apiClient: apiClient}
+	inbox := &Inbox{
+		emailAddress: "test@example.com",
+		client:       client,
+		keypair:      kp,
+		serverSigPk:  differentServerPk, // Wrong key
+		encrypted:    true,
+	}
+
+	_, err := inbox.GetRawEmail(context.Background(), "email-123")
+	if err == nil {
+		t.Fatal("GetRawEmail() expected error for decryption failure")
+	}
+
+	// Should be a signature verification error
+	var sigErr *SignatureVerificationError
+	if !errors.As(err, &sigErr) {
+		t.Errorf("expected SignatureVerificationError, got %T: %v", err, err)
+	}
+}
+
+func TestGetRawEmail_APIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "email not found"})
+	}))
+	defer server.Close()
+
+	apiClient, _ := api.New("test-key", api.WithBaseURL(server.URL), api.WithRetries(0))
+	client := &Client{apiClient: apiClient}
+	inbox := &Inbox{
+		emailAddress: "test@example.com",
+		client:       client,
+	}
+
+	_, err := inbox.GetRawEmail(context.Background(), "email-123")
+	if err == nil {
+		t.Fatal("GetRawEmail() expected error for API error")
 	}
 }

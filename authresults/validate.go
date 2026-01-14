@@ -35,6 +35,7 @@ func (e *ValidationError) Error() string {
 }
 
 // Validate checks that all authentication results pass.
+// Results with status "skipped" are treated as passed.
 func Validate(results *AuthResults) error {
 	if results == nil {
 		return ErrNoAuthResults
@@ -42,30 +43,34 @@ func Validate(results *AuthResults) error {
 
 	var errs []string
 
-	// SPF must pass
-	if results.SPF == nil || results.SPF.Result != "pass" {
+	// SPF must pass or be skipped
+	if results.SPF == nil || (results.SPF.Result != "pass" && results.SPF.Result != "skipped") {
 		errs = append(errs, "SPF did not pass")
 	}
 
-	// At least one DKIM must pass
+	// At least one DKIM must pass, or all must be skipped
 	dkimPassed := false
+	allSkipped := true
 	for _, dkim := range results.DKIM {
 		if dkim.Result == "pass" {
 			dkimPassed = true
 			break
 		}
+		if dkim.Result != "skipped" {
+			allSkipped = false
+		}
 	}
-	if !dkimPassed {
+	if !dkimPassed && !(len(results.DKIM) > 0 && allSkipped) {
 		errs = append(errs, "no DKIM signature passed")
 	}
 
-	// DMARC must pass
-	if results.DMARC == nil || results.DMARC.Result != "pass" {
+	// DMARC must pass or be skipped
+	if results.DMARC == nil || (results.DMARC.Result != "pass" && results.DMARC.Result != "skipped") {
 		errs = append(errs, "DMARC did not pass")
 	}
 
-	// ReverseDNS must pass if present
-	if results.ReverseDNS != nil && !results.ReverseDNS.Verified {
+	// ReverseDNS must pass or be skipped if present
+	if results.ReverseDNS != nil && results.ReverseDNS.Result != "pass" && results.ReverseDNS.Result != "skipped" {
 		errs = append(errs, "reverse DNS did not pass")
 	}
 
@@ -77,47 +82,57 @@ func Validate(results *AuthResults) error {
 }
 
 // ValidateSPF validates only SPF results.
+// Results with status "skipped" are treated as passed.
 func ValidateSPF(results *AuthResults) error {
 	if results == nil || results.SPF == nil {
 		return ErrNoAuthResults
 	}
-	if results.SPF.Result != "pass" {
+	if results.SPF.Result != "pass" && results.SPF.Result != "skipped" {
 		return ErrSPFFailed
 	}
 	return nil
 }
 
 // ValidateDKIM validates only DKIM results.
-// Returns nil if at least one DKIM signature passes.
+// Returns nil if at least one DKIM signature passes, or all are skipped.
 func ValidateDKIM(results *AuthResults) error {
 	if results == nil || len(results.DKIM) == 0 {
 		return ErrNoAuthResults
 	}
+	allSkipped := true
 	for _, dkim := range results.DKIM {
 		if dkim.Result == "pass" {
 			return nil
 		}
+		if dkim.Result != "skipped" {
+			allSkipped = false
+		}
+	}
+	if allSkipped {
+		return nil
 	}
 	return ErrDKIMFailed
 }
 
 // ValidateDMARC validates only DMARC results.
+// Results with status "skipped" are treated as passed.
 func ValidateDMARC(results *AuthResults) error {
 	if results == nil || results.DMARC == nil {
 		return ErrNoAuthResults
 	}
-	if results.DMARC.Result != "pass" {
+	if results.DMARC.Result != "pass" && results.DMARC.Result != "skipped" {
 		return ErrDMARCFailed
 	}
 	return nil
 }
 
 // ValidateReverseDNS validates only reverse DNS results.
+// Results with status "skipped" are treated as passed.
 func ValidateReverseDNS(results *AuthResults) error {
 	if results == nil || results.ReverseDNS == nil {
 		return ErrNoAuthResults
 	}
-	if !results.ReverseDNS.Verified {
+	if results.ReverseDNS.Result != "pass" && results.ReverseDNS.Result != "skipped" {
 		return ErrReverseDNSFailed
 	}
 	return nil

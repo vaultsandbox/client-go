@@ -12,11 +12,11 @@ import (
 const ExportVersion = 1
 
 // ExportedInbox contains all data needed to restore an inbox.
-// WARNING: Contains private key material - handle securely.
+// WARNING: For encrypted inboxes, this contains private key material - handle securely.
 //
 // The format follows the VaultSandbox specification Section 9.
-// The public key is NOT included as it can be derived from the secret key
-// (see spec Section 4.2).
+// For encrypted inboxes, the public key is NOT included as it can be derived
+// from the secret key (see spec Section 4.2).
 type ExportedInbox struct {
 	// Version is the export format version. MUST be 1.
 	Version int `json:"version"`
@@ -27,11 +27,17 @@ type ExportedInbox struct {
 	// InboxHash is the unique inbox identifier. Non-empty.
 	InboxHash string `json:"inboxHash"`
 	// ServerSigPk is the server's ML-DSA-65 public key (base64url, 1952 bytes decoded).
-	ServerSigPk string `json:"serverSigPk"`
+	// Only set for encrypted inboxes.
+	ServerSigPk string `json:"serverSigPk,omitempty"`
 	// SecretKey is the ML-KEM-768 secret key (base64url, 2400 bytes decoded).
-	SecretKey string `json:"secretKey"`
+	// Only set for encrypted inboxes.
+	SecretKey string `json:"secretKey,omitempty"`
 	// ExportedAt is the export timestamp (ISO 8601). Informational only.
 	ExportedAt time.Time `json:"exportedAt"`
+	// EmailAuth indicates whether email authentication is enabled for this inbox.
+	EmailAuth bool `json:"emailAuth"`
+	// Encrypted indicates whether this is an encrypted inbox.
+	Encrypted bool `json:"encrypted"`
 }
 
 // Validate checks that the exported data is valid per VaultSandbox spec Section 10.
@@ -55,28 +61,31 @@ func (e *ExportedInbox) Validate() error {
 		return fmt.Errorf("%w: inboxHash is required", ErrInvalidImportData)
 	}
 
-	// Step 6: Validate and decode secretKey (2400 bytes)
-	if e.SecretKey == "" {
-		return fmt.Errorf("%w: secretKey is required", ErrInvalidImportData)
-	}
-	secretKey, err := crypto.FromBase64URL(e.SecretKey)
-	if err != nil {
-		return fmt.Errorf("%w: invalid secretKey encoding", ErrInvalidImportData)
-	}
-	if len(secretKey) != crypto.MLKEMSecretKeySize {
-		return fmt.Errorf("%w: secretKey size %d, expected %d", ErrInvalidImportData, len(secretKey), crypto.MLKEMSecretKeySize)
-	}
+	// For encrypted inboxes, validate cryptographic keys
+	if e.Encrypted {
+		// Step 6: Validate and decode secretKey (2400 bytes)
+		if e.SecretKey == "" {
+			return fmt.Errorf("%w: secretKey is required for encrypted inbox", ErrInvalidImportData)
+		}
+		secretKey, err := crypto.FromBase64URL(e.SecretKey)
+		if err != nil {
+			return fmt.Errorf("%w: invalid secretKey encoding", ErrInvalidImportData)
+		}
+		if len(secretKey) != crypto.MLKEMSecretKeySize {
+			return fmt.Errorf("%w: secretKey size %d, expected %d", ErrInvalidImportData, len(secretKey), crypto.MLKEMSecretKeySize)
+		}
 
-	// Step 7: Validate and decode serverSigPk (1952 bytes)
-	if e.ServerSigPk == "" {
-		return fmt.Errorf("%w: serverSigPk is required", ErrInvalidImportData)
-	}
-	serverSigPk, err := crypto.FromBase64URL(e.ServerSigPk)
-	if err != nil {
-		return fmt.Errorf("%w: invalid serverSigPk encoding", ErrInvalidImportData)
-	}
-	if len(serverSigPk) != crypto.MLDSAPublicKeySize {
-		return fmt.Errorf("%w: serverSigPk size %d, expected %d", ErrInvalidImportData, len(serverSigPk), crypto.MLDSAPublicKeySize)
+		// Step 7: Validate and decode serverSigPk (1952 bytes)
+		if e.ServerSigPk == "" {
+			return fmt.Errorf("%w: serverSigPk is required for encrypted inbox", ErrInvalidImportData)
+		}
+		serverSigPk, err := crypto.FromBase64URL(e.ServerSigPk)
+		if err != nil {
+			return fmt.Errorf("%w: invalid serverSigPk encoding", ErrInvalidImportData)
+		}
+		if len(serverSigPk) != crypto.MLDSAPublicKeySize {
+			return fmt.Errorf("%w: serverSigPk size %d, expected %d", ErrInvalidImportData, len(serverSigPk), crypto.MLDSAPublicKeySize)
+		}
 	}
 
 	// Step 8: Validate timestamps (Go's time.Time handles ISO 8601 via JSON unmarshaling)
@@ -89,43 +98,59 @@ func (e *ExportedInbox) Validate() error {
 	return nil
 }
 
-// Export returns exportable inbox data including private key.
+// Export returns exportable inbox data.
+// For encrypted inboxes, this includes the private key material.
 // The format follows VaultSandbox specification Section 9.
-// Note: The public key is NOT included as it can be derived from the secret key.
+// Note: For encrypted inboxes, the public key is NOT included as it can be derived from the secret key.
 func (i *Inbox) Export() *ExportedInbox {
-	return &ExportedInbox{
+	exported := &ExportedInbox{
 		Version:      ExportVersion,
 		EmailAddress: i.emailAddress,
 		ExpiresAt:    i.expiresAt,
 		InboxHash:    i.inboxHash,
-		ServerSigPk:  crypto.ToBase64URL(i.serverSigPk),
-		SecretKey:    crypto.ToBase64URL(i.keypair.SecretKey),
 		ExportedAt:   time.Now().UTC(),
+		EmailAuth:    i.emailAuth,
+		Encrypted:    i.encrypted,
 	}
+
+	// Only include cryptographic material for encrypted inboxes
+	if i.encrypted && i.serverSigPk != nil && i.keypair != nil {
+		exported.ServerSigPk = crypto.ToBase64URL(i.serverSigPk)
+		exported.SecretKey = crypto.ToBase64URL(i.keypair.SecretKey)
+	}
+
+	return exported
 }
 
 // newInboxFromExport reconstructs an inbox from exported data.
-// Per VaultSandbox spec Section 10.2, the public key is derived from the secret key.
+// For encrypted inboxes, the public key is derived from the secret key per VaultSandbox spec Section 10.2.
 func newInboxFromExport(data *ExportedInbox, c *Client) (*Inbox, error) {
 	if err := data.Validate(); err != nil {
 		return nil, err
 	}
 
-	// Decode keys - Validate() already verified these are valid base64 with correct sizes
-	secretKey, _ := crypto.FromBase64URL(data.SecretKey)
-	serverSigPk, _ := crypto.FromBase64URL(data.ServerSigPk)
-
-	// Per spec Section 10.2: Reconstruct keypair by deriving public key from secret key
-	// publicKey = secretKey[1152:2400]
-	// Validate() already verified the secret key size is correct
-	keypair, _ := crypto.KeypairFromSecretKey(secretKey)
-
-	return &Inbox{
+	inbox := &Inbox{
 		emailAddress: data.EmailAddress,
 		expiresAt:    data.ExpiresAt,
 		inboxHash:    data.InboxHash,
-		serverSigPk:  serverSigPk,
-		keypair:      keypair,
 		client:       c,
-	}, nil
+		emailAuth:    data.EmailAuth,
+		encrypted:    data.Encrypted,
+	}
+
+	// For encrypted inboxes, decode keys
+	// Validate() already verified these are valid base64 with correct sizes
+	if data.Encrypted {
+		secretKey, _ := crypto.FromBase64URL(data.SecretKey)
+		serverSigPk, _ := crypto.FromBase64URL(data.ServerSigPk)
+
+		// Per spec Section 10.2: Reconstruct keypair by deriving public key from secret key
+		// publicKey = secretKey[1152:2400]
+		keypair, _ := crypto.KeypairFromSecretKey(secretKey)
+
+		inbox.serverSigPk = serverSigPk
+		inbox.keypair = keypair
+	}
+
+	return inbox, nil
 }

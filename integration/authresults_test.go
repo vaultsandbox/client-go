@@ -30,7 +30,7 @@ type testEmailAuth struct {
 	SPF        string `json:"spf,omitempty"`
 	DKIM       string `json:"dkim,omitempty"`
 	DMARC      string `json:"dmarc,omitempty"`
-	ReverseDNS *bool  `json:"reverseDns,omitempty"`
+	ReverseDNS string `json:"reverseDns,omitempty"`
 }
 
 // testEmailResponse represents the response from the test email API.
@@ -71,11 +71,6 @@ func sendTestEmailWithAuth(t *testing.T, req testEmailRequest) string {
 	}
 
 	return result.EmailID
-}
-
-// boolPtr returns a pointer to a bool value.
-func boolPtr(b bool) *bool {
-	return &b
 }
 
 // TestIntegration_AuthResults_AllPass tests parsing auth results when all checks pass.
@@ -132,8 +127,8 @@ func TestIntegration_AuthResults_AllPass(t *testing.T) {
 	// Check ReverseDNS
 	if email.AuthResults.ReverseDNS == nil {
 		t.Error("ReverseDNS result is nil")
-	} else if !email.AuthResults.ReverseDNS.Verified {
-		t.Error("ReverseDNS.Verified = false, want true")
+	} else if email.AuthResults.ReverseDNS.Result != "pass" {
+		t.Errorf("ReverseDNS.Result = %q, want %q", email.AuthResults.ReverseDNS.Result, "pass")
 	}
 
 	// Verify validation passes
@@ -163,7 +158,7 @@ func TestIntegration_AuthResults_AllPass(t *testing.T) {
 		email.AuthResults.SPF.Result,
 		email.AuthResults.DKIM[0].Result,
 		email.AuthResults.DMARC.Result,
-		email.AuthResults.ReverseDNS.Verified)
+		email.AuthResults.ReverseDNS.Result)
 }
 
 // TestIntegration_AuthResults_SPFFail tests parsing auth results when SPF fails.
@@ -347,7 +342,7 @@ func TestIntegration_AuthResults_ReverseDNSFail(t *testing.T) {
 		From:    "sender@example.com",
 		Subject: "ReverseDNS Fail Test",
 		Auth: &testEmailAuth{
-			ReverseDNS: boolPtr(false),
+			ReverseDNS: "fail",
 		},
 	})
 
@@ -363,8 +358,8 @@ func TestIntegration_AuthResults_ReverseDNSFail(t *testing.T) {
 	// ReverseDNS should fail
 	if email.AuthResults.ReverseDNS == nil {
 		t.Error("ReverseDNS result is nil")
-	} else if email.AuthResults.ReverseDNS.Verified {
-		t.Error("ReverseDNS.Verified = true, want false")
+	} else if email.AuthResults.ReverseDNS.Result != "fail" {
+		t.Errorf("ReverseDNS.Result = %q, want %q", email.AuthResults.ReverseDNS.Result, "fail")
 	}
 
 	// Overall validation should still pass (ReverseDNS not included in Passed)
@@ -381,8 +376,8 @@ func TestIntegration_AuthResults_ReverseDNSFail(t *testing.T) {
 		t.Error("Failures is empty, expected ReverseDNS failure message")
 	}
 
-	t.Logf("ReverseDNS failure test passed: Verified=%v, Failures=%v",
-		email.AuthResults.ReverseDNS.Verified, validation.Failures)
+	t.Logf("ReverseDNS failure test passed: Result=%s, Failures=%v",
+		email.AuthResults.ReverseDNS.Result, validation.Failures)
 }
 
 // TestIntegration_AuthResults_AllFail tests parsing auth results when all checks fail.
@@ -405,7 +400,7 @@ func TestIntegration_AuthResults_AllFail(t *testing.T) {
 			SPF:        "fail",
 			DKIM:       "fail",
 			DMARC:      "fail",
-			ReverseDNS: boolPtr(false),
+			ReverseDNS: "fail",
 		},
 	})
 
@@ -428,8 +423,8 @@ func TestIntegration_AuthResults_AllFail(t *testing.T) {
 	if email.AuthResults.DMARC == nil || email.AuthResults.DMARC.Result != "fail" {
 		t.Errorf("DMARC.Result = %v, want fail", email.AuthResults.DMARC)
 	}
-	if email.AuthResults.ReverseDNS == nil || email.AuthResults.ReverseDNS.Verified {
-		t.Errorf("ReverseDNS.Verified = %v, want false", email.AuthResults.ReverseDNS)
+	if email.AuthResults.ReverseDNS == nil || email.AuthResults.ReverseDNS.Result != "fail" {
+		t.Errorf("ReverseDNS.Result = %v, want fail", email.AuthResults.ReverseDNS)
 	}
 
 	// Validation should fail
@@ -529,7 +524,7 @@ func TestIntegration_AuthResults_MixedResults(t *testing.T) {
 			SPF:        "softfail",
 			DKIM:       "pass",
 			DMARC:      "fail",
-			ReverseDNS: boolPtr(true),
+			ReverseDNS: "pass",
 		},
 	})
 
@@ -552,8 +547,8 @@ func TestIntegration_AuthResults_MixedResults(t *testing.T) {
 	if email.AuthResults.DMARC.Result != "fail" {
 		t.Errorf("DMARC.Result = %q, want fail", email.AuthResults.DMARC.Result)
 	}
-	if !email.AuthResults.ReverseDNS.Verified {
-		t.Error("ReverseDNS.Verified = false, want true")
+	if email.AuthResults.ReverseDNS.Result != "pass" {
+		t.Errorf("ReverseDNS.Result = %q, want %q", email.AuthResults.ReverseDNS.Result, "pass")
 	}
 
 	// Verify validation
@@ -578,7 +573,7 @@ func TestIntegration_AuthResults_MixedResults(t *testing.T) {
 		email.AuthResults.SPF.Result,
 		email.AuthResults.DKIM[0].Result,
 		email.AuthResults.DMARC.Result,
-		email.AuthResults.ReverseDNS.Verified)
+		email.AuthResults.ReverseDNS.Result)
 }
 
 // TestIntegration_AuthResults_ValidateFunction tests the standalone Validate function.
@@ -774,7 +769,7 @@ func TestIntegration_AuthResults_JSONUnmarshal(t *testing.T) {
 		"spf": {"result": "pass", "domain": "example.com"},
 		"dkim": [{"result": "pass", "domain": "example.com", "selector": "test"}],
 		"dmarc": {"result": "pass", "domain": "example.com", "policy": "none", "aligned": true},
-		"reverseDns": {"verified": true, "ip": "127.0.0.1", "hostname": "mail.example.com"}
+		"reverseDns": {"result": "pass", "ip": "127.0.0.1", "hostname": "mail.example.com"}
 	}`
 
 	var ar authresults.AuthResults
@@ -825,8 +820,8 @@ func TestIntegration_AuthResults_JSONUnmarshal(t *testing.T) {
 	if ar.ReverseDNS == nil {
 		t.Error("ReverseDNS is nil")
 	} else {
-		if !ar.ReverseDNS.Verified {
-			t.Error("ReverseDNS.Verified = false, want true")
+		if ar.ReverseDNS.Result != "pass" {
+			t.Errorf("ReverseDNS.Result = %q, want %q", ar.ReverseDNS.Result, "pass")
 		}
 		if ar.ReverseDNS.IP != "127.0.0.1" {
 			t.Errorf("ReverseDNS.IP = %q, want %q", ar.ReverseDNS.IP, "127.0.0.1")
@@ -869,7 +864,7 @@ func TestIntegration_AuthResults_JSONMarshal(t *testing.T) {
 			Domain:  "example.com",
 		},
 		ReverseDNS: &authresults.ReverseDNSResult{
-			Verified: true,
+			Result:   "pass",
 			IP:       "1.2.3.4",
 			Hostname: "mail.example.com",
 		},
@@ -922,7 +917,7 @@ func TestIntegration_AuthResults_Wire_Format(t *testing.T) {
 		},
 		"reverseDns": {
 			"hostname": "test.vaultsandbox.local",
-			"verified": true,
+			"result": "pass",
 			"ip": "127.0.0.1"
 		}
 	}`
@@ -942,7 +937,7 @@ func TestIntegration_AuthResults_Wire_Format(t *testing.T) {
 	if ar.DMARC == nil || ar.DMARC.Result != "pass" {
 		t.Errorf("DMARC not parsed correctly: %+v", ar.DMARC)
 	}
-	if ar.ReverseDNS == nil || !ar.ReverseDNS.Verified {
+	if ar.ReverseDNS == nil || ar.ReverseDNS.Result != "pass" {
 		t.Errorf("ReverseDNS not parsed correctly: %+v", ar.ReverseDNS)
 	}
 

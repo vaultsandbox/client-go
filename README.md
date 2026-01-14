@@ -10,7 +10,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/vaultsandbox/client-go.svg)](https://pkg.go.dev/github.com/vaultsandbox/client-go)
 [![CI](https://github.com/vaultsandbox/client-go/actions/workflows/ci.yml/badge.svg)](https://github.com/vaultsandbox/client-go/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.24-brightgreen.svg)](https://golang.org/)
 
 **Production-like email testing. Self-hosted & secure.**
@@ -861,4 +861,4 @@ Contributions are welcome! Please read our [contributing guidelines](CONTRIBUTIN
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+Apache 2.0 — see [LICENSE](LICENSE) for details.

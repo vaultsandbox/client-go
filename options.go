@@ -40,10 +40,24 @@ type clientConfig struct {
 	onSyncError func(error)
 }
 
+// EncryptionMode specifies the desired encryption mode for an inbox.
+type EncryptionMode string
+
+const (
+	// EncryptionModeDefault uses the server's default encryption setting.
+	EncryptionModeDefault EncryptionMode = ""
+	// EncryptionModeEncrypted requests an encrypted inbox.
+	EncryptionModeEncrypted EncryptionMode = "encrypted"
+	// EncryptionModePlain requests a plain (unencrypted) inbox.
+	EncryptionModePlain EncryptionMode = "plain"
+)
+
 // inboxConfig holds configuration for inbox creation.
 type inboxConfig struct {
 	ttl          time.Duration
 	emailAddress string
+	emailAuth    *bool
+	encryption   EncryptionMode
 }
 
 // waitConfig holds configuration for waiting on emails.
@@ -180,6 +194,30 @@ func WithTTL(ttl time.Duration) InboxOption {
 func WithEmailAddress(email string) InboxOption {
 	return func(c *inboxConfig) {
 		c.emailAddress = email
+	}
+}
+
+// WithEmailAuth controls email authentication (SPF, DKIM, DMARC, PTR) for the inbox.
+// When enabled, incoming emails are validated and results are available in AuthResults.
+// When disabled, authentication checks are skipped and results have status "skipped".
+// If not specified, the server default is used.
+func WithEmailAuth(enabled bool) InboxOption {
+	return func(c *inboxConfig) {
+		c.emailAuth = &enabled
+	}
+}
+
+// WithEncryption sets the encryption mode for the inbox.
+// Use [EncryptionModeEncrypted] to create an encrypted inbox, or [EncryptionModePlain]
+// for a plain inbox. If not specified, the server's default is used based on its
+// encryption policy.
+//
+// Note: The server's encryption policy may not allow overrides. Use
+// [ServerInfo.EncryptionPolicy.CanOverride] to check if the server allows
+// per-inbox encryption settings.
+func WithEncryption(mode EncryptionMode) InboxOption {
+	return func(c *inboxConfig) {
+		c.encryption = mode
 	}
 }
 

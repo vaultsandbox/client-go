@@ -219,6 +219,8 @@ func TestCrossSDK_ExportedInboxJSONFields(t *testing.T) {
 		"serverSigPk",
 		"secretKey",
 		"exportedAt",
+		"emailAuth",
+		"encrypted",
 	}
 
 	for _, field := range expectedFields {

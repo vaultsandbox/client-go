@@ -2,6 +2,9 @@ package vaultsandbox
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/vaultsandbox/client-go/internal/crypto"
 )
 
 // GetEmails fetches all emails in the inbox with full content.
@@ -53,9 +56,40 @@ func (i *Inbox) GetEmail(ctx context.Context, emailID string) (*Email, error) {
 	return i.decryptEmail(resp)
 }
 
-// GetRawEmail fetches the raw email content for a specific email.
+// GetRawEmail fetches the raw RFC 5322 email source for a specific email.
+// Returns the raw email content as a string.
 func (i *Inbox) GetRawEmail(ctx context.Context, emailID string) (string, error) {
-	return i.client.apiClient.GetEmailRaw(ctx, i.emailAddress, emailID)
+	resp, err := i.client.apiClient.GetEmailRaw(ctx, i.emailAddress, emailID)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.IsEncrypted() {
+		// Encrypted: verify and decrypt
+		if resp.EncryptedRaw == nil {
+			return "", fmt.Errorf("encrypted email has no raw content")
+		}
+		plaintext, err := i.verifyAndDecrypt(resp.EncryptedRaw)
+		if err != nil {
+			return "", err
+		}
+		// Decrypted content is Base64-encoded, decode it
+		rawBytes, err := crypto.DecodeBase64(string(plaintext))
+		if err != nil {
+			return "", fmt.Errorf("failed to decode encrypted raw email: %w", err)
+		}
+		return string(rawBytes), nil
+	}
+
+	// Plain: decode Base64
+	if resp.Raw == "" {
+		return "", fmt.Errorf("plain email has no raw content")
+	}
+	rawBytes, err := crypto.DecodeBase64(resp.Raw)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode plain raw email: %w", err)
+	}
+	return string(rawBytes), nil
 }
 
 // MarkEmailAsRead marks a specific email as read.

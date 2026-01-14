@@ -13,9 +13,11 @@ type Inbox struct {
 	emailAddress string
 	expiresAt    time.Time
 	inboxHash    string
-	serverSigPk  []byte
-	keypair      *crypto.Keypair
+	serverSigPk  []byte          // Only set for encrypted inboxes
+	keypair      *crypto.Keypair // Only set for encrypted inboxes
 	client       *Client
+	emailAuth    bool
+	encrypted    bool
 }
 
 // SyncStatus is a type alias for api.SyncStatus.
@@ -42,6 +44,19 @@ func (i *Inbox) IsExpired() bool {
 	return time.Now().After(i.expiresAt)
 }
 
+// EmailAuth returns whether email authentication (SPF, DKIM, DMARC, PTR) is enabled.
+// When true, incoming emails are validated. When false, auth results have status "skipped".
+func (i *Inbox) EmailAuth() bool {
+	return i.emailAuth
+}
+
+// Encrypted returns whether the inbox uses end-to-end encryption.
+// When true, emails are encrypted with ML-KEM-768 and require decryption.
+// When false, emails are returned as Base64-encoded plaintext.
+func (i *Inbox) Encrypted() bool {
+	return i.encrypted
+}
+
 // GetSyncStatus retrieves the synchronization status of the inbox.
 // This includes the number of emails and a hash of the email list,
 // which can be used to efficiently check for changes.
@@ -62,5 +77,7 @@ func newInboxFromResult(resp *api.CreateInboxResult, c *Client) *Inbox {
 		serverSigPk:  resp.ServerSigPk,
 		keypair:      resp.Keypair,
 		client:       c,
+		emailAuth:    resp.EmailAuth,
+		encrypted:    resp.Encrypted,
 	}
 }

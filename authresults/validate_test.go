@@ -91,7 +91,7 @@ func TestValidate(t *testing.T) {
 				SPF:        &SPFResult{Result: "pass"},
 				DKIM:       []DKIMResult{{Result: "pass"}},
 				DMARC:      &DMARCResult{Result: "pass"},
-				ReverseDNS: &ReverseDNSResult{Verified: true},
+				ReverseDNS: &ReverseDNSResult{Result: "pass"},
 			},
 			wantErr: false,
 		},
@@ -174,7 +174,7 @@ func TestValidate(t *testing.T) {
 				SPF:        &SPFResult{Result: "pass"},
 				DKIM:       []DKIMResult{{Result: "pass"}},
 				DMARC:      &DMARCResult{Result: "pass"},
-				ReverseDNS: &ReverseDNSResult{Verified: false},
+				ReverseDNS: &ReverseDNSResult{Result: "fail"},
 			},
 			wantErr: true,
 			errMsgs: []string{"reverse DNS"},
@@ -383,17 +383,17 @@ func TestValidateReverseDNS(t *testing.T) {
 		},
 		{
 			name:    "ReverseDNS pass",
-			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Verified: true}},
+			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Result: "pass"}},
 			wantErr: nil,
 		},
 		{
 			name:    "ReverseDNS fail",
-			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Verified: false}},
+			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Result: "fail"}},
 			wantErr: ErrReverseDNSFailed,
 		},
 		{
 			name:    "ReverseDNS none",
-			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Verified: false}},
+			results: &AuthResults{ReverseDNS: &ReverseDNSResult{Result: "none"}},
 			wantErr: ErrReverseDNSFailed,
 		},
 	}
@@ -430,7 +430,7 @@ func TestIsPassing(t *testing.T) {
 				SPF:        &SPFResult{Result: "pass"},
 				DKIM:       []DKIMResult{{Result: "pass"}},
 				DMARC:      &DMARCResult{Result: "pass"},
-				ReverseDNS: &ReverseDNSResult{Verified: true},
+				ReverseDNS: &ReverseDNSResult{Result: "pass"},
 			},
 			expected: true,
 		},
@@ -458,7 +458,7 @@ func TestIsPassing(t *testing.T) {
 		{
 			name: "ReverseDNS fails",
 			results: &AuthResults{
-				ReverseDNS: &ReverseDNSResult{Verified: false},
+				ReverseDNS: &ReverseDNSResult{Result: "fail"},
 			},
 			expected: false,
 		},
@@ -560,13 +560,13 @@ func TestResultTypes_Fields(t *testing.T) {
 
 	t.Run("ReverseDNSResult", func(t *testing.T) {
 		rdns := &ReverseDNSResult{
-			Verified: true,
+			Result:   "pass",
 			IP:       "1.2.3.4",
 			Hostname: "mail.example.com",
 		}
 
-		if !rdns.Verified {
-			t.Error("Verified = false, want true")
+		if rdns.Result != "pass" {
+			t.Errorf("Result = %s, want pass", rdns.Result)
 		}
 		if rdns.Hostname != "mail.example.com" {
 			t.Errorf("Hostname = %s, want mail.example.com", rdns.Hostname)

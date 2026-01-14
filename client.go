@@ -51,11 +51,27 @@ func (s *syncState) computeEmailsHash() string {
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
+// EncryptionPolicy represents the server's encryption policy for inboxes.
+type EncryptionPolicy = api.EncryptionPolicy
+
+// Encryption policy constants.
+const (
+	// EncryptionPolicyAlways requires all inboxes to be encrypted.
+	EncryptionPolicyAlways = api.EncryptionPolicyAlways
+	// EncryptionPolicyEnabled makes encryption the default, but allows plain inboxes.
+	EncryptionPolicyEnabled = api.EncryptionPolicyEnabled
+	// EncryptionPolicyDisabled makes plain the default, but allows encrypted inboxes.
+	EncryptionPolicyDisabled = api.EncryptionPolicyDisabled
+	// EncryptionPolicyNever requires all inboxes to be plain.
+	EncryptionPolicyNever = api.EncryptionPolicyNever
+)
+
 // ServerInfo contains server configuration.
 type ServerInfo struct {
-	AllowedDomains []string
-	MaxTTL         time.Duration
-	DefaultTTL     time.Duration
+	AllowedDomains   []string
+	MaxTTL           time.Duration
+	DefaultTTL       time.Duration
+	EncryptionPolicy EncryptionPolicy
 }
 
 // Client is the main VaultSandbox client for managing inboxes.
@@ -244,6 +260,8 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 	req := &api.CreateInboxParams{
 		TTL:          cfg.ttl,
 		EmailAddress: cfg.emailAddress,
+		EmailAuth:    cfg.emailAuth,
+		Encryption:   string(cfg.encryption),
 	}
 
 	resp, err := c.apiClient.CreateInbox(ctx, req)
@@ -350,9 +368,10 @@ func (c *Client) Inboxes() []*Inbox {
 // ServerInfo returns the server configuration.
 func (c *Client) ServerInfo() *ServerInfo {
 	return &ServerInfo{
-		AllowedDomains: c.serverInfo.AllowedDomains,
-		MaxTTL:         time.Duration(c.serverInfo.MaxTTL) * time.Second,
-		DefaultTTL:     time.Duration(c.serverInfo.DefaultTTL) * time.Second,
+		AllowedDomains:   c.serverInfo.AllowedDomains,
+		MaxTTL:           time.Duration(c.serverInfo.MaxTTL) * time.Second,
+		DefaultTTL:       time.Duration(c.serverInfo.DefaultTTL) * time.Second,
+		EncryptionPolicy: c.serverInfo.EncryptionPolicy,
 	}
 }
 

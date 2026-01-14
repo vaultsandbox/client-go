@@ -161,6 +161,7 @@ func TestExportedInbox_Validate_InvalidBase64(t *testing.T) {
 				ServerSigPk:  base64.RawURLEncoding.EncodeToString(validServerSig),
 				SecretKey:    base64.RawURLEncoding.EncodeToString(validSecretKey),
 				ExportedAt:   time.Now(),
+				Encrypted:    true, // Key validation only runs for encrypted inboxes
 			}
 
 			// Apply modification
@@ -187,8 +188,9 @@ func TestExportedInbox_Validate_MissingFields(t *testing.T) {
 			},
 		},
 		{
-			name: "empty secret key",
+			name: "empty secret key for encrypted inbox",
 			modifier: func(e *ExportedInbox) {
+				e.Encrypted = true
 				e.SecretKey = ""
 			},
 		},
@@ -254,6 +256,7 @@ func TestExportedInbox_Validate_WrongKeySizes(t *testing.T) {
 				ServerSigPk:  base64.RawURLEncoding.EncodeToString(validServerSig),
 				SecretKey:    base64.RawURLEncoding.EncodeToString(secretKey),
 				ExportedAt:   time.Now(),
+				Encrypted:    true, // Key validation only runs for encrypted inboxes
 			}
 
 			err := data.Validate()
@@ -266,8 +269,8 @@ func TestExportedInbox_Validate_WrongKeySizes(t *testing.T) {
 
 func TestNewInboxFromExport_InvalidServerSigPkSize(t *testing.T) {
 	// Valid secret key, but wrong size server sig pk
-	validSecretKey := make([]byte, 2400)    // MLKEMSecretKeySize
-	invalidServerSig := make([]byte, 100)   // Wrong size
+	validSecretKey := make([]byte, 2400)  // MLKEMSecretKeySize
+	invalidServerSig := make([]byte, 100) // Wrong size
 
 	data := &ExportedInbox{
 		Version:      ExportVersion,
@@ -277,6 +280,7 @@ func TestNewInboxFromExport_InvalidServerSigPkSize(t *testing.T) {
 		ServerSigPk:  base64.RawURLEncoding.EncodeToString(invalidServerSig),
 		SecretKey:    base64.RawURLEncoding.EncodeToString(validSecretKey),
 		ExportedAt:   time.Now(),
+		Encrypted:    true, // Key validation only runs for encrypted inboxes
 	}
 
 	// Validation should fail due to invalid server sig pk size

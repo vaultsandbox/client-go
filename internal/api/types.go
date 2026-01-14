@@ -6,6 +6,34 @@ import (
 	"github.com/vaultsandbox/client-go/internal/crypto"
 )
 
+// EncryptionPolicy represents the server's encryption policy for inboxes.
+type EncryptionPolicy string
+
+const (
+	// EncryptionPolicyAlways requires all inboxes to be encrypted.
+	// No per-inbox override is allowed.
+	EncryptionPolicyAlways EncryptionPolicy = "always"
+	// EncryptionPolicyEnabled makes encryption the default, but allows
+	// per-inbox override to request plain inboxes.
+	EncryptionPolicyEnabled EncryptionPolicy = "enabled"
+	// EncryptionPolicyDisabled makes plain the default, but allows
+	// per-inbox override to request encrypted inboxes.
+	EncryptionPolicyDisabled EncryptionPolicy = "disabled"
+	// EncryptionPolicyNever requires all inboxes to be plain.
+	// No per-inbox override is allowed.
+	EncryptionPolicyNever EncryptionPolicy = "never"
+)
+
+// CanOverride returns true if the policy allows per-inbox encryption override.
+func (p EncryptionPolicy) CanOverride() bool {
+	return p == EncryptionPolicyEnabled || p == EncryptionPolicyDisabled
+}
+
+// DefaultEncrypted returns true if encryption is the default for this policy.
+func (p EncryptionPolicy) DefaultEncrypted() bool {
+	return p == EncryptionPolicyAlways || p == EncryptionPolicyEnabled
+}
+
 // ServerInfo represents the /api/server-info response containing server
 // configuration and capabilities.
 type ServerInfo struct {
@@ -23,6 +51,8 @@ type ServerInfo struct {
 	SSEConsole bool `json:"sseConsole"`
 	// AllowedDomains lists email domains that can be used for inbox creation.
 	AllowedDomains []string `json:"allowedDomains"`
+	// EncryptionPolicy specifies the server's encryption policy for inboxes.
+	EncryptionPolicy EncryptionPolicy `json:"encryptionPolicy"`
 }
 
 // SyncStatus represents the /api/inboxes/{email}/sync response used to check
@@ -34,7 +64,10 @@ type SyncStatus struct {
 	EmailsHash string `json:"emailsHash"`
 }
 
-// RawEmail represents an encrypted email from the API before decryption.
+// RawEmail represents an email from the API, either encrypted or plain.
+// Use IsEncrypted() to determine the format:
+//   - Encrypted: EncryptedMetadata and EncryptedParsed are set
+//   - Plain: Metadata and Parsed are set (Base64-encoded JSON)
 type RawEmail struct {
 	// ID is the unique email identifier.
 	ID string `json:"id"`
@@ -44,41 +77,75 @@ type RawEmail struct {
 	ReceivedAt time.Time `json:"receivedAt"`
 	// IsRead indicates whether the email has been marked as read.
 	IsRead bool `json:"isRead"`
+
+	// Encrypted format fields
 	// EncryptedMetadata contains the encrypted email headers (from, to, subject).
-	EncryptedMetadata *crypto.EncryptedPayload `json:"encryptedMetadata"`
+	EncryptedMetadata *crypto.EncryptedPayload `json:"encryptedMetadata,omitempty"`
 	// EncryptedParsed contains the encrypted email body and attachments.
 	// Only present when fetching full email details.
 	EncryptedParsed *crypto.EncryptedPayload `json:"encryptedParsed,omitempty"`
+
+	// Plain format fields
+	// Metadata contains the Base64-encoded JSON email headers (from, to, subject).
+	Metadata string `json:"metadata,omitempty"`
+	// Parsed contains the Base64-encoded JSON email body and attachments.
+	// Only present when fetching full email details.
+	Parsed string `json:"parsed,omitempty"`
 }
 
-// RawEmailSource represents the raw RFC 5322 email source in encrypted form.
+// IsEncrypted returns true if the email is in encrypted format.
+func (r *RawEmail) IsEncrypted() bool {
+	return r.EncryptedMetadata != nil
+}
+
+// RawEmailSource represents the raw RFC 5322 email source, either encrypted or plain.
+// Use IsEncrypted() to determine the format.
 type RawEmailSource struct {
 	// ID is the email identifier.
 	ID string `json:"id"`
-	// EncryptedRaw contains the encrypted raw email source.
-	EncryptedRaw *crypto.EncryptedPayload `json:"encryptedRaw"`
+	// EncryptedRaw contains the encrypted raw email source (encrypted inboxes).
+	EncryptedRaw *crypto.EncryptedPayload `json:"encryptedRaw,omitempty"`
+	// Raw contains the Base64-encoded raw email source (plain inboxes).
+	Raw string `json:"raw,omitempty"`
+}
+
+// IsEncrypted returns true if the raw email source is in encrypted format.
+func (r *RawEmailSource) IsEncrypted() bool {
+	return r.EncryptedRaw != nil
 }
 
 // SSEEvent represents a server-sent event payload for real-time email notifications.
+// Use IsEncrypted() to determine the format.
 type SSEEvent struct {
 	// InboxID is the inbox that received the email.
 	InboxID string `json:"inboxId"`
 	// EmailID is the unique identifier of the new email.
 	EmailID string `json:"emailId"`
-	// EncryptedMetadata contains the encrypted email headers for preview.
-	EncryptedMetadata *crypto.EncryptedPayload `json:"encryptedMetadata"`
+	// EncryptedMetadata contains the encrypted email headers for preview (encrypted inboxes).
+	EncryptedMetadata *crypto.EncryptedPayload `json:"encryptedMetadata,omitempty"`
+	// Metadata contains the Base64-encoded JSON email headers for preview (plain inboxes).
+	Metadata string `json:"metadata,omitempty"`
+}
+
+// IsEncrypted returns true if the SSE event is for an encrypted inbox.
+func (e *SSEEvent) IsEncrypted() bool {
+	return e.EncryptedMetadata != nil
 }
 
 type createInboxAPIRequest struct {
-	ClientKemPk  string `json:"clientKemPk"`
+	ClientKemPk  string `json:"clientKemPk,omitempty"` // Required when creating encrypted inbox
 	TTL          int    `json:"ttl,omitempty"`
 	EmailAddress string `json:"emailAddress,omitempty"`
+	EmailAuth    *bool  `json:"emailAuth,omitempty"`
+	Encryption   string `json:"encryption,omitempty"` // "encrypted" or "plain", omit for server default
 }
 
 type createInboxAPIResponse struct {
 	EmailAddress string    `json:"emailAddress"`
 	ExpiresAt    time.Time `json:"expiresAt"`
 	InboxHash    string    `json:"inboxHash"`
-	ServerSigPk  string    `json:"serverSigPk"`
+	ServerSigPk  string    `json:"serverSigPk,omitempty"` // Only present when Encrypted=true
+	EmailAuth    bool      `json:"emailAuth"`
+	Encrypted    bool      `json:"encrypted"` // Actual encryption state of the inbox
 }
 

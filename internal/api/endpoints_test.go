@@ -153,6 +153,7 @@ func TestCreateInbox_Success(t *testing.T) {
 			ExpiresAt:    time.Now().Add(time.Hour),
 			InboxHash:    "inbox123",
 			ServerSigPk:  "c2VydmVyc2lncGs=", // base64 of "serversigpk"
+			Encrypted:    true,                // Server indicates this is an encrypted inbox
 		})
 	}))
 	defer server.Close()
@@ -172,11 +173,14 @@ func TestCreateInbox_Success(t *testing.T) {
 	if result.InboxHash != "inbox123" {
 		t.Errorf("InboxHash = %s, want inbox123", result.InboxHash)
 	}
+	if !result.Encrypted {
+		t.Error("Encrypted should be true")
+	}
 	if result.Keypair == nil {
-		t.Error("Keypair should not be nil")
+		t.Error("Keypair should not be nil for encrypted inbox")
 	}
 	if len(result.ServerSigPk) == 0 {
-		t.Error("ServerSigPk should not be empty")
+		t.Error("ServerSigPk should not be empty for encrypted inbox")
 	}
 }
 
@@ -204,6 +208,7 @@ func TestCreateInbox_InvalidServerSigPk(t *testing.T) {
 			ExpiresAt:    time.Now().Add(time.Hour),
 			InboxHash:    "inbox123",
 			ServerSigPk:  "!!!invalid-base64!!!", // Invalid base64
+			Encrypted:    true,                   // Must be true to trigger ServerSigPk validation
 		})
 	}))
 	defer server.Close()
@@ -350,20 +355,27 @@ func TestGetEmailRaw_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		// Return a plain format raw email source (Base64-encoded)
 		json.NewEncoder(w).Encode(map[string]string{
-			"raw": "From: sender@example.com\r\nTo: test@example.com\r\n\r\nHello World",
+			"id":  "email123",
+			"raw": "RnJvbTogc2VuZGVyQGV4YW1wbGUuY29tDQpUbzogdGVzdEBleGFtcGxlLmNvbQ0KDQpIZWxsbyBXb3JsZA==", // Base64 encoded raw email
 		})
 	}))
 	defer server.Close()
 
 	client, _ := New("test-key", WithBaseURL(server.URL))
-	raw, err := client.GetEmailRaw(context.Background(), "test@example.com", "email123")
+	rawSource, err := client.GetEmailRaw(context.Background(), "test@example.com", "email123")
 	if err != nil {
 		t.Fatalf("GetEmailRaw() error = %v", err)
 	}
 
-	if !strings.Contains(raw, "From: sender@example.com") {
-		t.Errorf("raw = %s, want to contain 'From: sender@example.com'", raw)
+	if rawSource.ID != "email123" {
+		t.Errorf("rawSource.ID = %s, want email123", rawSource.ID)
+	}
+
+	// Plain format should have Raw field set
+	if rawSource.Raw == "" {
+		t.Error("rawSource.Raw should not be empty for plain format")
 	}
 }
 

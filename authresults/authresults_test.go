@@ -9,7 +9,7 @@ func TestValidate_AllPassing(t *testing.T) {
 		SPF:   &SPFResult{Result: "pass", Domain: "example.com"},
 		DKIM:  []DKIMResult{{Result: "pass", Domain: "example.com"}},
 		DMARC: &DMARCResult{Result: "pass", Domain: "example.com"},
-		ReverseDNS: &ReverseDNSResult{Verified: true, Hostname: "mail.example.com"},
+		ReverseDNS: &ReverseDNSResult{Result: "pass", Hostname: "mail.example.com"},
 	}
 
 	v := ar.Validate()
@@ -125,7 +125,7 @@ func TestValidate_ReverseDNSFailedDoesNotAffectPassed(t *testing.T) {
 		SPF:        &SPFResult{Result: "pass", Domain: "example.com"},
 		DKIM:       []DKIMResult{{Result: "pass", Domain: "example.com"}},
 		DMARC:      &DMARCResult{Result: "pass", Domain: "example.com"},
-		ReverseDNS: &ReverseDNSResult{Verified: false, Hostname: "bad.example.com"},
+		ReverseDNS: &ReverseDNSResult{Result: "fail", Hostname: "bad.example.com"},
 	}
 
 	v := ar.Validate()
@@ -227,7 +227,7 @@ func TestIsPassing_MatchesValidatePassed(t *testing.T) {
 				SPF:        &SPFResult{Result: "pass"},
 				DKIM:       []DKIMResult{{Result: "pass"}},
 				DMARC:      &DMARCResult{Result: "pass"},
-				ReverseDNS: &ReverseDNSResult{Verified: false},
+				ReverseDNS: &ReverseDNSResult{Result: "fail"},
 			},
 			expected: true,
 		},

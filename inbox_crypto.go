@@ -12,6 +12,12 @@ import (
 )
 
 func (i *Inbox) decryptEmail(raw *api.RawEmail) (*Email, error) {
+	// Handle plain emails (no encryption)
+	if !raw.IsEncrypted() {
+		return i.decodePlainEmail(raw)
+	}
+
+	// Handle encrypted emails
 	if raw.EncryptedMetadata == nil {
 		return nil, fmt.Errorf("email has no encrypted metadata")
 	}
@@ -40,15 +46,73 @@ func (i *Inbox) decryptEmail(raw *api.RawEmail) (*Email, error) {
 	return i.convertDecryptedEmail(decrypted), nil
 }
 
-// decryptMetadata decrypts only the metadata from an email.
-func (i *Inbox) decryptMetadata(raw *api.RawEmail) (*EmailMetadata, error) {
-	if raw.EncryptedMetadata == nil {
-		return nil, fmt.Errorf("email has no encrypted metadata")
+// decodePlainEmail decodes a plain (unencrypted) email from Base64-encoded JSON.
+func (i *Inbox) decodePlainEmail(raw *api.RawEmail) (*Email, error) {
+	if raw.Metadata == "" {
+		return nil, fmt.Errorf("plain email has no metadata")
 	}
 
-	metadataPlaintext, err := i.verifyAndDecrypt(raw.EncryptedMetadata)
+	// Decode Base64 metadata
+	metadataJSON, err := crypto.DecodeBase64(raw.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode plain metadata: %w", err)
+	}
+
+	metadata, err := parseMetadata(metadataJSON)
 	if err != nil {
 		return nil, err
+	}
+
+	// Build email from metadata
+	decrypted := buildDecryptedEmail(raw, metadata)
+
+	// Decode and apply parsed content if available
+	if raw.Parsed != "" {
+		parsedJSON, err := crypto.DecodeBase64(raw.Parsed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode plain parsed content: %w", err)
+		}
+
+		parsed, headers, err := parseParsedContent(parsedJSON)
+		if err != nil {
+			return nil, err
+		}
+
+		decrypted.Text = parsed.Text
+		decrypted.HTML = parsed.HTML
+		decrypted.Attachments = parsed.Attachments
+		decrypted.Links = parsed.Links
+		decrypted.AuthResults = parsed.AuthResults
+		decrypted.Headers = headers
+	}
+
+	return i.convertDecryptedEmail(decrypted), nil
+}
+
+// decryptMetadata decrypts only the metadata from an email.
+// For plain emails, this decodes the Base64-encoded metadata.
+func (i *Inbox) decryptMetadata(raw *api.RawEmail) (*EmailMetadata, error) {
+	var metadataPlaintext []byte
+	var err error
+
+	if raw.IsEncrypted() {
+		// Encrypted email: verify and decrypt
+		if raw.EncryptedMetadata == nil {
+			return nil, fmt.Errorf("email has no encrypted metadata")
+		}
+		metadataPlaintext, err = i.verifyAndDecrypt(raw.EncryptedMetadata)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Plain email: decode Base64
+		if raw.Metadata == "" {
+			return nil, fmt.Errorf("plain email has no metadata")
+		}
+		metadataPlaintext, err = crypto.DecodeBase64(raw.Metadata)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode plain metadata: %w", err)
+		}
 	}
 
 	metadata, err := parseMetadata(metadataPlaintext)

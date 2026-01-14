@@ -99,10 +99,16 @@ type CreateInboxParams struct {
 	TTL time.Duration
 	// EmailAddress is the optional desired email address.
 	EmailAddress string
+	// EmailAuth controls whether email authentication (SPF, DKIM, DMARC, PTR) is enabled.
+	// nil = use server default, true = enable, false = disable.
+	EmailAuth *bool
+	// Encryption specifies the desired encryption mode ("encrypted" or "plain").
+	// Empty string means use server default.
+	Encryption string
 }
 
 // CreateInboxResult contains the result of creating an inbox,
-// including the generated keypair.
+// including the generated keypair for encrypted inboxes.
 type CreateInboxResult struct {
 	// EmailAddress is the created inbox's email address.
 	EmailAddress string
@@ -110,23 +116,37 @@ type CreateInboxResult struct {
 	ExpiresAt time.Time
 	// InboxHash is the unique identifier for the inbox.
 	InboxHash string
-	// ServerSigPk is the server's signing public key.
+	// ServerSigPk is the server's signing public key. Only set for encrypted inboxes.
 	ServerSigPk []byte
-	// Keypair is the generated ML-KEM-768 keypair for decryption.
+	// Keypair is the generated ML-KEM-768 keypair for decryption. Only set for encrypted inboxes.
 	Keypair *crypto.Keypair
+	// EmailAuth indicates whether email authentication is enabled for this inbox.
+	EmailAuth bool
+	// Encrypted indicates whether the inbox is encrypted.
+	Encrypted bool
 }
 
-// CreateInbox creates a new inbox with an automatically generated keypair.
+// CreateInbox creates a new inbox.
+// For encrypted inboxes, a keypair is automatically generated.
+// For plain inboxes, no keypair is generated and emails are returned unencrypted.
 func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*CreateInboxResult, error) {
-	keypair, err := crypto.GenerateKeypair()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate keypair: %w", err)
-	}
-
 	apiReq := &createInboxAPIRequest{
-		ClientKemPk:  crypto.ToBase64URL(keypair.PublicKey),
 		TTL:          int(req.TTL.Seconds()),
 		EmailAddress: req.EmailAddress,
+		EmailAuth:    req.EmailAuth,
+		Encryption:   req.Encryption,
+	}
+
+	// Only generate keypair if requesting encrypted inbox (or server default which may be encrypted).
+	// If explicitly requesting plain, skip keypair generation.
+	var keypair *crypto.Keypair
+	if req.Encryption != "plain" {
+		var err error
+		keypair, err = crypto.GenerateKeypair()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate keypair: %w", err)
+		}
+		apiReq.ClientKemPk = crypto.ToBase64URL(keypair.PublicKey)
 	}
 
 	var apiResp createInboxAPIResponse
@@ -134,18 +154,28 @@ func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*Crea
 		return nil, apierrors.WithResourceType(err, apierrors.ResourceInbox)
 	}
 
-	serverSigPk, err := crypto.DecodeBase64(apiResp.ServerSigPk)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode server signature public key: %w", err)
-	}
-
-	return &CreateInboxResult{
+	result := &CreateInboxResult{
 		EmailAddress: apiResp.EmailAddress,
 		ExpiresAt:    apiResp.ExpiresAt,
 		InboxHash:    apiResp.InboxHash,
-		ServerSigPk:  serverSigPk,
-		Keypair:      keypair,
-	}, nil
+		EmailAuth:    apiResp.EmailAuth,
+		Encrypted:    apiResp.Encrypted,
+	}
+
+	// Only decode server signature key and set keypair for encrypted inboxes
+	if apiResp.Encrypted {
+		if apiResp.ServerSigPk == "" {
+			return nil, fmt.Errorf("server did not return signature public key for encrypted inbox")
+		}
+		serverSigPk, err := crypto.DecodeBase64(apiResp.ServerSigPk)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode server signature public key: %w", err)
+		}
+		result.ServerSigPk = serverSigPk
+		result.Keypair = keypair
+	}
+
+	return result, nil
 }
 
 // GetEmailsResponse contains the result of listing emails in an inbox.
@@ -182,15 +212,14 @@ func (c *Client) GetEmail(ctx context.Context, emailAddress, emailID string) (*R
 }
 
 // GetEmailRaw returns the raw RFC 5322 email source.
-func (c *Client) GetEmailRaw(ctx context.Context, emailAddress, emailID string) (string, error) {
-	var resp struct {
-		Raw string `json:"raw"`
-	}
+// Returns a RawEmailSource which can be either encrypted or plain.
+func (c *Client) GetEmailRaw(ctx context.Context, emailAddress, emailID string) (*RawEmailSource, error) {
+	var resp RawEmailSource
 	path := fmt.Sprintf("/api/inboxes/%s/emails/%s/raw", url.PathEscape(emailAddress), url.PathEscape(emailID))
 	if err := c.Do(ctx, http.MethodGet, path, nil, &resp); err != nil {
-		return "", apierrors.WithResourceType(err, apierrors.ResourceEmail)
+		return nil, apierrors.WithResourceType(err, apierrors.ResourceEmail)
 	}
-	return resp.Raw, nil
+	return &resp, nil
 }
 
 // MarkEmailAsRead marks an email as read.
