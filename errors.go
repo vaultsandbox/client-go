@@ -35,6 +35,9 @@ var (
 
 	// ErrRateLimited is returned when the API rate limit is exceeded.
 	ErrRateLimited = apierrors.ErrRateLimited
+
+	// ErrWebhookNotFound is returned when a webhook is not found.
+	ErrWebhookNotFound = apierrors.ErrWebhookNotFound
 )
 
 // ResourceType indicates which type of resource an error relates to.
@@ -47,6 +50,8 @@ const (
 	ResourceInbox = apierrors.ResourceInbox
 	// ResourceEmail indicates the error relates to an email.
 	ResourceEmail = apierrors.ResourceEmail
+	// ResourceWebhook indicates the error relates to a webhook.
+	ResourceWebhook = apierrors.ResourceWebhook
 )
 
 // APIError represents an HTTP error from the VaultSandbox API.

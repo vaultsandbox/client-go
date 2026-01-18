@@ -662,6 +662,39 @@ func (c *Client) handleSSEEvent(ctx context.Context, event *api.SSEEvent) error 
 	return nil
 }
 
+// GetWebhookTemplates returns all available webhook templates.
+// Templates can be used with [WithWebhookTemplate] when creating webhooks.
+func (c *Client) GetWebhookTemplates(ctx context.Context) ([]*WebhookTemplate, error) {
+	if err := c.checkClosed(); err != nil {
+		return nil, err
+	}
+
+	dtos, err := c.apiClient.GetWebhookTemplates(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	templates := make([]*WebhookTemplate, len(dtos))
+	for i, dto := range dtos {
+		templates[i] = webhookTemplateFromDTO(dto)
+	}
+	return templates, nil
+}
+
+// GetWebhookMetrics returns global webhook metrics for the account.
+func (c *Client) GetWebhookMetrics(ctx context.Context) (*WebhookMetrics, error) {
+	if err := c.checkClosed(); err != nil {
+		return nil, err
+	}
+
+	dto, err := c.apiClient.GetWebhookMetrics(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return webhookMetricsFromDTO(dto), nil
+}
+
 // Close closes the client and releases resources.
 func (c *Client) Close() error {
 	c.mu.Lock()

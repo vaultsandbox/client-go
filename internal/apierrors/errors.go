@@ -37,6 +37,9 @@ var (
 
 	// ErrRateLimited is returned when the API rate limit is exceeded.
 	ErrRateLimited = errors.New("rate limit exceeded")
+
+	// ErrWebhookNotFound is returned when a webhook is not found.
+	ErrWebhookNotFound = errors.New("webhook not found")
 )
 
 // ResourceType indicates which type of resource an error relates to.
@@ -49,6 +52,8 @@ const (
 	ResourceInbox ResourceType = "inbox"
 	// ResourceEmail indicates the error relates to an email.
 	ResourceEmail ResourceType = "email"
+	// ResourceWebhook indicates the error relates to a webhook.
+	ResourceWebhook ResourceType = "webhook"
 )
 
 // APIError represents an HTTP error from the VaultSandbox API.
@@ -83,8 +88,10 @@ func (e *APIError) Is(target error) bool {
 			return target == ErrInboxNotFound
 		case ResourceEmail:
 			return target == ErrEmailNotFound
+		case ResourceWebhook:
+			return target == ErrWebhookNotFound
 		default:
-			return target == ErrInboxNotFound || target == ErrEmailNotFound
+			return target == ErrInboxNotFound || target == ErrEmailNotFound || target == ErrWebhookNotFound
 		}
 	case 409:
 		return target == ErrInboxAlreadyExists
