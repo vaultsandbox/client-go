@@ -58,6 +58,7 @@ type inboxConfig struct {
 	emailAddress string
 	emailAuth    *bool
 	encryption   EncryptionMode
+	spamAnalysis *bool
 }
 
 // waitConfig holds configuration for waiting on emails.
@@ -218,6 +219,19 @@ func WithEmailAuth(enabled bool) InboxOption {
 func WithEncryption(mode EncryptionMode) InboxOption {
 	return func(c *inboxConfig) {
 		c.encryption = mode
+	}
+}
+
+// WithSpamAnalysis controls spam analysis (Rspamd) for the inbox.
+// When enabled, incoming emails are analyzed for spam and results are available
+// in [Email.SpamAnalysis]. When disabled, spam analysis is skipped and results
+// have status "skipped". If not specified, the server default is used.
+//
+// Note: This option has no effect if spam analysis is disabled globally on the server.
+// Use [ServerInfo.SpamAnalysisEnabled] to check if spam analysis is available.
+func WithSpamAnalysis(enabled bool) InboxOption {
+	return func(c *inboxConfig) {
+		c.spamAnalysis = &enabled
 	}
 }
 

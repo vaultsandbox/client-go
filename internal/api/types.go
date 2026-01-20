@@ -53,6 +53,8 @@ type ServerInfo struct {
 	AllowedDomains []string `json:"allowedDomains"`
 	// EncryptionPolicy specifies the server's encryption policy for inboxes.
 	EncryptionPolicy EncryptionPolicy `json:"encryptionPolicy"`
+	// SpamAnalysisEnabled indicates whether spam analysis (Rspamd) is enabled on the server.
+	SpamAnalysisEnabled bool `json:"spamAnalysisEnabled"`
 }
 
 // SyncStatus represents the /api/inboxes/{email}/sync response used to check
@@ -138,6 +140,7 @@ type createInboxAPIRequest struct {
 	EmailAddress string `json:"emailAddress,omitempty"`
 	EmailAuth    *bool  `json:"emailAuth,omitempty"`
 	Encryption   string `json:"encryption,omitempty"` // "encrypted" or "plain", omit for server default
+	SpamAnalysis *bool  `json:"spamAnalysis,omitempty"`
 }
 
 type createInboxAPIResponse struct {
@@ -147,5 +150,6 @@ type createInboxAPIResponse struct {
 	ServerSigPk  string    `json:"serverSigPk,omitempty"` // Only present when Encrypted=true
 	EmailAuth    bool      `json:"emailAuth"`
 	Encrypted    bool      `json:"encrypted"` // Actual encryption state of the inbox
+	SpamAnalysis *bool     `json:"spamAnalysis,omitempty"`
 }
 

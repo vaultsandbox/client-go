@@ -9,6 +9,7 @@ import (
 	"github.com/vaultsandbox/client-go/authresults"
 	"github.com/vaultsandbox/client-go/internal/api"
 	"github.com/vaultsandbox/client-go/internal/crypto"
+	"github.com/vaultsandbox/client-go/spamanalysis"
 )
 
 func (i *Inbox) decryptEmail(raw *api.RawEmail) (*Email, error) {
@@ -83,6 +84,7 @@ func (i *Inbox) decodePlainEmail(raw *api.RawEmail) (*Email, error) {
 		decrypted.Attachments = parsed.Attachments
 		decrypted.Links = parsed.Links
 		decrypted.AuthResults = parsed.AuthResults
+		decrypted.SpamAnalysis = parsed.SpamAnalysis
 		decrypted.Headers = headers
 	}
 
@@ -154,6 +156,7 @@ func (i *Inbox) applyParsedContent(encrypted *crypto.EncryptedPayload, decrypted
 	decrypted.Attachments = parsed.Attachments
 	decrypted.Links = parsed.Links
 	decrypted.AuthResults = parsed.AuthResults
+	decrypted.SpamAnalysis = parsed.SpamAnalysis
 	decrypted.Headers = headers
 
 	return nil
@@ -192,6 +195,14 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 		var ar authresults.AuthResults
 		if err := json.Unmarshal(d.AuthResults, &ar); err == nil {
 			email.AuthResults = &ar
+		}
+	}
+
+	// Unmarshal SpamAnalysis if present
+	if len(d.SpamAnalysis) > 0 {
+		var sa spamanalysis.SpamAnalysis
+		if err := json.Unmarshal(d.SpamAnalysis, &sa); err == nil {
+			email.SpamAnalysis = &sa
 		}
 	}
 

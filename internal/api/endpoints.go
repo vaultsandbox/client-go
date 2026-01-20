@@ -105,6 +105,9 @@ type CreateInboxParams struct {
 	// Encryption specifies the desired encryption mode ("encrypted" or "plain").
 	// Empty string means use server default.
 	Encryption string
+	// SpamAnalysis controls whether spam analysis (Rspamd) is enabled for this inbox.
+	// nil = use server default, true = enable, false = disable.
+	SpamAnalysis *bool
 }
 
 // CreateInboxResult contains the result of creating an inbox,
@@ -124,6 +127,9 @@ type CreateInboxResult struct {
 	EmailAuth bool
 	// Encrypted indicates whether the inbox is encrypted.
 	Encrypted bool
+	// SpamAnalysis indicates whether spam analysis is enabled for this inbox.
+	// May be nil if using server default.
+	SpamAnalysis *bool
 }
 
 // CreateInbox creates a new inbox.
@@ -135,6 +141,7 @@ func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*Crea
 		EmailAddress: req.EmailAddress,
 		EmailAuth:    req.EmailAuth,
 		Encryption:   req.Encryption,
+		SpamAnalysis: req.SpamAnalysis,
 	}
 
 	// Only generate keypair if requesting encrypted inbox (or server default which may be encrypted).
@@ -160,6 +167,7 @@ func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*Crea
 		InboxHash:    apiResp.InboxHash,
 		EmailAuth:    apiResp.EmailAuth,
 		Encrypted:    apiResp.Encrypted,
+		SpamAnalysis: apiResp.SpamAnalysis,
 	}
 
 	// Only decode server signature key and set keypair for encrypted inboxes

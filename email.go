@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/vaultsandbox/client-go/authresults"
+	"github.com/vaultsandbox/client-go/spamanalysis"
 )
 
 // Email represents a decrypted email.
@@ -22,11 +23,12 @@ type Email struct {
 	ReceivedAt  time.Time
 	// Headers contains email headers as string key-value pairs.
 	// Non-string header values from the server are omitted during parsing.
-	Headers     map[string]string
-	Attachments []Attachment
-	Links       []string
-	AuthResults *authresults.AuthResults
-	IsRead      bool
+	Headers      map[string]string
+	Attachments  []Attachment
+	Links        []string
+	AuthResults  *authresults.AuthResults
+	SpamAnalysis *spamanalysis.SpamAnalysis
+	IsRead       bool
 }
 
 // Attachment represents an email attachment.

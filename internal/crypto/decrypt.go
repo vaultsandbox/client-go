@@ -43,6 +43,8 @@ type DecryptedParsed struct {
 	Links []string `json:"links"`
 	// AuthResults contains email authentication results (SPF, DKIM, DMARC).
 	AuthResults json.RawMessage `json:"authResults"`
+	// SpamAnalysis contains spam analysis results from Rspamd.
+	SpamAnalysis json.RawMessage `json:"spamAnalysis"`
 }
 
 // DecryptedEmail represents a fully decrypted email combining metadata and
@@ -70,6 +72,8 @@ type DecryptedEmail struct {
 	Links []string
 	// AuthResults contains email authentication results (SPF, DKIM, DMARC).
 	AuthResults json.RawMessage
+	// SpamAnalysis contains spam analysis results from Rspamd.
+	SpamAnalysis json.RawMessage
 	// IsRead indicates whether the email has been marked as read.
 	IsRead bool
 }
