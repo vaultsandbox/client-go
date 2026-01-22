@@ -55,6 +55,8 @@ type ServerInfo struct {
 	EncryptionPolicy EncryptionPolicy `json:"encryptionPolicy"`
 	// SpamAnalysisEnabled indicates whether spam analysis (Rspamd) is enabled on the server.
 	SpamAnalysisEnabled bool `json:"spamAnalysisEnabled"`
+	// ChaosEnabled indicates whether chaos engineering features are enabled on the server.
+	ChaosEnabled bool `json:"chaosEnabled"`
 }
 
 // SyncStatus represents the /api/inboxes/{email}/sync response used to check

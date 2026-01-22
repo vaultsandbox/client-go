@@ -73,6 +73,7 @@ type ServerInfo struct {
 	DefaultTTL          time.Duration
 	EncryptionPolicy    EncryptionPolicy
 	SpamAnalysisEnabled bool
+	ChaosEnabled        bool
 }
 
 // Client is the main VaultSandbox client for managing inboxes.
@@ -375,6 +376,7 @@ func (c *Client) ServerInfo() *ServerInfo {
 		DefaultTTL:          time.Duration(c.serverInfo.DefaultTTL) * time.Second,
 		EncryptionPolicy:    c.serverInfo.EncryptionPolicy,
 		SpamAnalysisEnabled: c.serverInfo.SpamAnalysisEnabled,
+		ChaosEnabled:        c.serverInfo.ChaosEnabled,
 	}
 }
 

@@ -38,6 +38,9 @@ var (
 
 	// ErrWebhookNotFound is returned when a webhook is not found.
 	ErrWebhookNotFound = apierrors.ErrWebhookNotFound
+
+	// ErrChaosDisabled is returned when chaos is disabled globally on the server.
+	ErrChaosDisabled = apierrors.ErrChaosDisabled
 )
 
 // ResourceType indicates which type of resource an error relates to.
