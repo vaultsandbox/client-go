@@ -193,7 +193,9 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 	// Unmarshal AuthResults if present
 	if len(d.AuthResults) > 0 {
 		var ar authresults.AuthResults
-		if err := json.Unmarshal(d.AuthResults, &ar); err == nil {
+		if err := json.Unmarshal(d.AuthResults, &ar); err != nil {
+			email.AuthResultsError = fmt.Errorf("failed to parse auth results: %w", err)
+		} else {
 			email.AuthResults = &ar
 		}
 	}
@@ -201,7 +203,9 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 	// Unmarshal SpamAnalysis if present
 	if len(d.SpamAnalysis) > 0 {
 		var sa spamanalysis.SpamAnalysis
-		if err := json.Unmarshal(d.SpamAnalysis, &sa); err == nil {
+		if err := json.Unmarshal(d.SpamAnalysis, &sa); err != nil {
+			email.SpamAnalysisError = fmt.Errorf("failed to parse spam analysis: %w", err)
+		} else {
 			email.SpamAnalysis = &sa
 		}
 	}
@@ -212,6 +216,17 @@ func (i *Inbox) convertDecryptedEmail(d *crypto.DecryptedEmail) *Email {
 // verifyAndDecrypt verifies the signature and decrypts an encrypted payload.
 // It returns the decrypted plaintext or an error if verification/decryption fails.
 func (i *Inbox) verifyAndDecrypt(payload *crypto.EncryptedPayload) ([]byte, error) {
+	// Guard against misuse on plain inboxes
+	if !i.encrypted {
+		return nil, fmt.Errorf("verifyAndDecrypt called on plain (unencrypted) inbox")
+	}
+	if i.keypair == nil {
+		return nil, fmt.Errorf("keypair is nil for encrypted inbox")
+	}
+	if i.serverSigPk == nil {
+		return nil, fmt.Errorf("server signature public key is nil")
+	}
+
 	if err := crypto.VerifySignature(payload, i.serverSigPk); err != nil {
 		return nil, wrapCryptoError(err)
 	}

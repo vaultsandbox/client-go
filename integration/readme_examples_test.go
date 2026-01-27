@@ -1271,3 +1271,141 @@ func TestREADME_ClientMethods(t *testing.T) {
 	// inboxes from other concurrent tests. The defers above clean up
 	// the inboxes created by this test.
 }
+
+// ============================================================================
+// README Webhooks Example
+// ============================================================================
+
+func TestREADME_Webhooks(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	// README example: Create inbox
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inbox.Delete(ctx)
+
+	// README example: Create a webhook that triggers when emails are received
+	webhook, err := inbox.CreateWebhook(ctx, "https://example.com/webhook",
+		vaultsandbox.WithWebhookEvents(vaultsandbox.WebhookEventEmailReceived),
+		vaultsandbox.WithWebhookDescription("Notify on new emails"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inbox.DeleteWebhook(ctx, webhook.ID)
+
+	t.Logf("Webhook created: ID=%s, Secret=%s...", webhook.ID, webhook.Secret[:10])
+
+	// Verify webhook properties
+	if webhook.ID == "" {
+		t.Error("webhook.ID is empty")
+	}
+	if webhook.Secret == "" {
+		t.Error("webhook.Secret is empty")
+	}
+	if webhook.Scope != vaultsandbox.WebhookScopeInbox {
+		t.Errorf("webhook.Scope = %s, want inbox", webhook.Scope)
+	}
+	if len(webhook.Events) != 1 || webhook.Events[0] != vaultsandbox.WebhookEventEmailReceived {
+		t.Errorf("webhook.Events = %v, want [email.received]", webhook.Events)
+	}
+
+	// README example: List webhooks for the inbox
+	webhooks, err := inbox.ListWebhooks(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Total webhooks: %d", webhooks.Total)
+
+	if webhooks.Total < 1 {
+		t.Error("expected at least 1 webhook")
+	}
+
+	// Verify our webhook is in the list
+	found := false
+	for _, w := range webhooks.Webhooks {
+		if w.ID == webhook.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("created webhook not found in list")
+	}
+}
+
+// ============================================================================
+// README Chaos Engineering Example
+// ============================================================================
+
+func TestREADME_ChaosEngineering(t *testing.T) {
+	client := newClient(t)
+	ctx := context.Background()
+
+	// README example: Create inbox
+	inbox, err := client.CreateInbox(ctx, vaultsandbox.WithTTL(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inbox.Delete(ctx)
+
+	// README example: Check if chaos is enabled on the server
+	if !client.ServerInfo().ChaosEnabled {
+		t.Skip("Chaos not enabled on this server")
+	}
+
+	// README example: Enable latency injection (500ms-2s delay with 50% probability)
+	chaosConfig := &vaultsandbox.ChaosConfig{
+		Enabled: true,
+		Latency: &vaultsandbox.LatencyConfig{
+			Enabled:     true,
+			MinDelayMs:  500,
+			MaxDelayMs:  2000,
+			Probability: 0.5,
+		},
+	}
+
+	result, err := inbox.SetChaosConfig(ctx, chaosConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Chaos enabled: Latency=%v", result.Latency.Enabled)
+
+	// Verify chaos config
+	if !result.Enabled {
+		t.Error("expected chaos to be enabled")
+	}
+	if result.Latency == nil {
+		t.Fatal("expected latency config to be set")
+	}
+	if !result.Latency.Enabled {
+		t.Error("expected latency to be enabled")
+	}
+
+	// Verify we can get the config back
+	got, err := inbox.GetChaosConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Enabled {
+		t.Error("GetChaosConfig: expected chaos to be enabled")
+	}
+
+	// README example: Disable chaos when done testing
+	if err := inbox.DisableChaos(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify chaos is disabled
+	got, err = inbox.GetChaosConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Enabled {
+		t.Error("expected chaos to be disabled after DisableChaos()")
+	}
+	t.Log("Chaos disabled successfully")
+}

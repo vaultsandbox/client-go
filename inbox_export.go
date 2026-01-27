@@ -145,8 +145,10 @@ func newInboxFromExport(data *ExportedInbox, c *Client) (*Inbox, error) {
 		serverSigPk, _ := crypto.FromBase64URL(data.ServerSigPk)
 
 		// Per spec Section 10.2: Reconstruct keypair by deriving public key from secret key
-		// publicKey = secretKey[1152:2400]
-		keypair, _ := crypto.KeypairFromSecretKey(secretKey)
+		keypair, err := crypto.KeypairFromSecretKey(secretKey)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to reconstruct keypair: %v", ErrInvalidImportData, err)
+		}
 
 		inbox.serverSigPk = serverSigPk
 		inbox.keypair = keypair

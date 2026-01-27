@@ -203,6 +203,12 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	// This catches any emails that arrived during the reconnection window.
 	strategy.OnReconnect(c.syncAllInboxes)
 
+	// Register error handler for event processing failures (e.g., fetch errors,
+	// decryption failures, signature verification failures).
+	if errHandler, ok := strategy.(interface{ OnError(func(error)) }); ok {
+		errHandler.OnError(c.onSyncError)
+	}
+
 	return c, nil
 }
 
@@ -287,65 +293,94 @@ func (c *Client) ImportInbox(ctx context.Context, data *ExportedInbox) (*Inbox, 
 		return nil, fmt.Errorf("exported inbox data cannot be nil")
 	}
 
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		return nil, ErrClientClosed
+	// Early check for closed client (avoid work if already closed)
+	if err := c.checkClosed(); err != nil {
+		return nil, err
 	}
 
-	// Check for duplicate
-	if _, exists := c.inboxes[data.EmailAddress]; exists {
-		c.mu.Unlock()
+	// Early check for duplicate (fast path, will be re-checked atomically below)
+	c.mu.RLock()
+	_, exists := c.inboxes[data.EmailAddress]
+	c.mu.RUnlock()
+	if exists {
 		return nil, ErrInboxAlreadyExists
 	}
-	c.mu.Unlock()
 
 	inbox, err := newInboxFromExport(data, c)
 	if err != nil {
 		return nil, err
 	}
 
-	// Verify inbox still exists on server
+	// Verify inbox still exists on server (before acquiring lock for registration)
 	_, err = c.apiClient.GetInboxSync(ctx, inbox.emailAddress)
 	if err != nil {
 		return nil, fmt.Errorf("verify inbox: %w", err)
 	}
 
-	if err := c.registerInbox(inbox); err != nil {
-		return nil, err //coverage:ignore
+	// Atomic check-and-register with single lock hold
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return nil, ErrClientClosed
 	}
+
+	// Re-check for duplicate (another goroutine may have registered while we were verifying)
+	if _, exists := c.inboxes[data.EmailAddress]; exists {
+		return nil, ErrInboxAlreadyExists
+	}
+
+	// Register inline instead of calling registerInbox to avoid lock release
+	c.inboxes[inbox.emailAddress] = inbox
+	c.inboxesByHash[inbox.inboxHash] = inbox
+	c.syncStates[inbox.inboxHash] = &syncState{
+		seenEmails: make(map[string]struct{}),
+	}
+	c.strategy.AddInbox(delivery.InboxInfo{
+		Hash:         inbox.inboxHash,
+		EmailAddress: inbox.emailAddress,
+	})
 
 	return inbox, nil
 }
 
 // DeleteInbox deletes an inbox by email address.
 func (c *Client) DeleteInbox(ctx context.Context, emailAddress string) error {
+	// First, attempt the API deletion
+	if err := c.apiClient.DeleteInboxByEmail(ctx, emailAddress); err != nil {
+		return err
+	}
+
+	// Only remove from local tracking after successful API call
 	c.mu.Lock()
-	inbox, exists := c.inboxes[emailAddress]
-	if exists {
+	defer c.mu.Unlock()
+
+	if inbox, exists := c.inboxes[emailAddress]; exists {
+		c.strategy.RemoveInbox(inbox.inboxHash)
 		delete(c.inboxes, emailAddress)
 		delete(c.inboxesByHash, inbox.inboxHash)
 		delete(c.syncStates, inbox.inboxHash)
-		c.strategy.RemoveInbox(inbox.inboxHash)
 	}
-	c.mu.Unlock()
 
-	return c.apiClient.DeleteInboxByEmail(ctx, emailAddress)
+	return nil
 }
 
 // DeleteAllInboxes deletes all inboxes managed by this client.
 func (c *Client) DeleteAllInboxes(ctx context.Context) (int, error) {
+	count, err := c.apiClient.DeleteAllInboxes(ctx)
+	if err != nil {
+		return 0, err
+	}
+
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	for email, inbox := range c.inboxes {
 		c.strategy.RemoveInbox(inbox.inboxHash)
 		delete(c.inboxes, email)
 		delete(c.inboxesByHash, inbox.inboxHash)
 		delete(c.syncStates, inbox.inboxHash)
 	}
-	c.mu.Unlock()
-
-	count, err := c.apiClient.DeleteAllInboxes(ctx)
-	return count, err
+	return count, nil
 }
 
 // GetInbox returns an inbox by email address.

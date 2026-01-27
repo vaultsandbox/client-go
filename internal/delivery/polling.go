@@ -2,7 +2,7 @@ package delivery
 
 import (
 	"context"
-	"math/rand"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -25,6 +25,10 @@ type PollingStrategy struct {
 	cancel    context.CancelFunc      // Cancels the poll loop goroutine.
 	mu        sync.RWMutex            // Protects inboxes, handler, and onError.
 	started   bool                    // Whether polling is active.
+
+	// Local random source for jitter calculation
+	rng   *rand.Rand   // Local random source (not thread-safe).
+	rngMu sync.Mutex   // Protects rng.
 
 	// Configurable polling parameters
 	initialInterval   time.Duration
@@ -65,9 +69,14 @@ func NewPollingStrategy(cfg Config) *PollingStrategy {
 		jitterFactor = DefaultPollingJitterFactor
 	}
 
+	// Create local random source to avoid contention on global rand
+	seed := uint64(time.Now().UnixNano())
+	rng := rand.New(rand.NewPCG(seed, seed^0xDEADBEEF))
+
 	return &PollingStrategy{
 		apiClient:         cfg.APIClient,
 		inboxes:           make(map[string]*polledInbox),
+		rng:               rng,
 		initialInterval:   initialInterval,
 		maxBackoff:        maxBackoff,
 		backoffMultiplier: backoffMultiplier,
@@ -247,21 +256,41 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 		return
 	}
 
+	// Build set of current server email IDs
+	serverIDs := make(map[string]struct{}, len(resp.Emails))
+	for _, email := range resp.Emails {
+		serverIDs[email.ID] = struct{}{}
+	}
+
+	// Remove deleted emails from seenEmails to prevent memory leak
+	for id := range inbox.seenEmails {
+		if _, exists := serverIDs[id]; !exists {
+			delete(inbox.seenEmails, id)
+		}
+	}
+
 	p.mu.RLock()
 	handler := p.handler
 	p.mu.RUnlock()
 
-	// Find new emails
+	// Find and notify new emails
 	for _, email := range resp.Emails {
 		if _, seen := inbox.seenEmails[email.ID]; !seen {
 			inbox.seenEmails[email.ID] = struct{}{}
 
 			if handler != nil {
-				handler(ctx, &api.SSEEvent{
+				if err := handler(ctx, &api.SSEEvent{
 					InboxID:           inbox.hash,
 					EmailID:           email.ID,
 					EncryptedMetadata: email.EncryptedMetadata,
-				})
+				}); err != nil {
+					p.mu.RLock()
+					onError := p.onError
+					p.mu.RUnlock()
+					if onError != nil {
+						onError(err)
+					}
+				}
 			}
 		}
 	}
@@ -271,7 +300,10 @@ func (p *PollingStrategy) pollInbox(ctx context.Context, inbox *polledInbox) {
 // jitter to the base interval to prevent synchronized polling across clients.
 func (p *PollingStrategy) getWaitDuration(inbox *polledInbox) time.Duration {
 	// Add jitter to prevent thundering herd
-	jitter := time.Duration(rand.Float64() * p.jitterFactor * float64(inbox.interval))
+	// Use local random source with mutex protection (rand.Rand is not thread-safe)
+	p.rngMu.Lock()
+	jitter := time.Duration(p.rng.Float64() * p.jitterFactor * float64(inbox.interval))
+	p.rngMu.Unlock()
 	return inbox.interval + jitter
 }
 

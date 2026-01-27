@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.1] - 2026-01-27
+
+### Fixed
+
+- Polling strategy now reports handler errors via `OnError` callback
+- `DeleteAllInboxes` state consistency on API failure
+- Race conditions in `DeleteInbox` and `ImportInbox`
+- Nil pointer dereference in `verifyAndDecrypt` for plain inboxes
+- SSE strategy state not resetting on reuse
+- Memory leak in polling strategy `seenEmails`
+- Silently ignored errors in crypto operations and import
+- SSE event processing errors now reported via `OnSyncError` callback
+- `ErrChaosDisabled` mapping for 403 responses
+
+### Added
+
+- `AuthResultsError` and `SpamAnalysisError` fields on `Email` struct
+
+
 ## [0.9.0] - 2026-01-22
 
 ### Added

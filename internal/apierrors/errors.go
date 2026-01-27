@@ -4,6 +4,7 @@ package apierrors
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Sentinel errors for errors.Is() checks
@@ -85,6 +86,12 @@ func (e *APIError) Is(target error) bool {
 	switch e.StatusCode {
 	case 401:
 		return target == ErrUnauthorized
+	case 403:
+		// Check message for chaos-specific error
+		if strings.Contains(strings.ToLower(e.Message), "chaos") {
+			return target == ErrChaosDisabled
+		}
+		return false
 	case 404:
 		switch e.ResourceType {
 		case ResourceInbox:

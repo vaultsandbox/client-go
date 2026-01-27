@@ -51,7 +51,7 @@ type SSEStrategy struct {
 	handler       EventHandler         // Callback for new email events.
 	cancel        context.CancelFunc   // Cancels the connection goroutine.
 	connCancel    context.CancelFunc   // Cancels the current connection (for reconnection).
-	mu            sync.RWMutex         // Protects inboxHashes, handler, and connCancel.
+	mu            sync.RWMutex         // Protects inboxHashes, handler, connCancel, onReconnect, onError.
 	reconnectWait time.Duration        // Base interval for reconnection backoff.
 	attempts      atomic.Int32         // Consecutive failed connection attempts.
 	started       bool                 // Whether the strategy is active.
@@ -60,6 +60,7 @@ type SSEStrategy struct {
 	lastError     error                // Most recent connection error.
 	inboxAdded    chan struct{}        // Signaled when an inbox is added (0→1 case).
 	onReconnect   func(ctx context.Context) // Called after each successful connection.
+	onError       func(error)          // Callback for event processing errors.
 }
 
 // NewSSEStrategy creates a new SSE strategy with the given configuration.
@@ -114,6 +115,15 @@ func (s *SSEStrategy) OnReconnect(fn func(ctx context.Context)) {
 	s.mu.Unlock()
 }
 
+// OnError sets a callback that is invoked when an event processing error occurs.
+// This includes errors from fetching emails, decryption failures, and signature
+// verification failures. Use this to detect and log security-critical failures.
+func (s *SSEStrategy) OnError(fn func(error)) {
+	s.mu.Lock()
+	s.onError = fn
+	s.mu.Unlock()
+}
+
 // Start begins listening for emails on the given inboxes via SSE. It spawns
 // a background goroutine that maintains a persistent connection to the server
 // and calls the handler for each new email event.
@@ -123,6 +133,14 @@ func (s *SSEStrategy) OnReconnect(fn func(ctx context.Context)) {
 // Start still returns nil and reconnection attempts happen in the background.
 func (s *SSEStrategy) Start(ctx context.Context, inboxes []InboxInfo, handler EventHandler) error {
 	s.mu.Lock()
+
+	// Reset state for potential reuse after Stop
+	s.connected = make(chan struct{})
+	s.connectedOnce = sync.Once{}
+	s.attempts.Store(0)
+	s.lastError = nil
+	s.inboxHashes = make(map[string]struct{})
+
 	for _, inbox := range inboxes {
 		s.inboxHashes[inbox.Hash] = struct{}{}
 	}
@@ -347,10 +365,15 @@ func (s *SSEStrategy) connect(ctx context.Context) error {
 
 			s.mu.RLock()
 			handler := s.handler
+			onError := s.onError
 			s.mu.RUnlock()
 
 			if handler != nil {
-				handler(connCtx, &event)
+				if err := handler(connCtx, &event); err != nil {
+					if onError != nil {
+						onError(err)
+					}
+				}
 			}
 		}
 	}

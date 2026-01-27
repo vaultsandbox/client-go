@@ -153,7 +153,9 @@ func VerifySignature(payload *EncryptedPayload, pinnedServerPk []byte) error {
 
 	// Unmarshal public key (size already validated by ValidatePayload)
 	var pubKey mldsa65.PublicKey
-	_ = pubKey.UnmarshalBinary(serverSigPk)
+	if err := pubKey.UnmarshalBinary(serverSigPk); err != nil {
+		return fmt.Errorf("failed to unmarshal server public key: %w", err)
+	}
 
 	// Verify signature
 	if !mldsa65.Verify(&pubKey, transcript, nil, sig) {

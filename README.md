@@ -13,36 +13,15 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.24-brightgreen.svg)](https://golang.org/)
 
-**Production-like email testing. Self-hosted & secure.**
+**Production-like email testing. Self-hosted and secure.**
 
-The official Go SDK for [VaultSandbox Gateway](https://github.com/vaultsandbox/gateway) — a secure, receive-only SMTP server for QA/testing environments. This SDK abstracts encryption complexity, making email testing workflows transparent and effortless.
+The official Go SDK for [VaultSandbox Gateway](https://github.com/vaultsandbox/gateway) — a self-hosted SMTP testing platform that replicates real-world email delivery with TLS, authentication, spam analysis, chaos engineering, and zero-knowledge encryption.
 
-Stop mocking your email stack. If your app sends real emails in production, it must send real emails in testing. VaultSandbox provides isolated inboxes that behave exactly like production without exposing a single byte of customer data.
+Stop mocking. Test email like production.
+
+**[See full feature list →](https://github.com/vaultsandbox/gateway)**
 
 > **Go 1.24+** required.
-
-## Why VaultSandbox?
-
-| Feature             | Simple Mocks     | Public SaaS  | **VaultSandbox**    |
-| :------------------ | :--------------- | :----------- | :------------------ |
-| **TLS/SSL**         | Ignored/Disabled | Partial      | **Real ACME certs** |
-| **Data Privacy**    | Local only       | Shared cloud | **Private VPC**     |
-| **Inbound Mail**    | Outbound only    | Yes          | **Real MX**         |
-| **Auth (SPF/DKIM)** | None             | Limited      | **Full Validation** |
-| **Crypto**          | Plaintext        | Varies       | **Zero-Knowledge**  |
-
-## Features
-
-- **Quantum-Safe Encryption** — Automatic ML-KEM-768 (Kyber768) key encapsulation + AES-256-GCM encryption
-- **Zero Crypto Knowledge Required** — All cryptographic operations are invisible to the user
-- **Real-Time Email Delivery** — SSE-based delivery with smart polling fallback
-- **Built for CI/CD** — Deterministic tests without sleeps, polling, or flakiness
-- **Full Email Access** — Decrypt and access email content, headers, links, and attachments
-- **Email Authentication** — Built-in SPF/DKIM/DMARC validation helpers
-- **Type-Safe** — Full Go type safety with comprehensive struct definitions
-- **[Spam Analysis](https://vaultsandbox.dev/client-go/concepts/spam-analysis/)** — Rspamd integration for spam scores, classifications, and rule analysis
-- **[Webhooks](https://vaultsandbox.dev/client-go/guides/webhooks/)** — Global and per-inbox HTTP callbacks for email events with filtering and templates
-- **[Chaos Engineering](https://vaultsandbox.dev/client-go/guides/chaos/)** — Per-inbox SMTP failure simulation (latency, drops, errors, greylisting, blackhole)
 
 ## Installation
 
@@ -460,6 +439,78 @@ func main() {
     })
 
     fmt.Println("Stopped monitoring")
+}
+```
+
+### Webhooks
+
+Webhooks notify your services when emails arrive. Create inbox-scoped webhooks to receive notifications for a specific inbox.
+
+```go
+inbox, err := client.CreateInbox(ctx)
+if err != nil {
+    t.Fatal(err)
+}
+defer inbox.Delete(ctx)
+
+// Create a webhook that triggers when emails are received
+webhook, err := inbox.CreateWebhook(ctx, "https://example.com/webhook",
+    vaultsandbox.WithWebhookEvents(vaultsandbox.WebhookEventEmailReceived),
+    vaultsandbox.WithWebhookDescription("Notify on new emails"),
+)
+if err != nil {
+    t.Fatal(err)
+}
+defer inbox.DeleteWebhook(ctx, webhook.ID)
+
+fmt.Printf("Webhook created: ID=%s, Secret=%s\n", webhook.ID, webhook.Secret)
+
+// List webhooks for the inbox
+webhooks, err := inbox.ListWebhooks(ctx)
+if err != nil {
+    t.Fatal(err)
+}
+fmt.Printf("Total webhooks: %d\n", webhooks.Total)
+```
+
+### Chaos Engineering
+
+Chaos engineering lets you test how your application handles email delivery failures. Enable chaos on an inbox to inject latency, errors, or other failure scenarios.
+
+```go
+inbox, err := client.CreateInbox(ctx)
+if err != nil {
+    t.Fatal(err)
+}
+defer inbox.Delete(ctx)
+
+// Check if chaos is enabled on the server
+if !client.ServerInfo().ChaosEnabled {
+    t.Skip("Chaos not enabled on this server")
+}
+
+// Enable latency injection (500ms-2s delay with 50% probability)
+chaosConfig := &vaultsandbox.ChaosConfig{
+    Enabled: true,
+    Latency: &vaultsandbox.LatencyConfig{
+        Enabled:     true,
+        MinDelayMs:  500,
+        MaxDelayMs:  2000,
+        Probability: 0.5,
+    },
+}
+
+result, err := inbox.SetChaosConfig(ctx, chaosConfig)
+if err != nil {
+    t.Fatal(err)
+}
+fmt.Printf("Chaos enabled: Latency=%v\n", result.Latency.Enabled)
+
+// Send emails to this inbox - they will experience random delays
+
+// Disable chaos when done testing
+if err := inbox.DisableChaos(ctx); err != nil {
+    t.Fatal(err)
 }
 ```
 

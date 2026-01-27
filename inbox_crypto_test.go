@@ -288,6 +288,7 @@ func TestDecryptMetadata_Success(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: serverPk,
+		encrypted:   true,
 	}
 
 	apiReceivedAt := time.Now().Truncate(time.Second)
@@ -343,6 +344,7 @@ func TestDecryptMetadata_InvalidReceivedAtFallback(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: serverPk,
+		encrypted:   true,
 	}
 
 	apiReceivedAt := time.Now().Truncate(time.Second)
@@ -383,6 +385,7 @@ func TestDecryptMetadata_EmptyReceivedAtFallback(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: serverPk,
+		encrypted:   true,
 	}
 
 	apiReceivedAt := time.Now().Truncate(time.Second)
@@ -426,6 +429,7 @@ func TestDecryptMetadata_VerifyAndDecryptError(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: differentServerPk,
+		encrypted:   true,
 	}
 
 	rawEmail := &api.RawEmail{
@@ -452,6 +456,7 @@ func TestDecryptMetadata_ParseMetadataError(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: serverPk,
+		encrypted:   true,
 	}
 
 	rawEmail := &api.RawEmail{
@@ -484,6 +489,7 @@ func TestDecryptEmail_Success(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: serverPk,
+		encrypted:   true,
 	}
 
 	rawEmail := &api.RawEmail{
@@ -549,6 +555,7 @@ func TestDecryptEmail_WithParsedContent(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: serverPubBytes,
+		encrypted:   true,
 	}
 
 	rawEmail := &api.RawEmail{
@@ -819,6 +826,7 @@ func TestApplyParsedContent_Success(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: serverPk,
+		encrypted:   true,
 	}
 
 	decrypted := &crypto.DecryptedEmail{}
@@ -866,6 +874,7 @@ func TestVerifyAndDecrypt_Success(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: serverPk,
+		encrypted:   true,
 	}
 
 	result, err := inbox.verifyAndDecrypt(payload)
@@ -893,6 +902,7 @@ func TestVerifyAndDecrypt_SignatureError(t *testing.T) {
 	inbox := &Inbox{
 		keypair:     kp,
 		serverSigPk: wrongServerPk,
+		encrypted:   true,
 	}
 
 	_, err = inbox.verifyAndDecrypt(payload)

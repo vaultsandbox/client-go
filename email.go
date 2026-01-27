@@ -29,6 +29,14 @@ type Email struct {
 	AuthResults  *authresults.AuthResults
 	SpamAnalysis *spamanalysis.SpamAnalysis
 	IsRead       bool
+
+	// AuthResultsError contains any error that occurred parsing auth results.
+	// This is set instead of AuthResults if parsing failed.
+	AuthResultsError error `json:"-"`
+
+	// SpamAnalysisError contains any error that occurred parsing spam analysis.
+	// This is set instead of SpamAnalysis if parsing failed.
+	SpamAnalysisError error `json:"-"`
 }
 
 // Attachment represents an email attachment.
