@@ -19,6 +19,7 @@ import (
 )
 
 func TestNew_RequiresAPIKey(t *testing.T) {
+	t.Parallel()
 	_, err := New("")
 	if !errors.Is(err, ErrMissingAPIKey) {
 		t.Errorf("New() error = %v, want ErrMissingAPIKey", err)
@@ -26,6 +27,7 @@ func TestNew_RequiresAPIKey(t *testing.T) {
 }
 
 func TestServerInfo_Fields(t *testing.T) {
+	t.Parallel()
 	info := &ServerInfo{
 		AllowedDomains: []string{"example.com", "test.com"},
 		MaxTTL:         MaxTTL,
@@ -44,6 +46,7 @@ func TestServerInfo_Fields(t *testing.T) {
 }
 
 func TestExportInboxToFile_NilInbox(t *testing.T) {
+	t.Parallel()
 	// Create a minimal client (we can't fully initialize without API)
 	c := &Client{}
 
@@ -57,6 +60,7 @@ func TestExportInboxToFile_NilInbox(t *testing.T) {
 }
 
 func TestExportedInbox_JSONRoundtrip(t *testing.T) {
+	t.Parallel()
 	original := &ExportedInbox{
 		Version:      ExportVersion,
 		EmailAddress: "test@example.com",
@@ -98,6 +102,7 @@ func TestExportedInbox_JSONRoundtrip(t *testing.T) {
 }
 
 func TestImportInboxFromFile_NotFound(t *testing.T) {
+	t.Parallel()
 	c := &Client{}
 
 	_, err := c.ImportInboxFromFile(context.TODO(), "/nonexistent/path/file.json")
@@ -107,6 +112,7 @@ func TestImportInboxFromFile_NotFound(t *testing.T) {
 }
 
 func TestImportInboxFromFile_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	c := &Client{}
 
 	// Create a temp file with invalid JSON
@@ -123,6 +129,7 @@ func TestImportInboxFromFile_InvalidJSON(t *testing.T) {
 }
 
 func TestExportedInbox_Validate_InvalidBase64(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		modifier func(*ExportedInbox)
@@ -177,6 +184,7 @@ func TestExportedInbox_Validate_InvalidBase64(t *testing.T) {
 }
 
 func TestExportedInbox_Validate_MissingFields(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		modifier func(*ExportedInbox)
@@ -755,6 +763,7 @@ func TestClient_Inboxes_Empty(t *testing.T) {
 }
 
 func TestClient_WatchInboxes_EmptyList(t *testing.T) {
+	t.Parallel()
 	c := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -773,6 +782,7 @@ func TestClient_WatchInboxes_EmptyList(t *testing.T) {
 }
 
 func TestClient_WatchInboxes_ContextCancel(t *testing.T) {
+	t.Parallel()
 	c := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -785,11 +795,8 @@ func TestClient_WatchInboxes_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := c.WatchInboxes(ctx, inbox)
 
-	// Cancel context
+	// Cancel context - cleanup happens synchronously
 	cancel()
-
-	// Give time for cleanup goroutine to run
-	time.Sleep(50 * time.Millisecond)
 
 	// Verify we can still read from channel (it's not closed, but context is done)
 	select {
@@ -2046,6 +2053,7 @@ func TestClient_CheckKey_Success(t *testing.T) {
 
 // TestClient_WatchInboxesFunc_EventDelivery tests that events are delivered to callback
 func TestClient_WatchInboxesFunc_EventDelivery(t *testing.T) {
+	t.Parallel()
 	c := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -2057,9 +2065,11 @@ func TestClient_WatchInboxesFunc_EventDelivery(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	receivedEvent := make(chan *InboxEvent, 1)
+	started := make(chan struct{})
 
 	done := make(chan struct{})
 	go func() {
+		close(started)
 		c.WatchInboxesFunc(ctx, func(event *InboxEvent) {
 			select {
 			case receivedEvent <- event:
@@ -2069,8 +2079,8 @@ func TestClient_WatchInboxesFunc_EventDelivery(t *testing.T) {
 		close(done)
 	}()
 
-	// Give WatchInboxesFunc time to set up subscription
-	time.Sleep(50 * time.Millisecond)
+	// Wait for WatchInboxesFunc to start
+	<-started
 
 	// Simulate email arrival
 	email := &Email{ID: "email-123", Subject: "Test"}

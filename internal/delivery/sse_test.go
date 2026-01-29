@@ -13,6 +13,7 @@ import (
 )
 
 func TestNewSSEStrategy(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		APIClient: nil,
 	}
@@ -30,6 +31,7 @@ func TestNewSSEStrategy(t *testing.T) {
 }
 
 func TestSSEStrategy_Name(t *testing.T) {
+	t.Parallel()
 	s := NewSSEStrategy(Config{})
 	if s.Name() != "sse" {
 		t.Errorf("Name() = %s, want sse", s.Name())
@@ -37,6 +39,7 @@ func TestSSEStrategy_Name(t *testing.T) {
 }
 
 func TestSSEStrategy_AddRemoveInbox(t *testing.T) {
+	t.Parallel()
 	s := NewSSEStrategy(Config{})
 
 	inbox := InboxInfo{
@@ -64,6 +67,7 @@ func TestSSEStrategy_AddRemoveInbox(t *testing.T) {
 }
 
 func TestSSEStrategy_Stop_NotStarted(t *testing.T) {
+	t.Parallel()
 	s := NewSSEStrategy(Config{})
 
 	// Should not panic when stopping before starting
@@ -73,6 +77,7 @@ func TestSSEStrategy_Stop_NotStarted(t *testing.T) {
 }
 
 func TestSSEConstants(t *testing.T) {
+	t.Parallel()
 	if SSEReconnectInterval != 5*time.Second {
 		t.Errorf("SSEReconnectInterval = %v, want 5s", SSEReconnectInterval)
 	}
@@ -85,6 +90,7 @@ func TestSSEConstants(t *testing.T) {
 }
 
 func TestSSEStrategy_Start(t *testing.T) {
+	t.Parallel()
 	s := NewSSEStrategy(Config{})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -115,6 +121,7 @@ func TestSSEStrategy_Start(t *testing.T) {
 }
 
 func TestSSEStrategy_Connected(t *testing.T) {
+	t.Parallel()
 	s := NewSSEStrategy(Config{})
 
 	// Channel should not be closed initially
@@ -127,6 +134,7 @@ func TestSSEStrategy_Connected(t *testing.T) {
 }
 
 func TestSSEStrategy_LastError(t *testing.T) {
+	t.Parallel()
 	s := NewSSEStrategy(Config{})
 
 	// Should be nil initially
@@ -136,6 +144,7 @@ func TestSSEStrategy_LastError(t *testing.T) {
 }
 
 func TestSSEStrategy_Inboxes(t *testing.T) {
+	t.Parallel()
 	s := NewSSEStrategy(Config{})
 
 	// Initially empty
@@ -174,6 +183,7 @@ func TestSSEStrategy_Inboxes(t *testing.T) {
 }
 
 func TestSSEStrategy_RemoveInbox_Idempotent(t *testing.T) {
+	t.Parallel()
 	// Test that removing the same inbox multiple times doesn't cause errors
 	s := NewSSEStrategy(Config{})
 
@@ -214,6 +224,7 @@ func TestSSEStrategy_RemoveInbox_Idempotent(t *testing.T) {
 }
 
 func TestSSEStrategy_AddInbox_AfterStop(t *testing.T) {
+	t.Parallel()
 	// Test behavior when adding inbox after strategy is stopped
 	s := NewSSEStrategy(Config{})
 
@@ -258,6 +269,7 @@ func TestSSEStrategy_AddInbox_AfterStop(t *testing.T) {
 }
 
 func TestSSEStrategy_Start_AfterStop(t *testing.T) {
+	t.Parallel()
 	// Test that starting after stop doesn't cause panics
 	s := NewSSEStrategy(Config{})
 
@@ -281,6 +293,7 @@ func TestSSEStrategy_Start_AfterStop(t *testing.T) {
 // This was a bug where connectLoop would exit immediately when started with
 // no inboxes, and never wake up when inboxes were added later.
 func TestSSEStrategy_AddInboxAfterStart(t *testing.T) {
+	t.Parallel()
 	s := NewSSEStrategy(Config{})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -294,9 +307,6 @@ func TestSSEStrategy_AddInboxAfterStart(t *testing.T) {
 	if err := s.Start(ctx, nil, handler); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-
-	// Give connectLoop time to start waiting
-	time.Sleep(50 * time.Millisecond)
 
 	// Now add an inbox AFTER start
 	inbox := InboxInfo{
@@ -319,7 +329,14 @@ func TestSSEStrategy_AddInboxAfterStart(t *testing.T) {
 	// With the fix: connectLoop should wake up and attempt connection.
 	// Since we don't have a real API client, it will fail, but we can verify
 	// that LastError is set (meaning connect was attempted).
-	time.Sleep(100 * time.Millisecond)
+	// Poll for the error to appear instead of sleeping.
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if s.LastError() != nil {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 
 	// Check that an error was recorded (connection was attempted but failed
 	// because apiClient is nil)
@@ -332,6 +349,7 @@ func TestSSEStrategy_AddInboxAfterStart(t *testing.T) {
 }
 
 func TestSSEStrategy_ConcurrentSubscriptions(t *testing.T) {
+	t.Parallel()
 	// Test adding and removing inboxes concurrently
 	s := NewSSEStrategy(Config{})
 
@@ -387,6 +405,7 @@ func TestSSEStrategy_ConcurrentSubscriptions(t *testing.T) {
 }
 
 func TestSSEStrategy_MaxReconnectAttempts(t *testing.T) {
+	t.Parallel()
 	// Test that strategy gives up after SSEMaxReconnectAttempts failures
 	s := NewSSEStrategy(Config{})
 
@@ -408,9 +427,15 @@ func TestSSEStrategy_MaxReconnectAttempts(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	// Wait for the strategy to hit max attempts and exit
+	// Poll for the strategy to hit max attempts instead of sleeping
 	// With 1ms base * exponential backoff, need: 1+2+4+8+16+32+64+128+256+512 = ~1023ms
-	time.Sleep(1500 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if s.attempts.Load() >= SSEMaxReconnectAttempts {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Verify attempts reached max
 	if s.attempts.Load() < SSEMaxReconnectAttempts {
@@ -419,6 +444,7 @@ func TestSSEStrategy_MaxReconnectAttempts(t *testing.T) {
 }
 
 func TestSSEStrategy_ConnectWithNoHashes(t *testing.T) {
+	t.Parallel()
 	// Test the edge case where connect() is called with empty hashes
 	// This can happen if inboxes are removed between connectLoop check and connect call
 	s := NewSSEStrategy(Config{})
@@ -437,31 +463,23 @@ func TestSSEStrategy_ConnectWithNoHashes(t *testing.T) {
 }
 
 func TestSSEStrategy_MalformedSSEEvent(t *testing.T) {
+	t.Parallel()
 	// Test that malformed JSON in SSE events is skipped gracefully
 	// Use httptest to create a server that sends malformed SSE data
 
-	var requestCount int
-	var reqMu sync.Mutex
+	eventReceived := make(chan struct{}, 1)
+	serverDone := make(chan struct{})
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reqMu.Lock()
-		requestCount++
-		reqNum := requestCount
-		reqMu.Unlock()
-
-		// Only respond on first request
-		if reqNum > 1 {
-			time.Sleep(500 * time.Millisecond)
-			return
-		}
-
+		defer close(serverDone)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("expected http.Flusher")
+			t.Error("expected http.Flusher")
+			return
 		}
 
 		// Send malformed JSON (should be skipped)
@@ -472,8 +490,11 @@ func TestSSEStrategy_MalformedSSEEvent(t *testing.T) {
 		fmt.Fprintf(w, "data: {\"inbox_id\":\"inbox1\",\"email_id\":\"email1\"}\n\n")
 		flusher.Flush()
 
-		// Keep connection open briefly then close
-		time.Sleep(50 * time.Millisecond)
+		// Wait for event to be processed or timeout
+		select {
+		case <-eventReceived:
+		case <-time.After(2 * time.Second):
+		}
 	}))
 	defer server.Close()
 
@@ -490,6 +511,10 @@ func TestSSEStrategy_MalformedSSEEvent(t *testing.T) {
 		mu.Lock()
 		receivedEvents++
 		mu.Unlock()
+		select {
+		case eventReceived <- struct{}{}:
+		default:
+		}
 		return nil
 	}
 
@@ -500,8 +525,12 @@ func TestSSEStrategy_MalformedSSEEvent(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	// Wait for events to be processed
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the valid event to be processed
+	select {
+	case <-eventReceived:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for event")
+	}
 
 	mu.Lock()
 	count := receivedEvents
@@ -511,4 +540,8 @@ func TestSSEStrategy_MalformedSSEEvent(t *testing.T) {
 	if count != 1 {
 		t.Errorf("receivedEvents = %d, want 1 (malformed should be skipped)", count)
 	}
+
+	// Cancel and wait for server to finish
+	cancel()
+	<-serverDone
 }

@@ -12,6 +12,7 @@ import (
 )
 
 func TestExportedInbox_Validate(t *testing.T) {
+	t.Parallel()
 	// Generate a valid keypair for testing
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
@@ -198,6 +199,7 @@ func TestExportedInbox_Validate(t *testing.T) {
 }
 
 func TestExportedInbox_Fields(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	data := &ExportedInbox{
 		Version:      ExportVersion,
@@ -221,6 +223,7 @@ func TestExportedInbox_Fields(t *testing.T) {
 }
 
 func TestInbox_Export(t *testing.T) {
+	t.Parallel()
 	// Generate valid keypair
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
@@ -318,6 +321,7 @@ func TestInbox_Export(t *testing.T) {
 }
 
 func TestInbox_Export_Roundtrip(t *testing.T) {
+	t.Parallel()
 	// Generate valid keypair
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
@@ -362,6 +366,7 @@ func TestInbox_Export_Roundtrip(t *testing.T) {
 }
 
 func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	t.Run("with valid auth results", func(t *testing.T) {
@@ -476,6 +481,7 @@ func TestConvertDecryptedEmail_AuthResults(t *testing.T) {
 }
 
 func TestWaitConfig_MatchesEmail(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		email    *Email
@@ -561,6 +567,7 @@ func TestWaitConfig_MatchesEmail(t *testing.T) {
 }
 
 func TestParseMetadata_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		json     string
@@ -610,6 +617,7 @@ func TestParseMetadata_Valid(t *testing.T) {
 }
 
 func TestParseMetadata_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		json string
@@ -630,6 +638,7 @@ func TestParseMetadata_InvalidJSON(t *testing.T) {
 }
 
 func TestParseParsedContent_WithHeaders(t *testing.T) {
+	t.Parallel()
 	jsonData := `{
 		"text": "Plain text body",
 		"html": "<p>HTML body</p>",
@@ -669,6 +678,7 @@ func TestParseParsedContent_WithHeaders(t *testing.T) {
 }
 
 func TestParseParsedContent_NonStringHeaders(t *testing.T) {
+	t.Parallel()
 	// Headers with non-string values should be filtered out
 	jsonData := `{
 		"text": "body",
@@ -701,6 +711,7 @@ func TestParseParsedContent_NonStringHeaders(t *testing.T) {
 }
 
 func TestParseParsedContent_EmptyHeaders(t *testing.T) {
+	t.Parallel()
 	jsonData := `{"text": "body", "html": "", "headers": {}}`
 
 	_, headers, err := parseParsedContent([]byte(jsonData))
@@ -715,6 +726,7 @@ func TestParseParsedContent_EmptyHeaders(t *testing.T) {
 }
 
 func TestParseParsedContent_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	_, _, err := parseParsedContent([]byte(`{invalid json`))
 	if err == nil {
 		t.Error("parseParsedContent() expected error, got nil")
@@ -722,6 +734,7 @@ func TestParseParsedContent_InvalidJSON(t *testing.T) {
 }
 
 func TestBuildDecryptedEmail_Complete(t *testing.T) {
+	t.Parallel()
 	now := time.Now().Truncate(time.Second)
 	rawEmail := &api.RawEmail{
 		ID:         "email-123",
@@ -760,6 +773,7 @@ func TestBuildDecryptedEmail_Complete(t *testing.T) {
 }
 
 func TestBuildDecryptedEmail_ReceivedAtFallback(t *testing.T) {
+	t.Parallel()
 	now := time.Now().Truncate(time.Second)
 
 	tests := []struct {
@@ -803,6 +817,7 @@ func TestBuildDecryptedEmail_ReceivedAtFallback(t *testing.T) {
 }
 
 func TestInbox_Accessors(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	expiresAt := now.Add(time.Hour)
 
@@ -832,6 +847,7 @@ func TestInbox_Accessors(t *testing.T) {
 }
 
 func TestInbox_IsExpired(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		expiresAt time.Time
@@ -868,6 +884,7 @@ func TestInbox_IsExpired(t *testing.T) {
 }
 
 func TestNewInboxFromResult(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)

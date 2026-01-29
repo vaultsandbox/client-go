@@ -6,6 +6,7 @@ import (
 )
 
 func TestSpamAnalysis_GetScore(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		analysis *SpamAnalysis
@@ -54,6 +55,7 @@ func TestSpamAnalysis_GetScore(t *testing.T) {
 }
 
 func TestSpamAnalysis_GetIsSpam(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		analysis *SpamAnalysis
@@ -98,6 +100,7 @@ func TestSpamAnalysis_GetIsSpam(t *testing.T) {
 }
 
 func TestSpamAnalysis_StatusMethods(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		analysis    *SpamAnalysis
@@ -151,6 +154,7 @@ func TestSpamAnalysis_StatusMethods(t *testing.T) {
 }
 
 func TestSpamAnalysis_Validate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		analysis  *SpamAnalysis
@@ -229,6 +233,7 @@ func TestSpamAnalysis_Validate(t *testing.T) {
 }
 
 func TestCategorizeSymbols(t *testing.T) {
+	t.Parallel()
 	symbols := []SpamSymbol{
 		{Name: "DKIM_SIGNED", Score: -0.1},
 		{Name: "SPF_ALLOW", Score: -0.2},
@@ -273,6 +278,7 @@ func TestCategorizeSymbols(t *testing.T) {
 }
 
 func TestSpamAnalysis_JSONUnmarshal(t *testing.T) {
+	t.Parallel()
 	jsonData := `{
 		"status": "analyzed",
 		"score": 5.5,
@@ -315,6 +321,7 @@ func TestSpamAnalysis_JSONUnmarshal(t *testing.T) {
 }
 
 func TestSpamAnalysis_JSONUnmarshal_Skipped(t *testing.T) {
+	t.Parallel()
 	jsonData := `{
 		"status": "skipped",
 		"info": "Spam analysis disabled"
@@ -334,6 +341,7 @@ func TestSpamAnalysis_JSONUnmarshal_Skipped(t *testing.T) {
 }
 
 func TestSpamAnalysis_JSONUnmarshal_Error(t *testing.T) {
+	t.Parallel()
 	jsonData := `{
 		"status": "error",
 		"processingTimeMs": 5001,

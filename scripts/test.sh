@@ -103,7 +103,7 @@ CMD="$CMD -tags=$TAGS"
 CMD="$CMD ./..."
 
 echo "Running: $CMD"
-$CMD
+time $CMD
 
 if [ "$SKIP_COVERAGE" = false ]; then
     echo ""

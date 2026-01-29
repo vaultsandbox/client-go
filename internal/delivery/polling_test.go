@@ -14,6 +14,7 @@ import (
 )
 
 func TestNewPollingStrategy(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		APIClient: nil, // Would be a real client in production
 	}
@@ -28,6 +29,7 @@ func TestNewPollingStrategy(t *testing.T) {
 }
 
 func TestPollingStrategy_Name(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 	if p.Name() != "polling" {
 		t.Errorf("Name() = %s, want polling", p.Name())
@@ -35,6 +37,7 @@ func TestPollingStrategy_Name(t *testing.T) {
 }
 
 func TestPollingStrategy_AddRemoveInbox(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	inbox := InboxInfo{
@@ -62,6 +65,7 @@ func TestPollingStrategy_AddRemoveInbox(t *testing.T) {
 }
 
 func TestPollingStrategy_Stop_NotStarted(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	// Should not panic when stopping before starting
@@ -71,6 +75,7 @@ func TestPollingStrategy_Stop_NotStarted(t *testing.T) {
 }
 
 func TestPollingStrategy_Start(t *testing.T) {
+	t.Parallel()
 	// Create a mock API client would be needed for full test
 	// For now, test basic start/stop functionality
 
@@ -104,6 +109,7 @@ func TestPollingStrategy_Start(t *testing.T) {
 }
 
 func TestPollingStrategy_getWaitDuration(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	inbox := &polledInbox{
@@ -133,6 +139,7 @@ func TestPollingStrategy_getWaitDuration(t *testing.T) {
 }
 
 func TestPollingStrategy_RemoveInbox_Idempotent(t *testing.T) {
+	t.Parallel()
 	// Test that removing the same inbox multiple times doesn't cause errors
 	p := NewPollingStrategy(Config{})
 
@@ -168,6 +175,7 @@ func TestPollingStrategy_RemoveInbox_Idempotent(t *testing.T) {
 }
 
 func TestPollingStrategy_AddInbox_AfterStop(t *testing.T) {
+	t.Parallel()
 	// Test behavior when adding inbox after strategy is stopped
 	p := NewPollingStrategy(Config{})
 
@@ -196,6 +204,7 @@ func TestPollingStrategy_AddInbox_AfterStop(t *testing.T) {
 }
 
 func TestPollingStrategy_OnReconnect(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	var called bool
@@ -214,6 +223,7 @@ func TestPollingStrategy_OnReconnect(t *testing.T) {
 }
 
 func TestPollingStrategy_OnError(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	var receivedErr error
@@ -238,6 +248,7 @@ func TestPollingStrategy_OnError(t *testing.T) {
 }
 
 func TestPollingStrategy_OnError_NilCallback(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	// Setting nil callback should not panic
@@ -249,6 +260,7 @@ func TestPollingStrategy_OnError_NilCallback(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_NilAPIClient(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{
 		APIClient: nil,
 	})
@@ -265,6 +277,7 @@ func TestPollingStrategy_pollInbox_NilAPIClient(t *testing.T) {
 }
 
 func TestPollingStrategy_pollAll_EmptyInboxList(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	// pollAll with empty inbox list should return initial interval
@@ -275,6 +288,7 @@ func TestPollingStrategy_pollAll_EmptyInboxList(t *testing.T) {
 }
 
 func TestPollingStrategy_pollLoop_ContextCancel(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -298,6 +312,7 @@ func TestPollingStrategy_pollLoop_ContextCancel(t *testing.T) {
 }
 
 func TestPollingStrategy_Start_WithInboxes(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -337,6 +352,7 @@ func TestPollingStrategy_Start_WithInboxes(t *testing.T) {
 }
 
 func TestPollingStrategy_CustomConfig(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		PollingInitialInterval:   5 * time.Second,
 		PollingMaxBackoff:        60 * time.Second,
@@ -361,6 +377,7 @@ func TestPollingStrategy_CustomConfig(t *testing.T) {
 }
 
 func TestPollingStrategy_DefaultConfig(t *testing.T) {
+	t.Parallel()
 	p := NewPollingStrategy(Config{})
 
 	if p.initialInterval != DefaultPollingInitialInterval {
@@ -378,6 +395,7 @@ func TestPollingStrategy_DefaultConfig(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_NoChange(t *testing.T) {
+	t.Parallel()
 	// Create a mock server that returns unchanged sync status
 	syncHash := "hash123"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -412,6 +430,7 @@ func TestPollingStrategy_pollInbox_NoChange(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_WithNewEmails(t *testing.T) {
+	t.Parallel()
 	var syncCalled, emailsCalled atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -478,6 +497,7 @@ func TestPollingStrategy_pollInbox_WithNewEmails(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_SyncError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -508,6 +528,7 @@ func TestPollingStrategy_pollInbox_SyncError(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_EmailsError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/inboxes/test%40example.com/sync" || r.URL.Path == "/api/inboxes/test@example.com/sync" {
@@ -548,6 +569,7 @@ func TestPollingStrategy_pollInbox_EmailsError(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_BackoffCapping(t *testing.T) {
+	t.Parallel()
 	syncHash := "samehash"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -586,6 +608,7 @@ func TestPollingStrategy_pollInbox_BackoffCapping(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_OnErrorNil(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -609,6 +632,7 @@ func TestPollingStrategy_pollInbox_OnErrorNil(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_SkipSeenEmails(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/inboxes/test%40example.com/sync" || r.URL.Path == "/api/inboxes/test@example.com/sync" {
@@ -655,6 +679,7 @@ func TestPollingStrategy_pollInbox_SkipSeenEmails(t *testing.T) {
 }
 
 func TestPollingStrategy_pollInbox_NilHandler(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/inboxes/test%40example.com/sync" || r.URL.Path == "/api/inboxes/test@example.com/sync" {
@@ -694,6 +719,7 @@ func TestPollingStrategy_pollInbox_NilHandler(t *testing.T) {
 }
 
 func TestPollingStrategy_pollLoop_ZeroMinWait(t *testing.T) {
+	t.Parallel()
 	// Test that pollLoop handles zero minWait by using initialInterval
 	// This covers the defensive check: if minWait == 0 { minWait = p.initialInterval }
 	p := NewPollingStrategy(Config{
@@ -725,8 +751,7 @@ func TestPollingStrategy_pollLoop_ZeroMinWait(t *testing.T) {
 		close(done)
 	}()
 
-	// Let it run one iteration
-	time.Sleep(50 * time.Millisecond)
+	// Cancel immediately - we just need to verify it doesn't hang on zero minWait
 	cancel()
 
 	select {

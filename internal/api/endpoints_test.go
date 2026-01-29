@@ -21,6 +21,7 @@ func (failingReader) Read([]byte) (int, error) {
 }
 
 func TestCheckKey_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "server error"})
@@ -35,6 +36,7 @@ func TestCheckKey_Error(t *testing.T) {
 }
 
 func TestGetServerInfo_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "server error"})
@@ -49,6 +51,7 @@ func TestGetServerInfo_Error(t *testing.T) {
 }
 
 func TestGetInboxSync_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "inbox not found"})
@@ -63,6 +66,7 @@ func TestGetInboxSync_Error(t *testing.T) {
 }
 
 func TestOpenEventStream_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			t.Errorf("method = %s, want GET", r.Method)
@@ -105,6 +109,7 @@ func TestOpenEventStream_Success(t *testing.T) {
 }
 
 func TestOpenEventStream_Error(t *testing.T) {
+	t.Parallel()
 	// Use invalid URL to trigger error
 	client, _ := New("test-key", WithBaseURL("http://invalid.invalid.invalid:99999"))
 	_, err := client.OpenEventStream(context.Background(), []string{"hash1"})
@@ -114,6 +119,7 @@ func TestOpenEventStream_Error(t *testing.T) {
 }
 
 func TestOpenEventStream_RequestCreationError(t *testing.T) {
+	t.Parallel()
 	// Use a URL with invalid characters that will cause NewRequestWithContext to fail
 	// A URL containing a space character without encoding will cause url.Parse to fail
 	client, _ := New("test-key", WithBaseURL("http://example .com"))
@@ -124,6 +130,7 @@ func TestOpenEventStream_RequestCreationError(t *testing.T) {
 }
 
 func TestCreateInbox_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("method = %s, want POST", r.Method)
@@ -185,6 +192,7 @@ func TestCreateInbox_Success(t *testing.T) {
 }
 
 func TestCreateInbox_APIError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request"})
@@ -201,6 +209,7 @@ func TestCreateInbox_APIError(t *testing.T) {
 }
 
 func TestCreateInbox_InvalidServerSigPk(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(createInboxAPIResponse{
@@ -226,6 +235,7 @@ func TestCreateInbox_InvalidServerSigPk(t *testing.T) {
 }
 
 func TestCreateInbox_KeypairGenerationError(t *testing.T) {
+	// This test modifies global state (randReader) so it cannot run in parallel
 	// Force keypair generation to fail by using a failing random reader
 	restore := crypto.SetRandReaderForTesting(failingReader{})
 	defer restore()
@@ -243,6 +253,7 @@ func TestCreateInbox_KeypairGenerationError(t *testing.T) {
 }
 
 func TestGetEmails_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			t.Errorf("method = %s, want GET", r.Method)
@@ -274,6 +285,7 @@ func TestGetEmails_Success(t *testing.T) {
 }
 
 func TestGetEmails_WithIncludeContent(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("includeContent") != "true" {
 			t.Errorf("includeContent query = %s, want true", r.URL.Query().Get("includeContent"))
@@ -292,6 +304,7 @@ func TestGetEmails_WithIncludeContent(t *testing.T) {
 }
 
 func TestGetEmails_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "inbox not found"})
@@ -306,6 +319,7 @@ func TestGetEmails_Error(t *testing.T) {
 }
 
 func TestGetEmail_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			t.Errorf("method = %s, want GET", r.Method)
@@ -332,6 +346,7 @@ func TestGetEmail_Success(t *testing.T) {
 }
 
 func TestGetEmail_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "email not found"})
@@ -346,6 +361,7 @@ func TestGetEmail_Error(t *testing.T) {
 }
 
 func TestGetEmailRaw_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			t.Errorf("method = %s, want GET", r.Method)
@@ -380,6 +396,7 @@ func TestGetEmailRaw_Success(t *testing.T) {
 }
 
 func TestGetEmailRaw_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "email not found"})
@@ -394,6 +411,7 @@ func TestGetEmailRaw_Error(t *testing.T) {
 }
 
 func TestMarkEmailAsRead_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "PATCH" {
 			t.Errorf("method = %s, want PATCH", r.Method)
@@ -414,6 +432,7 @@ func TestMarkEmailAsRead_Success(t *testing.T) {
 }
 
 func TestMarkEmailAsRead_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "email not found"})
@@ -428,6 +447,7 @@ func TestMarkEmailAsRead_Error(t *testing.T) {
 }
 
 func TestDeleteEmail_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "DELETE" {
 			t.Errorf("method = %s, want DELETE", r.Method)
@@ -445,6 +465,7 @@ func TestDeleteEmail_Success(t *testing.T) {
 }
 
 func TestDeleteEmail_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "email not found"})

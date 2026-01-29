@@ -8,6 +8,7 @@ import (
 )
 
 func TestDeliveryStrategy_Constants(t *testing.T) {
+	t.Parallel()
 	if StrategySSE != "sse" {
 		t.Errorf("StrategySSE = %s, want sse", StrategySSE)
 	}
@@ -17,6 +18,7 @@ func TestDeliveryStrategy_Constants(t *testing.T) {
 }
 
 func TestDefaultConstants(t *testing.T) {
+	t.Parallel()
 	if defaultBaseURL != "https://api.vaultsandbox.com" {
 		t.Errorf("defaultBaseURL = %s, want https://api.vaultsandbox.com", defaultBaseURL)
 	}
@@ -26,6 +28,7 @@ func TestDefaultConstants(t *testing.T) {
 }
 
 func TestWithBaseURL(t *testing.T) {
+	t.Parallel()
 	cfg := &clientConfig{}
 	WithBaseURL("https://custom.example.com")(cfg)
 	if cfg.baseURL != "https://custom.example.com" {
@@ -34,6 +37,7 @@ func TestWithBaseURL(t *testing.T) {
 }
 
 func TestWithHTTPClient(t *testing.T) {
+	t.Parallel()
 	cfg := &clientConfig{}
 	customClient := &http.Client{Timeout: 99 * time.Second}
 	WithHTTPClient(customClient)(cfg)
@@ -43,6 +47,7 @@ func TestWithHTTPClient(t *testing.T) {
 }
 
 func TestWithDeliveryStrategy(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		strategy DeliveryStrategy
 	}{
@@ -62,6 +67,7 @@ func TestWithDeliveryStrategy(t *testing.T) {
 }
 
 func TestWithTimeout(t *testing.T) {
+	t.Parallel()
 	cfg := &clientConfig{}
 	WithTimeout(120 * time.Second)(cfg)
 	if cfg.timeout != 120*time.Second {
@@ -70,6 +76,7 @@ func TestWithTimeout(t *testing.T) {
 }
 
 func TestWithRetries(t *testing.T) {
+	t.Parallel()
 	cfg := &clientConfig{}
 	WithRetries(5)(cfg)
 	if cfg.retries != 5 {
@@ -78,6 +85,7 @@ func TestWithRetries(t *testing.T) {
 }
 
 func TestWithTTL(t *testing.T) {
+	t.Parallel()
 	cfg := &inboxConfig{}
 	WithTTL(30 * time.Minute)(cfg)
 	if cfg.ttl != 30*time.Minute {
@@ -86,6 +94,7 @@ func TestWithTTL(t *testing.T) {
 }
 
 func TestWithEmailAddress(t *testing.T) {
+	t.Parallel()
 	cfg := &inboxConfig{}
 	WithEmailAddress("custom@example.com")(cfg)
 	if cfg.emailAddress != "custom@example.com" {
@@ -94,6 +103,7 @@ func TestWithEmailAddress(t *testing.T) {
 }
 
 func TestWithSubject(t *testing.T) {
+	t.Parallel()
 	cfg := &waitConfig{}
 	WithSubject("Test Subject")(cfg)
 	if cfg.subject != "Test Subject" {
@@ -102,6 +112,7 @@ func TestWithSubject(t *testing.T) {
 }
 
 func TestWithSubjectRegex(t *testing.T) {
+	t.Parallel()
 	cfg := &waitConfig{}
 	pattern := regexp.MustCompile("welcome.*")
 	WithSubjectRegex(pattern)(cfg)
@@ -111,6 +122,7 @@ func TestWithSubjectRegex(t *testing.T) {
 }
 
 func TestWithFrom(t *testing.T) {
+	t.Parallel()
 	cfg := &waitConfig{}
 	WithFrom("sender@example.com")(cfg)
 	if cfg.from != "sender@example.com" {
@@ -119,6 +131,7 @@ func TestWithFrom(t *testing.T) {
 }
 
 func TestWithFromRegex(t *testing.T) {
+	t.Parallel()
 	cfg := &waitConfig{}
 	pattern := regexp.MustCompile(".*@example.com")
 	WithFromRegex(pattern)(cfg)
@@ -128,6 +141,7 @@ func TestWithFromRegex(t *testing.T) {
 }
 
 func TestWithPredicate(t *testing.T) {
+	t.Parallel()
 	cfg := &waitConfig{}
 	predicate := func(e *Email) bool { return e.Subject == "Test" }
 	WithPredicate(predicate)(cfg)
@@ -137,6 +151,7 @@ func TestWithPredicate(t *testing.T) {
 }
 
 func TestWithWaitTimeout(t *testing.T) {
+	t.Parallel()
 	cfg := &waitConfig{}
 	WithWaitTimeout(5 * time.Minute)(cfg)
 	if cfg.timeout != 5*time.Minute {
@@ -145,6 +160,7 @@ func TestWithWaitTimeout(t *testing.T) {
 }
 
 func TestWaitConfig_Matches(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		config   waitConfig
@@ -248,6 +264,7 @@ func TestWaitConfig_Matches(t *testing.T) {
 }
 
 func TestTTLConstants(t *testing.T) {
+	t.Parallel()
 	if MinTTL != 60*time.Second {
 		t.Errorf("MinTTL = %v, want 60s", MinTTL)
 	}
@@ -257,6 +274,7 @@ func TestTTLConstants(t *testing.T) {
 }
 
 func TestWithOnSyncError(t *testing.T) {
+	t.Parallel()
 	cfg := &clientConfig{}
 
 	var called bool
@@ -278,6 +296,7 @@ func TestWithOnSyncError(t *testing.T) {
 }
 
 func TestWithPollingConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		config   PollingConfig
@@ -351,6 +370,7 @@ func TestWithPollingConfig(t *testing.T) {
 }
 
 func TestWithRetryOn(t *testing.T) {
+	t.Parallel()
 	cfg := &clientConfig{}
 	codes := []int{500, 502, 503}
 	WithRetryOn(codes)(cfg)

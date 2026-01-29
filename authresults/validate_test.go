@@ -7,6 +7,7 @@ import (
 )
 
 func TestSentinelErrors(t *testing.T) {
+	t.Parallel()
 	sentinels := []struct {
 		name string
 		err  error
@@ -31,6 +32,7 @@ func TestSentinelErrors(t *testing.T) {
 }
 
 func TestValidationError_Error(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		errors   []string
@@ -65,6 +67,7 @@ func TestValidationError_Error(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		results *AuthResults
@@ -211,6 +214,7 @@ func TestValidate(t *testing.T) {
 }
 
 func TestValidateSPF(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		results *AuthResults
@@ -264,6 +268,7 @@ func TestValidateSPF(t *testing.T) {
 }
 
 func TestValidateDKIM(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		results *AuthResults
@@ -323,6 +328,7 @@ func TestValidateDKIM(t *testing.T) {
 }
 
 func TestValidateDMARC(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		results *AuthResults
@@ -366,6 +372,7 @@ func TestValidateDMARC(t *testing.T) {
 }
 
 func TestValidateReverseDNS(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		results *AuthResults
@@ -409,6 +416,7 @@ func TestValidateReverseDNS(t *testing.T) {
 }
 
 func TestIsPassing(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		results  *AuthResults
@@ -504,6 +512,7 @@ func TestIsPassing(t *testing.T) {
 }
 
 func TestResultTypes_Fields(t *testing.T) {
+	t.Parallel()
 	t.Run("SPFResult", func(t *testing.T) {
 		spf := &SPFResult{
 			Result:  "pass",

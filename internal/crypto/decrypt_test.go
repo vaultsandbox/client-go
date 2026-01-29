@@ -12,6 +12,7 @@ import (
 )
 
 func TestDeriveKey(t *testing.T) {
+	t.Parallel()
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		t.Fatal(err)
@@ -45,6 +46,7 @@ func TestDeriveKey(t *testing.T) {
 }
 
 func TestDeriveKey_Deterministic(t *testing.T) {
+	t.Parallel()
 	secret := []byte("test secret key for derivation")
 	salt := []byte("test salt value")
 	info := []byte("test info value")
@@ -65,6 +67,7 @@ func TestDeriveKey_Deterministic(t *testing.T) {
 }
 
 func TestDeriveKey_ExceedsMaxLength(t *testing.T) {
+	t.Parallel()
 	secret := []byte("test secret")
 	salt := []byte("test salt")
 	info := []byte("test info")
@@ -78,6 +81,7 @@ func TestDeriveKey_ExceedsMaxLength(t *testing.T) {
 }
 
 func TestDeriveKey_DifferentInputs(t *testing.T) {
+	t.Parallel()
 	secret := []byte("test secret key for derivation")
 	salt := []byte("test salt value")
 	info := []byte("test info value")
@@ -107,6 +111,7 @@ func TestDeriveKey_DifferentInputs(t *testing.T) {
 }
 
 func TestDecryptedEmail_Fields(t *testing.T) {
+	t.Parallel()
 	// Test that DecryptedEmail struct can be used correctly
 	email := DecryptedEmail{
 		ID:      "test-id",
@@ -133,6 +138,7 @@ func TestDecryptedEmail_Fields(t *testing.T) {
 }
 
 func TestDecryptedAttachment_Fields(t *testing.T) {
+	t.Parallel()
 	attachment := DecryptedAttachment{
 		Filename:           "document.pdf",
 		ContentType:        "application/pdf",
@@ -152,6 +158,7 @@ func TestDecryptedAttachment_Fields(t *testing.T) {
 }
 
 func TestBase64Bytes_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -224,6 +231,7 @@ func TestBase64Bytes_UnmarshalJSON(t *testing.T) {
 }
 
 func TestDecryptedAttachment_JSONUnmarshal(t *testing.T) {
+	t.Parallel()
 	// Test JSON unmarshaling with camelCase field names (as sent by server)
 	jsonData := `{
 		"filename": "test.pdf",
@@ -264,6 +272,7 @@ func TestDecryptedAttachment_JSONUnmarshal(t *testing.T) {
 }
 
 func TestDecryptedAttachment_JSONUnmarshal_OptionalFields(t *testing.T) {
+	t.Parallel()
 	// Test JSON unmarshaling with optional fields omitted
 	jsonData := `{
 		"filename": "test.txt",
@@ -289,6 +298,7 @@ func TestDecryptedAttachment_JSONUnmarshal_OptionalFields(t *testing.T) {
 
 
 func TestDecrypt_Success(t *testing.T) {
+	t.Parallel()
 	// Generate a keypair for testing
 	kp, err := GenerateKeypair()
 	if err != nil {
@@ -342,6 +352,7 @@ func TestDecrypt_Success(t *testing.T) {
 }
 
 func TestDecrypt_InvalidPrivateKey(t *testing.T) {
+	t.Parallel()
 	// Create a keypair with invalid secret key
 	invalidKp := &Keypair{
 		SecretKey: make([]byte, 10), // Wrong size - will fail Unpack
@@ -363,6 +374,7 @@ func TestDecrypt_InvalidPrivateKey(t *testing.T) {
 }
 
 func TestDecrypt_DecryptionFailed(t *testing.T) {
+	t.Parallel()
 	// Generate a valid keypair
 	kp, err := GenerateKeypair()
 	if err != nil {
@@ -385,6 +397,7 @@ func TestDecrypt_DecryptionFailed(t *testing.T) {
 }
 
 func TestDecrypt_InvalidBase64(t *testing.T) {
+	t.Parallel()
 	kp, _ := GenerateKeypair()
 
 	tests := []struct {

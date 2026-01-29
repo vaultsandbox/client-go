@@ -5,6 +5,7 @@ import (
 )
 
 func TestValidate_AllPassing(t *testing.T) {
+	t.Parallel()
 	ar := &AuthResults{
 		SPF:   &SPFResult{Result: "pass", Domain: "example.com"},
 		DKIM:  []DKIMResult{{Result: "pass", Domain: "example.com"}},
@@ -35,6 +36,7 @@ func TestValidate_AllPassing(t *testing.T) {
 }
 
 func TestValidate_SPFFailed(t *testing.T) {
+	t.Parallel()
 	ar := &AuthResults{
 		SPF:   &SPFResult{Result: "fail", Domain: "example.com"},
 		DKIM:  []DKIMResult{{Result: "pass", Domain: "example.com"}},
@@ -58,6 +60,7 @@ func TestValidate_SPFFailed(t *testing.T) {
 }
 
 func TestValidate_DKIMFailed(t *testing.T) {
+	t.Parallel()
 	ar := &AuthResults{
 		SPF:   &SPFResult{Result: "pass", Domain: "example.com"},
 		DKIM:  []DKIMResult{{Result: "fail", Domain: "example.com"}},
@@ -78,6 +81,7 @@ func TestValidate_DKIMFailed(t *testing.T) {
 }
 
 func TestValidate_DKIMOnePassing(t *testing.T) {
+	t.Parallel()
 	ar := &AuthResults{
 		SPF: &SPFResult{Result: "pass", Domain: "example.com"},
 		DKIM: []DKIMResult{
@@ -98,6 +102,7 @@ func TestValidate_DKIMOnePassing(t *testing.T) {
 }
 
 func TestValidate_DMARCFailed(t *testing.T) {
+	t.Parallel()
 	ar := &AuthResults{
 		SPF:   &SPFResult{Result: "pass", Domain: "example.com"},
 		DKIM:  []DKIMResult{{Result: "pass", Domain: "example.com"}},
@@ -121,6 +126,7 @@ func TestValidate_DMARCFailed(t *testing.T) {
 }
 
 func TestValidate_ReverseDNSFailedDoesNotAffectPassed(t *testing.T) {
+	t.Parallel()
 	ar := &AuthResults{
 		SPF:        &SPFResult{Result: "pass", Domain: "example.com"},
 		DKIM:       []DKIMResult{{Result: "pass", Domain: "example.com"}},
@@ -143,6 +149,7 @@ func TestValidate_ReverseDNSFailedDoesNotAffectPassed(t *testing.T) {
 }
 
 func TestValidate_NilAuthResults(t *testing.T) {
+	t.Parallel()
 	var ar *AuthResults
 
 	v := ar.Validate()
@@ -159,6 +166,7 @@ func TestValidate_NilAuthResults(t *testing.T) {
 }
 
 func TestValidate_EmptyAuthResults(t *testing.T) {
+	t.Parallel()
 	ar := &AuthResults{}
 
 	v := ar.Validate()
@@ -184,6 +192,7 @@ func TestValidate_EmptyAuthResults(t *testing.T) {
 }
 
 func TestValidate_FailuresIsNeverNil(t *testing.T) {
+	t.Parallel()
 	ar := &AuthResults{
 		SPF:   &SPFResult{Result: "pass"},
 		DKIM:  []DKIMResult{{Result: "pass"}},
@@ -198,6 +207,7 @@ func TestValidate_FailuresIsNeverNil(t *testing.T) {
 }
 
 func TestIsPassing_MatchesValidatePassed(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		ar       *AuthResults
@@ -253,6 +263,7 @@ func TestIsPassing_MatchesValidatePassed(t *testing.T) {
 }
 
 func TestJoinStrings(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		strs     []string
 		sep      string

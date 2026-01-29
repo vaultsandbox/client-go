@@ -10,6 +10,7 @@ import (
 )
 
 func TestEncryptAES_DecryptAES_RoundTrip(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		plaintext []byte
@@ -62,6 +63,7 @@ func TestEncryptAES_DecryptAES_RoundTrip(t *testing.T) {
 }
 
 func TestEncryptAES_InvalidKeySize(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		keySize int
@@ -86,6 +88,7 @@ func TestEncryptAES_InvalidKeySize(t *testing.T) {
 }
 
 func TestEncryptAES_InvalidNonceSize(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		nonceSize int
@@ -110,6 +113,7 @@ func TestEncryptAES_InvalidNonceSize(t *testing.T) {
 }
 
 func TestDecryptAES_InvalidKeySize(t *testing.T) {
+	t.Parallel()
 	key := make([]byte, 16) // Wrong size
 	ciphertext := make([]byte, AESNonceSize+AESTagSize+10)
 
@@ -120,6 +124,7 @@ func TestDecryptAES_InvalidKeySize(t *testing.T) {
 }
 
 func TestDecryptAES_CiphertextTooShort(t *testing.T) {
+	t.Parallel()
 	key := make([]byte, AESKeySize)
 
 	tests := []struct {
@@ -143,6 +148,7 @@ func TestDecryptAES_CiphertextTooShort(t *testing.T) {
 }
 
 func TestDecryptAES_TamperedCiphertext(t *testing.T) {
+	t.Parallel()
 	key := make([]byte, AESKeySize)
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
@@ -169,6 +175,7 @@ func TestDecryptAES_TamperedCiphertext(t *testing.T) {
 }
 
 func TestDecryptAES_WrongKey(t *testing.T) {
+	t.Parallel()
 	key1 := make([]byte, AESKeySize)
 	key2 := make([]byte, AESKeySize)
 	if _, err := rand.Read(key1); err != nil {
@@ -197,6 +204,7 @@ func TestDecryptAES_WrongKey(t *testing.T) {
 }
 
 func TestDecryptAESGCM_WithAAD(t *testing.T) {
+	t.Parallel()
 	key := make([]byte, AESKeySize)
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
@@ -228,6 +236,7 @@ func TestDecryptAESGCM_WithAAD(t *testing.T) {
 }
 
 func TestEncryptAES_CipherCreationError(t *testing.T) {
+	// This test modifies global state (newCipher) so it cannot run in parallel
 	origNewCipher := newCipher
 	defer func() { newCipher = origNewCipher }()
 
@@ -247,6 +256,7 @@ func TestEncryptAES_CipherCreationError(t *testing.T) {
 }
 
 func TestEncryptAES_GCMCreationError(t *testing.T) {
+	// This test modifies global state (newGCM) so it cannot run in parallel
 	origNewGCM := newGCM
 	defer func() { newGCM = origNewGCM }()
 
@@ -266,6 +276,7 @@ func TestEncryptAES_GCMCreationError(t *testing.T) {
 }
 
 func TestDecryptAESGCM_CipherCreationError(t *testing.T) {
+	// This test modifies global state (newCipher) so it cannot run in parallel
 	origNewCipher := newCipher
 	defer func() { newCipher = origNewCipher }()
 
@@ -285,6 +296,7 @@ func TestDecryptAESGCM_CipherCreationError(t *testing.T) {
 }
 
 func TestDecryptAESGCM_GCMCreationError(t *testing.T) {
+	// This test modifies global state (newGCM) so it cannot run in parallel
 	origNewGCM := newGCM
 	defer func() { newGCM = origNewGCM }()
 

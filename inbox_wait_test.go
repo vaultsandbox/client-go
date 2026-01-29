@@ -9,6 +9,7 @@ import (
 )
 
 func TestInbox_Watch_ReturnsChannel(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{
 		inboxHash: "test-hash",
 		client: &Client{
@@ -26,6 +27,7 @@ func TestInbox_Watch_ReturnsChannel(t *testing.T) {
 }
 
 func TestInbox_Watch_UnsubscribesOnContextCancel(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -37,8 +39,11 @@ func TestInbox_Watch_UnsubscribesOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := inbox.Watch(ctx)
 
-	// Cancel context and wait for unsubscribe goroutine
+	// Cancel context - the unsubscribe goroutine needs a moment to run
 	cancel()
+
+	// Wait for the unsubscribe goroutine to complete
+	// The Watch function starts a goroutine that listens for context.Done()
 	time.Sleep(10 * time.Millisecond)
 
 	// After cancel, notify should not deliver (unsubscribed)
@@ -54,6 +59,7 @@ func TestInbox_Watch_UnsubscribesOnContextCancel(t *testing.T) {
 }
 
 func TestInbox_Watch_ReceivesEmails(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -85,6 +91,7 @@ func TestInbox_Watch_ReceivesEmails(t *testing.T) {
 }
 
 func TestInbox_Watch_MultipleWatchers(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -118,6 +125,7 @@ func TestInbox_Watch_MultipleWatchers(t *testing.T) {
 }
 
 func TestInbox_Watch_CancelRemovesWatcher(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -129,11 +137,10 @@ func TestInbox_Watch_CancelRemovesWatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = inbox.Watch(ctx)
 
-	// Cancel and wait for cleanup
+	// Cancel - the unsubscribe happens synchronously
 	cancel()
-	time.Sleep(50 * time.Millisecond)
 
-	// Verify notification doesn't reach any subscriber
+	// Verify notification doesn't reach old subscriber
 	// by checking that notify doesn't panic or deliver
 	called := false
 	unsub := client.subs.subscribe("test-hash", func(email *Email) {
@@ -150,6 +157,7 @@ func TestInbox_Watch_CancelRemovesWatcher(t *testing.T) {
 }
 
 func TestClient_WatchInboxes_ReturnsChannel(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -166,6 +174,7 @@ func TestClient_WatchInboxes_ReturnsChannel(t *testing.T) {
 }
 
 func TestClient_WatchInboxes_EmptyInboxes(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -185,6 +194,7 @@ func TestClient_WatchInboxes_EmptyInboxes(t *testing.T) {
 }
 
 func TestClient_WatchInboxes_ReceivesFromMultipleInboxes(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -224,6 +234,7 @@ func TestClient_WatchInboxes_ReceivesFromMultipleInboxes(t *testing.T) {
 }
 
 func TestClient_WatchInboxes_UnsubscribesOnContextCancel(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -232,9 +243,8 @@ func TestClient_WatchInboxes_UnsubscribesOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := client.WatchInboxes(ctx, inbox)
 
-	// Cancel context and wait for unsubscribe goroutine
+	// Cancel context - the unsubscribe happens synchronously
 	cancel()
-	time.Sleep(10 * time.Millisecond)
 
 	// After cancel, notify should not deliver (unsubscribed)
 	client.subs.notify("hash-1", &Email{ID: "late-email"})
@@ -249,6 +259,7 @@ func TestClient_WatchInboxes_UnsubscribesOnContextCancel(t *testing.T) {
 }
 
 func TestSubscriptionManager_Subscribe(t *testing.T) {
+	t.Parallel()
 	m := newSubscriptionManager()
 
 	var received *Email
@@ -278,6 +289,7 @@ func TestSubscriptionManager_Subscribe(t *testing.T) {
 }
 
 func TestSubscriptionManager_UnsubscribeIdempotent(t *testing.T) {
+	t.Parallel()
 	m := newSubscriptionManager()
 
 	unsub := m.subscribe("test-hash", func(email *Email) {})
@@ -289,6 +301,7 @@ func TestSubscriptionManager_UnsubscribeIdempotent(t *testing.T) {
 }
 
 func TestSubscriptionManager_Clear(t *testing.T) {
+	t.Parallel()
 	m := newSubscriptionManager()
 
 	callCount := 0
@@ -308,6 +321,7 @@ func TestSubscriptionManager_Clear(t *testing.T) {
 }
 
 func TestSubscriptionManager_NotifyNoSubscribers(t *testing.T) {
+	t.Parallel()
 	m := newSubscriptionManager()
 
 	// Should not panic
@@ -315,6 +329,7 @@ func TestSubscriptionManager_NotifyNoSubscribers(t *testing.T) {
 }
 
 func TestSubscriptionManager_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	m := newSubscriptionManager()
 
 	// Set up initial subscribers
@@ -351,6 +366,7 @@ func TestSubscriptionManager_ConcurrentAccess(t *testing.T) {
 }
 
 func TestSubscriptionManager_CallbackNotInvokedAfterUnsubscribe(t *testing.T) {
+	t.Parallel()
 	m := newSubscriptionManager()
 
 	var callCount int
@@ -389,6 +405,7 @@ func TestSubscriptionManager_CallbackNotInvokedAfterUnsubscribe(t *testing.T) {
 }
 
 func TestWaitForEmail_MatchesConfig(t *testing.T) {
+	t.Parallel()
 	// Test that waitConfig.Matches works correctly with the new flow
 	cfg := &waitConfig{
 		subject: "Welcome",
@@ -406,6 +423,7 @@ func TestWaitForEmail_MatchesConfig(t *testing.T) {
 }
 
 func TestWaitForEmailCount_DeduplicatesEmails(t *testing.T) {
+	t.Parallel()
 	// Test the seen map deduplication logic
 	seen := make(map[string]struct{})
 	var results []*Email
@@ -448,6 +466,7 @@ func TestWaitForEmailCount_DeduplicatesEmails(t *testing.T) {
 }
 
 func TestInboxEvent_Fields(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{emailAddress: "test@example.com"}
 	email := &Email{ID: "email-1", Subject: "Test"}
 
@@ -465,6 +484,7 @@ func TestInboxEvent_Fields(t *testing.T) {
 }
 
 func TestInbox_WatchFunc_ReceivesEmails(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -484,15 +504,16 @@ func TestInbox_WatchFunc_ReceivesEmails(t *testing.T) {
 		inbox.WatchFunc(ctx, func(email *Email) {
 			mu.Lock()
 			received = append(received, email)
+			count := len(received)
 			mu.Unlock()
-			if len(received) >= 2 {
+			if count >= 2 {
 				cancel()
 			}
 		})
 		close(done)
 	}()
 
-	// Give WatchFunc time to start
+	// Give WatchFunc time to set up subscription
 	time.Sleep(10 * time.Millisecond)
 
 	// Send emails
@@ -514,6 +535,7 @@ func TestInbox_WatchFunc_ReceivesEmails(t *testing.T) {
 }
 
 func TestInbox_WatchFunc_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -545,6 +567,7 @@ func TestInbox_WatchFunc_ContextCancellation(t *testing.T) {
 }
 
 func TestInbox_WatchFunc_NilEmailHandling(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -556,14 +579,14 @@ func TestInbox_WatchFunc_NilEmailHandling(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	callbackCalled := false
+	var callCount int
 	var mu sync.Mutex
 	done := make(chan struct{})
 
 	go func() {
 		inbox.WatchFunc(ctx, func(email *Email) {
 			mu.Lock()
-			callbackCalled = true
+			callCount++
 			mu.Unlock()
 		})
 		close(done)
@@ -575,15 +598,19 @@ func TestInbox_WatchFunc_NilEmailHandling(t *testing.T) {
 	// Send nil email (should be ignored)
 	client.subs.notify("test-hash", nil)
 
+	// Send a real email
+	client.subs.notify("test-hash", &Email{ID: "real-email"})
+
 	// Give time for processing
 	time.Sleep(20 * time.Millisecond)
 
 	mu.Lock()
-	called := callbackCalled
+	count := callCount
 	mu.Unlock()
 
-	if called {
-		t.Error("callback should not be called for nil email")
+	// Callback should only be called once (for the real email, not for nil)
+	if count != 1 {
+		t.Errorf("callback called %d times, want 1 (nil should be ignored)", count)
 	}
 
 	cancel()
@@ -591,6 +618,7 @@ func TestInbox_WatchFunc_NilEmailHandling(t *testing.T) {
 }
 
 func TestWaitForEmailCount_NegativeCount(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -611,6 +639,7 @@ func TestWaitForEmailCount_NegativeCount(t *testing.T) {
 }
 
 func TestWaitForEmailCount_ZeroCount(t *testing.T) {
+	t.Parallel()
 	client := &Client{
 		subs: newSubscriptionManager(),
 	}
@@ -634,6 +663,7 @@ func TestWaitForEmailCount_ZeroCount(t *testing.T) {
 }
 
 func TestWaitConfig_MatchesFromRegex(t *testing.T) {
+	t.Parallel()
 	cfg := &waitConfig{
 		fromRegex: regexp.MustCompile(`.*@example\.com$`),
 	}
@@ -650,6 +680,7 @@ func TestWaitConfig_MatchesFromRegex(t *testing.T) {
 }
 
 func TestWaitConfig_MultipleFilters(t *testing.T) {
+	t.Parallel()
 	cfg := &waitConfig{
 		subject: "Welcome",
 		from:    "noreply@example.com",

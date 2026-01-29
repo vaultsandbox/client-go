@@ -15,6 +15,7 @@ import (
 )
 
 func TestNew_RequiresAPIKey(t *testing.T) {
+	t.Parallel()
 	_, err := New("", WithBaseURL("https://example.com"))
 	if err == nil {
 		t.Error("expected error for empty API key")
@@ -22,6 +23,7 @@ func TestNew_RequiresAPIKey(t *testing.T) {
 }
 
 func TestNew_RequiresBaseURL(t *testing.T) {
+	t.Parallel()
 	_, err := New("test-key") // No base URL option
 	if err == nil {
 		t.Error("expected error for missing base URL")
@@ -29,6 +31,7 @@ func TestNew_RequiresBaseURL(t *testing.T) {
 }
 
 func TestNew_DefaultValues(t *testing.T) {
+	t.Parallel()
 	client, err := New("test-key", WithBaseURL("https://example.com"))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -49,6 +52,7 @@ func TestNew_DefaultValues(t *testing.T) {
 }
 
 func TestNew_CustomValues(t *testing.T) {
+	t.Parallel()
 	customHTTPClient := &http.Client{Timeout: 60 * time.Second}
 
 	client, err := New("custom-key",
@@ -69,6 +73,7 @@ func TestNew_CustomValues(t *testing.T) {
 }
 
 func TestNew_WithOptions(t *testing.T) {
+	t.Parallel()
 	client, err := New("test-key",
 		WithBaseURL("https://example.com"),
 		WithRetries(5),
@@ -90,6 +95,7 @@ func TestNew_WithOptions(t *testing.T) {
 }
 
 func TestClient_Do_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify headers
 		if r.Header.Get("X-API-Key") != "test-key" {
@@ -117,6 +123,7 @@ func TestClient_Do_Success(t *testing.T) {
 }
 
 func TestClient_Do_WithBody(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Name string }
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -146,6 +153,7 @@ func TestClient_Do_WithBody(t *testing.T) {
 }
 
 func TestClient_Do_NoContent(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -160,6 +168,7 @@ func TestClient_Do_NoContent(t *testing.T) {
 }
 
 func TestClient_Do_Retry(t *testing.T) {
+	t.Parallel()
 	var attempts int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +200,7 @@ func TestClient_Do_Retry(t *testing.T) {
 }
 
 func TestClient_Do_NoRetryOn4xx(t *testing.T) {
+	t.Parallel()
 	var attempts int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -216,6 +226,7 @@ func TestClient_Do_NoRetryOn4xx(t *testing.T) {
 }
 
 func TestClient_Do_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
@@ -234,6 +245,7 @@ func TestClient_Do_ContextCancellation(t *testing.T) {
 }
 
 func TestClient_Do_ErrorResponse(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		statusCode int
@@ -310,6 +322,7 @@ func TestClient_Do_ErrorResponse(t *testing.T) {
 }
 
 func TestClient_BaseURL(t *testing.T) {
+	t.Parallel()
 	client, _ := New("test-key", WithBaseURL("https://example.com"))
 
 	if client.BaseURL() != "https://example.com" {
@@ -318,6 +331,7 @@ func TestClient_BaseURL(t *testing.T) {
 }
 
 func TestClient_HTTPClient(t *testing.T) {
+	t.Parallel()
 	customHTTPClient := &http.Client{Timeout: 60 * time.Second}
 
 	client, _ := New("test-key",
@@ -331,6 +345,7 @@ func TestClient_HTTPClient(t *testing.T) {
 }
 
 func TestClient_SetHTTPClient(t *testing.T) {
+	t.Parallel()
 	client, _ := New("test-key", WithBaseURL("https://example.com"))
 
 	newHTTPClient := &http.Client{Timeout: 120 * time.Second}
@@ -342,6 +357,7 @@ func TestClient_SetHTTPClient(t *testing.T) {
 }
 
 func TestIsRetryable(t *testing.T) {
+	t.Parallel()
 	// Create a client with default retryOn status codes
 	client, _ := New("test-key", WithBaseURL("https://example.com"))
 
@@ -375,6 +391,7 @@ func TestIsRetryable(t *testing.T) {
 }
 
 func TestIsRetryable_CustomStatusCodes(t *testing.T) {
+	t.Parallel()
 	// Create a client with custom retryOn status codes
 	client, _ := New("test-key",
 		WithBaseURL("https://example.com"),
@@ -403,6 +420,7 @@ func TestIsRetryable_CustomStatusCodes(t *testing.T) {
 }
 
 func TestWithHTTPClient(t *testing.T) {
+	t.Parallel()
 	customClient := &http.Client{Timeout: 99 * time.Second}
 
 	client, err := New("test-key",
@@ -445,6 +463,7 @@ func ExampleNew() {
 }
 
 func TestCheckKey_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/check-key" {
 			t.Errorf("path = %s, want /api/check-key", r.URL.Path)
@@ -465,6 +484,7 @@ func TestCheckKey_Success(t *testing.T) {
 }
 
 func TestCheckKey_NotOK(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]bool{"ok": false})
@@ -479,6 +499,7 @@ func TestCheckKey_NotOK(t *testing.T) {
 }
 
 func TestGetServerInfo_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/server-info" {
 			t.Errorf("path = %s, want /api/server-info", r.URL.Path)
@@ -506,6 +527,7 @@ func TestGetServerInfo_Success(t *testing.T) {
 }
 
 func TestDeleteAllInboxes_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/inboxes" {
 			t.Errorf("path = %s, want /api/inboxes", r.URL.Path)
@@ -529,6 +551,7 @@ func TestDeleteAllInboxes_Success(t *testing.T) {
 }
 
 func TestDeleteAllInboxes_ZeroDeleted(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]int{"deleted": 0})
@@ -546,6 +569,7 @@ func TestDeleteAllInboxes_ZeroDeleted(t *testing.T) {
 }
 
 func TestDeleteAllInboxes_Error(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "internal error"})
@@ -560,6 +584,7 @@ func TestDeleteAllInboxes_Error(t *testing.T) {
 }
 
 func TestDeleteInboxByEmail_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "DELETE" {
 			t.Errorf("method = %s, want DELETE", r.Method)
@@ -580,6 +605,7 @@ func TestDeleteInboxByEmail_Success(t *testing.T) {
 }
 
 func TestGetInboxSync_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			t.Errorf("method = %s, want GET", r.Method)
@@ -606,6 +632,7 @@ func TestGetInboxSync_Success(t *testing.T) {
 }
 
 func TestClient_Do_MarshalError(t *testing.T) {
+	t.Parallel()
 	client, _ := New("test-key", WithBaseURL("https://example.com"))
 
 	// Channels cannot be marshaled to JSON
@@ -621,6 +648,7 @@ func TestClient_Do_MarshalError(t *testing.T) {
 }
 
 func TestClient_Do_ContextCancellationDuringRetryDelay(t *testing.T) {
+	t.Parallel()
 	var attempts int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -653,6 +681,7 @@ func TestClient_Do_ContextCancellationDuringRetryDelay(t *testing.T) {
 }
 
 func TestClient_Do_NetworkError(t *testing.T) {
+	t.Parallel()
 	client, _ := New("test-key",
 		WithBaseURL("http://localhost:1"), // Invalid port - connection refused
 		WithRetries(0),
@@ -672,6 +701,7 @@ func TestClient_Do_NetworkError(t *testing.T) {
 }
 
 func TestClient_Do_NetworkErrorWithRetries(t *testing.T) {
+	t.Parallel()
 	client, _ := New("test-key",
 		WithBaseURL("http://localhost:1"), // Invalid port - connection refused
 		WithRetries(2),
@@ -690,6 +720,7 @@ func TestClient_Do_NetworkErrorWithRetries(t *testing.T) {
 }
 
 func TestClient_Do_DecodeError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("invalid json"))
@@ -709,6 +740,7 @@ func TestClient_Do_DecodeError(t *testing.T) {
 }
 
 func TestParseErrorResponse_MessageFieldFallback(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		// Use "message" field instead of "error" field
@@ -736,6 +768,7 @@ func TestParseErrorResponse_MessageFieldFallback(t *testing.T) {
 }
 
 func TestParseErrorResponse_EmptyMessageFields(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		// Both error and message are empty - should use raw body
@@ -761,6 +794,7 @@ func TestParseErrorResponse_EmptyMessageFields(t *testing.T) {
 }
 
 func TestParseErrorResponse_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("plain text error"))
@@ -787,6 +821,7 @@ func TestParseErrorResponse_InvalidJSON(t *testing.T) {
 }
 
 func TestClient_Do_RetryExhausted(t *testing.T) {
+	t.Parallel()
 	var attempts int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -833,6 +868,7 @@ func containsHelper(s, substr string) bool {
 }
 
 func TestClient_Do_RequestCreationError(t *testing.T) {
+	t.Parallel()
 	client, _ := New("test-key", WithBaseURL("https://example.com"))
 
 	// Invalid HTTP method causes request creation to fail
@@ -865,6 +901,7 @@ func (e *errorSeeker) Seek(offset int64, whence int) (int64, error) {
 }
 
 func TestClient_Do_SeekError(t *testing.T) {
+	t.Parallel()
 	var attempts int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -9,6 +9,7 @@ import (
 )
 
 func TestAPIError_Error(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      *apierrors.APIError
@@ -47,6 +48,7 @@ func TestAPIError_Error(t *testing.T) {
 }
 
 func TestAPIError_Is(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		statusCode   int
@@ -80,6 +82,7 @@ func TestAPIError_Is(t *testing.T) {
 }
 
 func TestNetworkError_Error(t *testing.T) {
+	t.Parallel()
 	underlying := errors.New("connection refused")
 	err := &apierrors.NetworkError{Err: underlying}
 
@@ -90,6 +93,7 @@ func TestNetworkError_Error(t *testing.T) {
 }
 
 func TestNetworkError_Unwrap(t *testing.T) {
+	t.Parallel()
 	underlying := errors.New("connection refused")
 	err := &apierrors.NetworkError{Err: underlying}
 
@@ -100,6 +104,7 @@ func TestNetworkError_Unwrap(t *testing.T) {
 }
 
 func TestNetworkError_Is(t *testing.T) {
+	t.Parallel()
 	underlying := errors.New("connection refused")
 	err := &apierrors.NetworkError{Err: underlying}
 
@@ -109,6 +114,7 @@ func TestNetworkError_Is(t *testing.T) {
 }
 
 func TestNetworkError_As(t *testing.T) {
+	t.Parallel()
 	underlying := fmt.Errorf("wrapped: %w", errors.New("root error"))
 	err := &apierrors.NetworkError{Err: underlying}
 
@@ -120,6 +126,7 @@ func TestNetworkError_As(t *testing.T) {
 
 
 func TestSentinelErrors(t *testing.T) {
+	t.Parallel()
 	// Verify sentinel errors are properly defined
 	sentinels := []struct {
 		name string

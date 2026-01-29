@@ -8,6 +8,7 @@ import (
 )
 
 func TestBase64URLRoundTrip(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		data []byte
@@ -40,6 +41,7 @@ func TestBase64URLRoundTrip(t *testing.T) {
 }
 
 func TestBase64URL_NoPadding(t *testing.T) {
+	t.Parallel()
 	// Encoding should not include padding
 	tests := []struct {
 		name string
@@ -61,6 +63,7 @@ func TestBase64URL_NoPadding(t *testing.T) {
 }
 
 func TestBase64URL_URLSafe(t *testing.T) {
+	t.Parallel()
 	// Generate data that would produce + and / in standard base64
 	// 0xfb will produce + and 0x3f will produce /
 	data := []byte{0xfb, 0xff, 0x3f, 0xff}
@@ -76,6 +79,7 @@ func TestBase64URL_URLSafe(t *testing.T) {
 }
 
 func TestFromBase64URL_InvalidInput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		input string
@@ -95,6 +99,7 @@ func TestFromBase64URL_InvalidInput(t *testing.T) {
 }
 
 func TestDecodeBase64_MultipleFormats(t *testing.T) {
+	t.Parallel()
 	original := []byte("hello world")
 
 	tests := []struct {
@@ -120,6 +125,7 @@ func TestDecodeBase64_MultipleFormats(t *testing.T) {
 }
 
 func TestDecodeBase64_StandardEncodings(t *testing.T) {
+	t.Parallel()
 	// Test data that produces + and / in standard base64, which will fail
 	// URL-safe decoding and exercise the standard encoding fallback paths.
 	// 0xfb, 0xff encodes to "+/8=" in standard base64 (contains + and /)
@@ -149,6 +155,7 @@ func TestDecodeBase64_StandardEncodings(t *testing.T) {
 }
 
 func TestDecodeBase64_URLSafeChars(t *testing.T) {
+	t.Parallel()
 	// Test decoding with URL-safe characters
 	// "-" and "_" should work (URL-safe replacements for "+" and "/")
 	encoded := "-_8" // Contains URL-safe characters
@@ -160,6 +167,7 @@ func TestDecodeBase64_URLSafeChars(t *testing.T) {
 }
 
 func TestToBase64_StandardEncoding(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		data     []byte
@@ -184,6 +192,7 @@ func TestToBase64_StandardEncoding(t *testing.T) {
 }
 
 func TestFromBase64_StandardDecoding(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		encoded  string
@@ -211,6 +220,7 @@ func TestFromBase64_StandardDecoding(t *testing.T) {
 }
 
 func TestBase64StandardRoundTrip(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		data []byte
@@ -236,6 +246,7 @@ func TestBase64StandardRoundTrip(t *testing.T) {
 }
 
 func TestFromBase64_InvalidInput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		encoded string
@@ -255,6 +266,7 @@ func TestFromBase64_InvalidInput(t *testing.T) {
 }
 
 func TestToBase64_WithPadding(t *testing.T) {
+	t.Parallel()
 	// Standard base64 SHOULD include padding
 	tests := []struct {
 		name string

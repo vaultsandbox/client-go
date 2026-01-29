@@ -125,6 +125,7 @@ func buildTestTranscript(version int, algs crypto.AlgorithmSuite, ctKem, nonce, 
 }
 
 func TestWrapCryptoError_Nil(t *testing.T) {
+	t.Parallel()
 	result := wrapCryptoError(nil)
 	if result != nil {
 		t.Errorf("wrapCryptoError(nil) = %v, want nil", result)
@@ -132,6 +133,7 @@ func TestWrapCryptoError_Nil(t *testing.T) {
 }
 
 func TestWrapCryptoError_ServerKeyMismatch(t *testing.T) {
+	t.Parallel()
 	err := crypto.ErrServerKeyMismatch
 	result := wrapCryptoError(err)
 
@@ -145,6 +147,7 @@ func TestWrapCryptoError_ServerKeyMismatch(t *testing.T) {
 }
 
 func TestWrapCryptoError_SignatureVerificationFailed(t *testing.T) {
+	t.Parallel()
 	err := crypto.ErrSignatureVerificationFailed
 	result := wrapCryptoError(err)
 
@@ -158,6 +161,7 @@ func TestWrapCryptoError_SignatureVerificationFailed(t *testing.T) {
 }
 
 func TestWrapCryptoError_OtherError(t *testing.T) {
+	t.Parallel()
 	originalErr := errors.New("some other error")
 	result := wrapCryptoError(originalErr)
 
@@ -167,6 +171,7 @@ func TestWrapCryptoError_OtherError(t *testing.T) {
 }
 
 func TestConvertDecryptedEmail_WithAttachments(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	decrypted := &crypto.DecryptedEmail{
@@ -230,6 +235,7 @@ func TestConvertDecryptedEmail_WithAttachments(t *testing.T) {
 }
 
 func TestDecryptMetadata_NilEncryptedMetadata(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 	// When EncryptedMetadata is nil, the email is treated as plain format
 	// Testing both cases:
@@ -251,6 +257,7 @@ func TestDecryptMetadata_NilEncryptedMetadata(t *testing.T) {
 }
 
 func TestDecryptEmail_NilEncryptedMetadata(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 	// When EncryptedMetadata is nil, the email is treated as plain format
 	rawEmail := &api.RawEmail{
@@ -269,6 +276,7 @@ func TestDecryptEmail_NilEncryptedMetadata(t *testing.T) {
 }
 
 func TestDecryptMetadata_Success(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -325,6 +333,7 @@ func TestDecryptMetadata_Success(t *testing.T) {
 }
 
 func TestDecryptMetadata_InvalidReceivedAtFallback(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -367,6 +376,7 @@ func TestDecryptMetadata_InvalidReceivedAtFallback(t *testing.T) {
 }
 
 func TestDecryptMetadata_EmptyReceivedAtFallback(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -408,6 +418,7 @@ func TestDecryptMetadata_EmptyReceivedAtFallback(t *testing.T) {
 }
 
 func TestDecryptMetadata_VerifyAndDecryptError(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -444,6 +455,7 @@ func TestDecryptMetadata_VerifyAndDecryptError(t *testing.T) {
 }
 
 func TestDecryptMetadata_ParseMetadataError(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -471,6 +483,7 @@ func TestDecryptMetadata_ParseMetadataError(t *testing.T) {
 }
 
 func TestDecryptEmail_Success(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -517,6 +530,7 @@ func TestDecryptEmail_Success(t *testing.T) {
 }
 
 func TestDecryptEmail_WithParsedContent(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -644,6 +658,7 @@ func createTestEncryptedPayloadWithServerKeyPair(t *testing.T, plaintext []byte,
 }
 
 func TestDecryptEmail_VerifyAndDecryptError(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -677,6 +692,7 @@ func TestDecryptEmail_VerifyAndDecryptError(t *testing.T) {
 }
 
 func TestDecryptEmail_ParseMetadataError(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -702,6 +718,7 @@ func TestDecryptEmail_ParseMetadataError(t *testing.T) {
 }
 
 func TestDecryptEmail_ApplyParsedContentError(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -742,6 +759,7 @@ func TestDecryptEmail_ApplyParsedContentError(t *testing.T) {
 }
 
 func TestApplyParsedContent_VerifyAndDecryptError(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -770,6 +788,7 @@ func TestApplyParsedContent_VerifyAndDecryptError(t *testing.T) {
 }
 
 func TestApplyParsedContent_ParseError(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -792,6 +811,7 @@ func TestApplyParsedContent_ParseError(t *testing.T) {
 }
 
 func TestApplyParsedContent_Success(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -863,6 +883,7 @@ func TestApplyParsedContent_Success(t *testing.T) {
 }
 
 func TestVerifyAndDecrypt_Success(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -888,6 +909,7 @@ func TestVerifyAndDecrypt_Success(t *testing.T) {
 }
 
 func TestVerifyAndDecrypt_SignatureError(t *testing.T) {
+	t.Parallel()
 	kp, err := crypto.GenerateKeypair()
 	if err != nil {
 		t.Fatal(err)
@@ -922,6 +944,7 @@ func TestVerifyAndDecrypt_SignatureError(t *testing.T) {
 // =============================================================================
 
 func TestDecodePlainEmail_Success(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	// Create Base64-encoded metadata
@@ -969,6 +992,7 @@ func TestDecodePlainEmail_Success(t *testing.T) {
 }
 
 func TestDecodePlainEmail_WithParsedContent(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	// Create Base64-encoded metadata
@@ -1035,6 +1059,7 @@ func TestDecodePlainEmail_WithParsedContent(t *testing.T) {
 }
 
 func TestDecodePlainEmail_WithAuthResults(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	metadata := map[string]interface{}{
@@ -1081,6 +1106,7 @@ func TestDecodePlainEmail_WithAuthResults(t *testing.T) {
 }
 
 func TestDecodePlainEmail_NoMetadata(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	rawEmail := &api.RawEmail{
@@ -1098,6 +1124,7 @@ func TestDecodePlainEmail_NoMetadata(t *testing.T) {
 }
 
 func TestDecodePlainEmail_InvalidBase64Metadata(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	rawEmail := &api.RawEmail{
@@ -1112,6 +1139,7 @@ func TestDecodePlainEmail_InvalidBase64Metadata(t *testing.T) {
 }
 
 func TestDecodePlainEmail_InvalidJSONMetadata(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	// Valid Base64 but invalid JSON
@@ -1129,6 +1157,7 @@ func TestDecodePlainEmail_InvalidJSONMetadata(t *testing.T) {
 }
 
 func TestDecodePlainEmail_InvalidBase64Parsed(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	// Valid metadata
@@ -1153,6 +1182,7 @@ func TestDecodePlainEmail_InvalidBase64Parsed(t *testing.T) {
 }
 
 func TestDecodePlainEmail_InvalidJSONParsed(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	// Valid metadata
@@ -1180,6 +1210,7 @@ func TestDecodePlainEmail_InvalidJSONParsed(t *testing.T) {
 }
 
 func TestDecryptMetadata_PlainEmail_Success(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	// Create Base64-encoded metadata for plain email
@@ -1227,6 +1258,7 @@ func TestDecryptMetadata_PlainEmail_Success(t *testing.T) {
 }
 
 func TestDecryptMetadata_PlainEmail_InvalidBase64(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	rawEmail := &api.RawEmail{
@@ -1242,6 +1274,7 @@ func TestDecryptMetadata_PlainEmail_InvalidBase64(t *testing.T) {
 }
 
 func TestDecryptMetadata_PlainEmail_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	invalidJSON := crypto.ToBase64URL([]byte("{invalid json"))
@@ -1259,6 +1292,7 @@ func TestDecryptMetadata_PlainEmail_InvalidJSON(t *testing.T) {
 }
 
 func TestDecryptMetadata_PlainEmail_ReceivedAtFallback(t *testing.T) {
+	t.Parallel()
 	inbox := &Inbox{}
 
 	// Create metadata without receivedAt
@@ -1290,6 +1324,7 @@ func TestDecryptMetadata_PlainEmail_ReceivedAtFallback(t *testing.T) {
 }
 
 func TestDecryptEmail_PlainEmail_ViaDecryptEmail(t *testing.T) {
+	t.Parallel()
 	// Test that decryptEmail correctly routes plain emails to decodePlainEmail
 	inbox := &Inbox{}
 
@@ -1339,6 +1374,7 @@ func TestDecryptEmail_PlainEmail_ViaDecryptEmail(t *testing.T) {
 // =============================================================================
 
 func TestGetRawEmail_PlainEmail_Success(t *testing.T) {
+	t.Parallel()
 	rawEmailContent := "From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nHello World"
 	rawB64 := crypto.ToBase64URL([]byte(rawEmailContent))
 
@@ -1374,6 +1410,7 @@ func TestGetRawEmail_PlainEmail_Success(t *testing.T) {
 }
 
 func TestGetRawEmail_PlainEmail_EmptyRaw(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1401,6 +1438,7 @@ func TestGetRawEmail_PlainEmail_EmptyRaw(t *testing.T) {
 }
 
 func TestGetRawEmail_PlainEmail_InvalidBase64(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1429,6 +1467,7 @@ func TestGetRawEmail_PlainEmail_InvalidBase64(t *testing.T) {
 // =============================================================================
 
 func TestGetRawEmail_EncryptedEmail_Success(t *testing.T) {
+	t.Parallel()
 	// Same raw email content as plain test - should get identical result
 	rawEmailContent := "From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nHello World"
 	rawB64 := crypto.ToBase64URL([]byte(rawEmailContent))
@@ -1477,6 +1516,7 @@ func TestGetRawEmail_EncryptedEmail_Success(t *testing.T) {
 }
 
 func TestGetRawEmail_EncryptedEmail_DecryptionError(t *testing.T) {
+	t.Parallel()
 	// Create encrypted payload with one keypair
 	kp, _ := crypto.GenerateKeypair()
 	rawB64 := crypto.ToBase64URL([]byte("raw email content"))
@@ -1517,6 +1557,7 @@ func TestGetRawEmail_EncryptedEmail_DecryptionError(t *testing.T) {
 }
 
 func TestGetRawEmail_APIError(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "email not found"})

@@ -6,6 +6,7 @@ import (
 )
 
 func TestEmail_Fields(t *testing.T) {
+	t.Parallel()
 	email := &Email{
 		ID:         "email123",
 		From:       "sender@example.com",
@@ -43,6 +44,7 @@ func TestEmail_Fields(t *testing.T) {
 }
 
 func TestAttachment_Fields(t *testing.T) {
+	t.Parallel()
 	attachment := Attachment{
 		Filename:           "document.pdf",
 		ContentType:        "application/pdf",
@@ -77,6 +79,7 @@ func TestAttachment_Fields(t *testing.T) {
 }
 
 func TestEmail_WithAttachments(t *testing.T) {
+	t.Parallel()
 	email := &Email{
 		ID:      "email123",
 		Subject: "With Attachments",

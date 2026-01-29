@@ -17,6 +17,7 @@ func (f failingReader) Read(p []byte) (n int, err error) {
 }
 
 func TestGenerateKeypair_RandomFailure(t *testing.T) {
+	// This test modifies global state (randReader) so it cannot run in parallel
 	// Save original and restore after test
 	original := randReader
 	defer func() { randReader = original }()
@@ -31,6 +32,7 @@ func TestGenerateKeypair_RandomFailure(t *testing.T) {
 }
 
 func TestGenerateKeypair(t *testing.T) {
+	t.Parallel()
 	kp, err := GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)
@@ -61,6 +63,7 @@ func TestGenerateKeypair(t *testing.T) {
 }
 
 func TestGenerateKeypair_Uniqueness(t *testing.T) {
+	t.Parallel()
 	kp1, err := GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)
@@ -81,6 +84,7 @@ func TestGenerateKeypair_Uniqueness(t *testing.T) {
 }
 
 func TestKeypairFromSecretKey(t *testing.T) {
+	t.Parallel()
 	original, err := GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)
@@ -108,6 +112,7 @@ func TestKeypairFromSecretKey(t *testing.T) {
 }
 
 func TestKeypairFromSecretKey_InvalidSize(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		key  []byte
@@ -129,6 +134,7 @@ func TestKeypairFromSecretKey_InvalidSize(t *testing.T) {
 }
 
 func TestNewKeypairFromBytes(t *testing.T) {
+	t.Parallel()
 	original, err := GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)
@@ -149,6 +155,7 @@ func TestNewKeypairFromBytes(t *testing.T) {
 }
 
 func TestNewKeypairFromBytes_InvalidSecretKeySize(t *testing.T) {
+	t.Parallel()
 	_, err := NewKeypairFromBytes([]byte("short"), make([]byte, MLKEMPublicKeySize))
 	if !errors.Is(err, ErrInvalidSecretKeySize) {
 		t.Errorf("expected ErrInvalidSecretKeySize, got %v", err)
@@ -156,6 +163,7 @@ func TestNewKeypairFromBytes_InvalidSecretKeySize(t *testing.T) {
 }
 
 func TestNewKeypairFromBytes_InvalidPublicKeySize(t *testing.T) {
+	t.Parallel()
 	_, err := NewKeypairFromBytes(make([]byte, MLKEMSecretKeySize), []byte("short"))
 	if !errors.Is(err, ErrInvalidPublicKeySize) {
 		t.Errorf("expected ErrInvalidPublicKeySize, got %v", err)
@@ -163,6 +171,7 @@ func TestNewKeypairFromBytes_InvalidPublicKeySize(t *testing.T) {
 }
 
 func TestNewKeypairFromBytes_InvalidPrivateKeyBytes(t *testing.T) {
+	t.Parallel()
 	// Correct size but invalid/malformed private key bytes
 	invalidPrivKey := make([]byte, MLKEMSecretKeySize)
 	validPubKey := make([]byte, MLKEMPublicKeySize)
@@ -182,6 +191,7 @@ func TestNewKeypairFromBytes_InvalidPrivateKeyBytes(t *testing.T) {
 
 
 func TestKeypair_Decapsulate(t *testing.T) {
+	t.Parallel()
 	kp, err := GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)
@@ -246,6 +256,7 @@ func TestKeypair_Decapsulate(t *testing.T) {
 }
 
 func TestPublicKeyOffset(t *testing.T) {
+	t.Parallel()
 	kp, err := GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)
@@ -259,6 +270,7 @@ func TestPublicKeyOffset(t *testing.T) {
 }
 
 func TestValidateKeypair(t *testing.T) {
+	t.Parallel()
 	t.Run("valid keypair", func(t *testing.T) {
 		kp, err := GenerateKeypair()
 		if err != nil {
@@ -363,6 +375,7 @@ func TestValidateKeypair(t *testing.T) {
 }
 
 func TestDerivePublicKeyFromSecret(t *testing.T) {
+	t.Parallel()
 	t.Run("valid secret key", func(t *testing.T) {
 		kp, err := GenerateKeypair()
 		if err != nil {

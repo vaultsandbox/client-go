@@ -7,6 +7,7 @@ import (
 )
 
 func TestAPIError_Error(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      *APIError
@@ -45,6 +46,7 @@ func TestAPIError_Error(t *testing.T) {
 }
 
 func TestAPIError_Is(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      *APIError
@@ -130,6 +132,7 @@ func TestAPIError_Is(t *testing.T) {
 }
 
 func TestAPIError_ErrorsIs(t *testing.T) {
+	t.Parallel()
 	// Test that errors.Is works correctly with APIError
 	err := &APIError{StatusCode: 401}
 	if !errors.Is(err, ErrUnauthorized) {
@@ -143,6 +146,7 @@ func TestAPIError_ErrorsIs(t *testing.T) {
 }
 
 func TestWithResourceType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		err          error
@@ -200,6 +204,7 @@ func TestWithResourceType(t *testing.T) {
 }
 
 func TestNetworkError_Error(t *testing.T) {
+	t.Parallel()
 	underlying := fmt.Errorf("connection refused")
 	err := &NetworkError{Err: underlying}
 
@@ -210,6 +215,7 @@ func TestNetworkError_Error(t *testing.T) {
 }
 
 func TestNetworkError_Unwrap(t *testing.T) {
+	t.Parallel()
 	underlying := fmt.Errorf("connection refused")
 	err := &NetworkError{Err: underlying}
 
@@ -224,6 +230,7 @@ func TestNetworkError_Unwrap(t *testing.T) {
 }
 
 func TestSignatureVerificationError_Error(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      *SignatureVerificationError
@@ -251,6 +258,7 @@ func TestSignatureVerificationError_Error(t *testing.T) {
 }
 
 func TestSignatureVerificationError_Is(t *testing.T) {
+	t.Parallel()
 	err := &SignatureVerificationError{Message: "test"}
 
 	if !err.Is(ErrSignatureInvalid) {
@@ -268,6 +276,7 @@ func TestSignatureVerificationError_Is(t *testing.T) {
 }
 
 func TestSentinelErrors(t *testing.T) {
+	t.Parallel()
 	// Verify all sentinel errors are properly defined
 	sentinels := []error{
 		ErrMissingAPIKey,
@@ -293,6 +302,7 @@ func TestSentinelErrors(t *testing.T) {
 }
 
 func TestResourceTypeConstants(t *testing.T) {
+	t.Parallel()
 	if ResourceUnknown != "" {
 		t.Errorf("ResourceUnknown = %q, want empty string", ResourceUnknown)
 	}

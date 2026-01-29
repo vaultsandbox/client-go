@@ -9,6 +9,7 @@ import (
 )
 
 func TestSentinelErrors(t *testing.T) {
+	t.Parallel()
 	sentinels := []struct {
 		name string
 		err  error
@@ -38,6 +39,7 @@ func TestSentinelErrors(t *testing.T) {
 }
 
 func TestAPIError_Error(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      *APIError
@@ -76,6 +78,7 @@ func TestAPIError_Error(t *testing.T) {
 }
 
 func TestAPIError_Is(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		statusCode int
@@ -103,6 +106,7 @@ func TestAPIError_Is(t *testing.T) {
 }
 
 func TestAPIError_Is_404Differentiation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		resourceType ResourceType
@@ -129,6 +133,7 @@ func TestAPIError_Is_404Differentiation(t *testing.T) {
 }
 
 func TestNetworkError_Error(t *testing.T) {
+	t.Parallel()
 	underlying := errors.New("connection refused")
 	err := &NetworkError{Err: underlying}
 
@@ -139,6 +144,7 @@ func TestNetworkError_Error(t *testing.T) {
 }
 
 func TestNetworkError_Unwrap(t *testing.T) {
+	t.Parallel()
 	underlying := errors.New("connection refused")
 	err := &NetworkError{Err: underlying}
 
@@ -149,6 +155,7 @@ func TestNetworkError_Unwrap(t *testing.T) {
 }
 
 func TestNetworkError_Is(t *testing.T) {
+	t.Parallel()
 	underlying := errors.New("connection refused")
 	err := &NetworkError{Err: underlying}
 
@@ -158,6 +165,7 @@ func TestNetworkError_Is(t *testing.T) {
 }
 
 func TestSignatureVerificationError_Error(t *testing.T) {
+	t.Parallel()
 	t.Run("signature failure", func(t *testing.T) {
 		err := &SignatureVerificationError{Message: "tampered data", IsKeyMismatch: false}
 		expected := "signature verification failed: tampered data"
@@ -176,6 +184,7 @@ func TestSignatureVerificationError_Error(t *testing.T) {
 }
 
 func TestSignatureVerificationError_Is(t *testing.T) {
+	t.Parallel()
 	t.Run("matches ErrSignatureInvalid when not key mismatch", func(t *testing.T) {
 		err := &SignatureVerificationError{IsKeyMismatch: false}
 		if !errors.Is(err, ErrSignatureInvalid) {
@@ -192,6 +201,7 @@ func TestSignatureVerificationError_Is(t *testing.T) {
 }
 
 func TestErrorWrapping(t *testing.T) {
+	t.Parallel()
 	root := errors.New("root cause")
 	wrapped := fmt.Errorf("wrapped: %w", root)
 	netErr := &NetworkError{Err: wrapped}
@@ -202,6 +212,7 @@ func TestErrorWrapping(t *testing.T) {
 }
 
 func TestTypeAliases_AreCompatible(t *testing.T) {
+	t.Parallel()
 	// Verify that public types are aliases to internal types
 	t.Run("APIError is same type", func(t *testing.T) {
 		var internalErr *apierrors.APIError = &apierrors.APIError{StatusCode: 401}
@@ -233,6 +244,7 @@ func TestTypeAliases_AreCompatible(t *testing.T) {
 }
 
 func TestErrorChain_CanUnwrapToSentinel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		err           error
@@ -280,6 +292,7 @@ func TestErrorChain_CanUnwrapToSentinel(t *testing.T) {
 }
 
 func TestWrapCryptoError_PreservesKeyMismatch(t *testing.T) {
+	t.Parallel()
 	t.Run("nil returns nil", func(t *testing.T) {
 		result := wrapCryptoError(nil)
 		if result != nil {

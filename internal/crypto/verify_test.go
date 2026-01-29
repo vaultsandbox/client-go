@@ -9,6 +9,7 @@ import (
 )
 
 func TestBuildTranscript(t *testing.T) {
+	t.Parallel()
 	algs := AlgorithmSuite{
 		KEM:  "ML-KEM-768",
 		Sig:  "ML-DSA-65",
@@ -61,6 +62,7 @@ func TestBuildTranscript(t *testing.T) {
 }
 
 func TestBuildTranscript_DifferentVersions(t *testing.T) {
+	t.Parallel()
 	algs := AlgorithmSuite{
 		KEM:  "ML-KEM-768",
 		Sig:  "ML-DSA-65",
@@ -88,6 +90,7 @@ func TestBuildTranscript_DifferentVersions(t *testing.T) {
 }
 
 func TestVerify_ValidSignature(t *testing.T) {
+	t.Parallel()
 	// Generate a test keypair
 	pub, priv, err := mldsa65.GenerateKey(nil)
 	if err != nil {
@@ -111,6 +114,7 @@ func TestVerify_ValidSignature(t *testing.T) {
 }
 
 func TestVerify_InvalidSignature(t *testing.T) {
+	t.Parallel()
 	pub, _, err := mldsa65.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -131,6 +135,7 @@ func TestVerify_InvalidSignature(t *testing.T) {
 }
 
 func TestVerify_TamperedMessage(t *testing.T) {
+	t.Parallel()
 	pub, priv, err := mldsa65.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -153,6 +158,7 @@ func TestVerify_TamperedMessage(t *testing.T) {
 }
 
 func TestVerify_InvalidPublicKey(t *testing.T) {
+	t.Parallel()
 	message := []byte("test message")
 	sig := make([]byte, MLDSASignatureSize)
 	invalidPubKey := []byte("invalid public key")
@@ -164,6 +170,7 @@ func TestVerify_InvalidPublicKey(t *testing.T) {
 }
 
 func TestVerifySignature_InvalidBase64(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		payload *EncryptedPayload
@@ -255,6 +262,7 @@ func TestVerifySignature_InvalidBase64(t *testing.T) {
 }
 
 func TestVerifySignature_InvalidPublicKey(t *testing.T) {
+	t.Parallel()
 	invalidPk := []byte("invalid public key")
 	payload := &EncryptedPayload{
 		V:           1,
@@ -274,6 +282,7 @@ func TestVerifySignature_InvalidPublicKey(t *testing.T) {
 }
 
 func TestVerifySignature_ServerKeyMismatch(t *testing.T) {
+	t.Parallel()
 	// Generate two different keypairs
 	pub1, _, err := mldsa65.GenerateKey(nil)
 	if err != nil {
@@ -312,6 +321,7 @@ func TestVerifySignature_ServerKeyMismatch(t *testing.T) {
 }
 
 func TestVerifySignature_InvalidSignature(t *testing.T) {
+	t.Parallel()
 	// Generate a valid public key but provide invalid signature
 	pub, _, err := mldsa65.GenerateKey(nil)
 	if err != nil {
@@ -348,6 +358,7 @@ func TestVerifySignature_InvalidSignature(t *testing.T) {
 }
 
 func TestVerifySignatureSafe(t *testing.T) {
+	t.Parallel()
 	t.Run("returns false for invalid payload", func(t *testing.T) {
 		pinnedKey := make([]byte, MLDSAPublicKeySize)
 		payload := &EncryptedPayload{
@@ -444,6 +455,7 @@ func TestVerifySignatureSafe(t *testing.T) {
 }
 
 func TestValidateServerPublicKey(t *testing.T) {
+	t.Parallel()
 	t.Run("valid public key", func(t *testing.T) {
 		pub, _, err := mldsa65.GenerateKey(nil)
 		if err != nil {
@@ -485,6 +497,7 @@ func TestValidateServerPublicKey(t *testing.T) {
 }
 
 func TestValidatePayload_InvalidVersion(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		version int
@@ -523,6 +536,7 @@ func TestValidatePayload_InvalidVersion(t *testing.T) {
 }
 
 func TestValidatePayload_InvalidAlgorithms(t *testing.T) {
+	t.Parallel()
 	validPayload := func() *EncryptedPayload {
 		return &EncryptedPayload{
 			V: 1,
@@ -587,6 +601,7 @@ func TestValidatePayload_InvalidAlgorithms(t *testing.T) {
 }
 
 func TestValidatePayload_InvalidBase64Encoding(t *testing.T) {
+	t.Parallel()
 	validPayload := func() *EncryptedPayload {
 		return &EncryptedPayload{
 			V: 1,
@@ -651,6 +666,7 @@ func TestValidatePayload_InvalidBase64Encoding(t *testing.T) {
 }
 
 func TestValidatePayload_InvalidSizes(t *testing.T) {
+	t.Parallel()
 	validPayload := func() *EncryptedPayload {
 		return &EncryptedPayload{
 			V: 1,
@@ -715,6 +731,7 @@ func TestValidatePayload_InvalidSizes(t *testing.T) {
 }
 
 func TestVerifySignature_InvalidAADBase64(t *testing.T) {
+	t.Parallel()
 	pub, _, err := mldsa65.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -747,6 +764,7 @@ func TestVerifySignature_InvalidAADBase64(t *testing.T) {
 }
 
 func TestVerifySignature_InvalidCiphertextBase64(t *testing.T) {
+	t.Parallel()
 	pub, _, err := mldsa65.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -779,6 +797,7 @@ func TestVerifySignature_InvalidCiphertextBase64(t *testing.T) {
 }
 
 func TestVerifySignature_ServerKeyLengthMismatch(t *testing.T) {
+	t.Parallel()
 	pub, _, err := mldsa65.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)

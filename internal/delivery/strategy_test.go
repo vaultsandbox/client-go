@@ -5,6 +5,7 @@ import (
 )
 
 func TestInboxInfo(t *testing.T) {
+	t.Parallel()
 	info := InboxInfo{
 		Hash:         "abc123",
 		EmailAddress: "test@example.com",
@@ -19,6 +20,7 @@ func TestInboxInfo(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		APIClient: nil,
 	}
@@ -31,6 +33,7 @@ func TestConfig(t *testing.T) {
 
 // Test that strategies implement the Strategy interface
 func TestStrategyInterface(t *testing.T) {
+	t.Parallel()
 	// Verify PollingStrategy implements Strategy
 	var _ Strategy = (*PollingStrategy)(nil)
 
