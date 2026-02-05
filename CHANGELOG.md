@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.3] - 2026-02-05
+
+### Added
+
+- Inbox persistence support with `WithPersistence` option
+- `PersistencePolicy` and `PersistentGlobalWebhooks` in server info
+
 ## [0.9.2] - 2026-01-29
 
 ### Changed

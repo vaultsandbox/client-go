@@ -105,6 +105,9 @@ type CreateInboxParams struct {
 	// Encryption specifies the desired encryption mode ("encrypted" or "plain").
 	// Empty string means use server default.
 	Encryption string
+	// Persistence specifies the desired persistence mode ("persistent" or "ephemeral").
+	// Empty string means use server default.
+	Persistence string
 	// SpamAnalysis controls whether spam analysis (Rspamd) is enabled for this inbox.
 	// nil = use server default, true = enable, false = disable.
 	SpamAnalysis *bool
@@ -127,6 +130,8 @@ type CreateInboxResult struct {
 	EmailAuth bool
 	// Encrypted indicates whether the inbox is encrypted.
 	Encrypted bool
+	// Persistent indicates whether the inbox is persistent.
+	Persistent bool
 	// SpamAnalysis indicates whether spam analysis is enabled for this inbox.
 	// May be nil if using server default.
 	SpamAnalysis *bool
@@ -141,6 +146,7 @@ func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*Crea
 		EmailAddress: req.EmailAddress,
 		EmailAuth:    req.EmailAuth,
 		Encryption:   req.Encryption,
+		Persistence:  req.Persistence,
 		SpamAnalysis: req.SpamAnalysis,
 	}
 
@@ -167,6 +173,7 @@ func (c *Client) CreateInbox(ctx context.Context, req *CreateInboxParams) (*Crea
 		InboxHash:    apiResp.InboxHash,
 		EmailAuth:    apiResp.EmailAuth,
 		Encrypted:    apiResp.Encrypted,
+		Persistent:   apiResp.Persistent,
 		SpamAnalysis: apiResp.SpamAnalysis,
 	}
 

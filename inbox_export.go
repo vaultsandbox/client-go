@@ -38,6 +38,8 @@ type ExportedInbox struct {
 	EmailAuth bool `json:"emailAuth"`
 	// Encrypted indicates whether this is an encrypted inbox.
 	Encrypted bool `json:"encrypted"`
+	// Persistent indicates whether this is a persistent inbox.
+	Persistent bool `json:"persistent"`
 }
 
 // Validate checks that the exported data is valid per VaultSandbox spec Section 10.
@@ -111,6 +113,7 @@ func (i *Inbox) Export() *ExportedInbox {
 		ExportedAt:   time.Now().UTC(),
 		EmailAuth:    i.emailAuth,
 		Encrypted:    i.encrypted,
+		Persistent:   i.persistent,
 	}
 
 	// Only include cryptographic material for encrypted inboxes
@@ -136,6 +139,7 @@ func newInboxFromExport(data *ExportedInbox, c *Client) (*Inbox, error) {
 		client:       c,
 		emailAuth:    data.EmailAuth,
 		encrypted:    data.Encrypted,
+		persistent:   data.Persistent,
 	}
 
 	// For encrypted inboxes, decode keys
