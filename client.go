@@ -66,14 +66,31 @@ const (
 	EncryptionPolicyNever = api.EncryptionPolicyNever
 )
 
+// PersistencePolicy represents the server's persistence policy for inboxes.
+type PersistencePolicy = api.PersistencePolicy
+
+// Persistence policy constants.
+const (
+	// PersistencePolicyAlways requires all inboxes to be persistent.
+	PersistencePolicyAlways = api.PersistencePolicyAlways
+	// PersistencePolicyEnabled makes persistence the default, but allows ephemeral inboxes.
+	PersistencePolicyEnabled = api.PersistencePolicyEnabled
+	// PersistencePolicyDisabled makes ephemeral the default, but allows persistent inboxes.
+	PersistencePolicyDisabled = api.PersistencePolicyDisabled
+	// PersistencePolicyNever requires all inboxes to be ephemeral.
+	PersistencePolicyNever = api.PersistencePolicyNever
+)
+
 // ServerInfo contains server configuration.
 type ServerInfo struct {
-	AllowedDomains      []string
-	MaxTTL              time.Duration
-	DefaultTTL          time.Duration
-	EncryptionPolicy    EncryptionPolicy
-	SpamAnalysisEnabled bool
-	ChaosEnabled        bool
+	AllowedDomains           []string
+	MaxTTL                   time.Duration
+	DefaultTTL               time.Duration
+	EncryptionPolicy         EncryptionPolicy
+	PersistencePolicy        PersistencePolicy
+	PersistentGlobalWebhooks bool
+	SpamAnalysisEnabled      bool
+	ChaosEnabled             bool
 }
 
 // Client is the main VaultSandbox client for managing inboxes.
@@ -270,6 +287,7 @@ func (c *Client) CreateInbox(ctx context.Context, opts ...InboxOption) (*Inbox, 
 		EmailAddress: cfg.emailAddress,
 		EmailAuth:    cfg.emailAuth,
 		Encryption:   string(cfg.encryption),
+		Persistence:  string(cfg.persistence),
 		SpamAnalysis: cfg.spamAnalysis,
 	}
 
@@ -406,12 +424,14 @@ func (c *Client) Inboxes() []*Inbox {
 // ServerInfo returns the server configuration.
 func (c *Client) ServerInfo() *ServerInfo {
 	return &ServerInfo{
-		AllowedDomains:      c.serverInfo.AllowedDomains,
-		MaxTTL:              time.Duration(c.serverInfo.MaxTTL) * time.Second,
-		DefaultTTL:          time.Duration(c.serverInfo.DefaultTTL) * time.Second,
-		EncryptionPolicy:    c.serverInfo.EncryptionPolicy,
-		SpamAnalysisEnabled: c.serverInfo.SpamAnalysisEnabled,
-		ChaosEnabled:        c.serverInfo.ChaosEnabled,
+		AllowedDomains:           c.serverInfo.AllowedDomains,
+		MaxTTL:                   time.Duration(c.serverInfo.MaxTTL) * time.Second,
+		DefaultTTL:               time.Duration(c.serverInfo.DefaultTTL) * time.Second,
+		EncryptionPolicy:         c.serverInfo.EncryptionPolicy,
+		PersistencePolicy:        c.serverInfo.PersistencePolicy,
+		PersistentGlobalWebhooks: c.serverInfo.PersistentGlobalWebhooks,
+		SpamAnalysisEnabled:      c.serverInfo.SpamAnalysisEnabled,
+		ChaosEnabled:             c.serverInfo.ChaosEnabled,
 	}
 }
 

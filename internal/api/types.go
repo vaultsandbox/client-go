@@ -34,6 +34,34 @@ func (p EncryptionPolicy) DefaultEncrypted() bool {
 	return p == EncryptionPolicyAlways || p == EncryptionPolicyEnabled
 }
 
+// PersistencePolicy represents the server's persistence policy for inboxes.
+type PersistencePolicy string
+
+const (
+	// PersistencePolicyAlways requires all inboxes to be persistent.
+	// No per-inbox override is allowed.
+	PersistencePolicyAlways PersistencePolicy = "always"
+	// PersistencePolicyEnabled makes persistence the default, but allows
+	// per-inbox override to request ephemeral inboxes.
+	PersistencePolicyEnabled PersistencePolicy = "enabled"
+	// PersistencePolicyDisabled makes ephemeral the default, but allows
+	// per-inbox override to request persistent inboxes.
+	PersistencePolicyDisabled PersistencePolicy = "disabled"
+	// PersistencePolicyNever requires all inboxes to be ephemeral.
+	// No per-inbox override is allowed.
+	PersistencePolicyNever PersistencePolicy = "never"
+)
+
+// CanOverride returns true if the policy allows per-inbox persistence override.
+func (p PersistencePolicy) CanOverride() bool {
+	return p == PersistencePolicyEnabled || p == PersistencePolicyDisabled
+}
+
+// DefaultPersistent returns true if persistence is the default for this policy.
+func (p PersistencePolicy) DefaultPersistent() bool {
+	return p == PersistencePolicyAlways || p == PersistencePolicyEnabled
+}
+
 // ServerInfo represents the /api/server-info response containing server
 // configuration and capabilities.
 type ServerInfo struct {
@@ -53,6 +81,10 @@ type ServerInfo struct {
 	AllowedDomains []string `json:"allowedDomains"`
 	// EncryptionPolicy specifies the server's encryption policy for inboxes.
 	EncryptionPolicy EncryptionPolicy `json:"encryptionPolicy"`
+	// PersistencePolicy specifies the server's persistence policy for inboxes.
+	PersistencePolicy PersistencePolicy `json:"persistencePolicy"`
+	// PersistentGlobalWebhooks indicates whether global webhooks fire for persistent inboxes.
+	PersistentGlobalWebhooks bool `json:"persistentGlobalWebhooks"`
 	// SpamAnalysisEnabled indicates whether spam analysis (Rspamd) is enabled on the server.
 	SpamAnalysisEnabled bool `json:"spamAnalysisEnabled"`
 	// ChaosEnabled indicates whether chaos engineering features are enabled on the server.
@@ -141,7 +173,8 @@ type createInboxAPIRequest struct {
 	TTL          int    `json:"ttl,omitempty"`
 	EmailAddress string `json:"emailAddress,omitempty"`
 	EmailAuth    *bool  `json:"emailAuth,omitempty"`
-	Encryption   string `json:"encryption,omitempty"` // "encrypted" or "plain", omit for server default
+	Encryption   string `json:"encryption,omitempty"`   // "encrypted" or "plain", omit for server default
+	Persistence  string `json:"persistence,omitempty"` // "persistent" or "ephemeral", omit for server default
 	SpamAnalysis *bool  `json:"spamAnalysis,omitempty"`
 }
 
@@ -151,7 +184,8 @@ type createInboxAPIResponse struct {
 	InboxHash    string    `json:"inboxHash"`
 	ServerSigPk  string    `json:"serverSigPk,omitempty"` // Only present when Encrypted=true
 	EmailAuth    bool      `json:"emailAuth"`
-	Encrypted    bool      `json:"encrypted"` // Actual encryption state of the inbox
+	Encrypted    bool      `json:"encrypted"`  // Actual encryption state of the inbox
+	Persistent   bool      `json:"persistent"` // Actual persistence state of the inbox
 	SpamAnalysis *bool     `json:"spamAnalysis,omitempty"`
 }
 

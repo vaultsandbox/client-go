@@ -52,12 +52,25 @@ const (
 	EncryptionModePlain EncryptionMode = "plain"
 )
 
+// PersistenceMode specifies the desired persistence mode for an inbox.
+type PersistenceMode string
+
+const (
+	// PersistenceModeDefault uses the server's default persistence setting.
+	PersistenceModeDefault PersistenceMode = ""
+	// PersistenceModePersistent requests a persistent inbox.
+	PersistenceModePersistent PersistenceMode = "persistent"
+	// PersistenceModeEphemeral requests an ephemeral inbox.
+	PersistenceModeEphemeral PersistenceMode = "ephemeral"
+)
+
 // inboxConfig holds configuration for inbox creation.
 type inboxConfig struct {
 	ttl          time.Duration
 	emailAddress string
 	emailAuth    *bool
 	encryption   EncryptionMode
+	persistence  PersistenceMode
 	spamAnalysis *bool
 }
 
@@ -219,6 +232,20 @@ func WithEmailAuth(enabled bool) InboxOption {
 func WithEncryption(mode EncryptionMode) InboxOption {
 	return func(c *inboxConfig) {
 		c.encryption = mode
+	}
+}
+
+// WithPersistence sets the persistence mode for the inbox.
+// Use [PersistenceModePersistent] to create a persistent inbox, or [PersistenceModeEphemeral]
+// for an ephemeral inbox. If not specified, the server's default is used based on its
+// persistence policy.
+//
+// Note: The server's persistence policy may not allow overrides. Use
+// [ServerInfo.PersistencePolicy.CanOverride] to check if the server allows
+// per-inbox persistence settings.
+func WithPersistence(mode PersistenceMode) InboxOption {
+	return func(c *inboxConfig) {
+		c.persistence = mode
 	}
 }
 

@@ -18,6 +18,7 @@ type Inbox struct {
 	client       *Client
 	emailAuth    bool
 	encrypted    bool
+	persistent   bool
 }
 
 // SyncStatus is a type alias for api.SyncStatus.
@@ -57,6 +58,13 @@ func (i *Inbox) Encrypted() bool {
 	return i.encrypted
 }
 
+// Persistent returns whether the inbox is persistent.
+// When true, the inbox and its emails are stored persistently on the server.
+// When false, the inbox is ephemeral.
+func (i *Inbox) Persistent() bool {
+	return i.persistent
+}
+
 // GetSyncStatus retrieves the synchronization status of the inbox.
 // This includes the number of emails and a hash of the email list,
 // which can be used to efficiently check for changes.
@@ -79,5 +87,6 @@ func newInboxFromResult(resp *api.CreateInboxResult, c *Client) *Inbox {
 		client:       c,
 		emailAuth:    resp.EmailAuth,
 		encrypted:    resp.Encrypted,
+		persistent:   resp.Persistent,
 	}
 }
